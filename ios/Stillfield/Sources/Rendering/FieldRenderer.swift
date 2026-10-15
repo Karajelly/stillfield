@@ -26,6 +26,8 @@ final class FieldRenderer {
         let angle: Float
         let cell: Int
         let hasFlower: Bool
+        let wildflower: Bool
+        let tone: UInt32
     }
 
     private enum RenderingError: Error {
@@ -59,10 +61,24 @@ final class FieldRenderer {
         self.cells = grid.cells
         self.plants = Self.makePlants()
         self.tiles = []
-        self.materials = [
-            Self.matteMaterial(0x96A96D, doubleSided: true),
-            Self.matteMaterial(0xEEE4BF)
-        ]
+        // A seven-swatch atlas keeps every patch to one draw, even in a field
+        // full of multicolored flowers. All vertices sample a swatch's center.
+        let palette: [UInt32] = [0x98B77F, 0xACC88D, 0x8DAD7C, 0xFFF0D4, 0xDDBB6B, 0xB6A7CB, 0xE3B6A7]
+        guard let swatches = CGContext(data: nil, width: palette.count, height: 1,
+                                       bitsPerComponent: 8, bytesPerRow: palette.count * 4,
+                                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            throw RenderingError.bitmapUnavailable
+        }
+        for (index, hex) in palette.enumerated() {
+            swatches.setFillColor(Self.color(hex).cgColor)
+            swatches.fill(CGRect(x: index, y: 0, width: 1, height: 1))
+        }
+        guard let paletteImage = swatches.makeImage() else { throw RenderingError.bitmapUnavailable }
+        let paletteTexture = try await TextureResource(image: paletteImage, options: Self.textureOptions)
+        var vegetationMaterial = Self.matteMaterial(0xFFFFFF, doubleSided: true)
+        vegetationMaterial.baseColor.texture = .init(paletteTexture)
+        self.materials = [vegetationMaterial]
 
         // Bitmap row zero represents the northern edge, z == minZ. Explicit
         // ground UVs below keep painted cells and their plants in agreement.
@@ -143,19 +159,21 @@ final class FieldRenderer {
         let y = CGFloat(row) * size
         let palette: [UInt32]
         switch state {
-        case 1: palette = [0xB9C48B, 0xBDC991]
-        case 2: palette = [0xB89570, 0xC29F79]
-        case 3: palette = [0x97AB78, 0x9CAE7B]
-        default: palette = [0xA4B376, 0xA8B67A]
+        case 1: palette = [0xBDCE96, 0xC1D39C]
+        case 2: palette = [0xB89373, 0xBF9D7E]
+        case 3: palette = [0xA0BA88, 0xA4BD8B]
+        default: palette = [0xA7BC87, 0xAABD8A]
         }
-        bitmap.setFillColor(color(palette[row % 8 < 4 ? 0 : 1]).cgColor)
+        let patch = state == 1 || state == 2 ? row % 8 < 4
+            : sin(Double(column) * 0.19) + cos(Double(row) * 0.27) > 0
+        bitmap.setFillColor(color(palette[patch ? 0 : 1]).cgColor)
         bitmap.fill(CGRect(x: x, y: y, width: size, height: size))
 
         let noise = Double((index * 17 + row * 31) % 13) / 13
         if noise > 0.65 {
-            let fleck: UInt32 = state == 2 ? 0xAC8968 : state == 1 ? 0xA5B77D : 0x8FA368
-            bitmap.setFillColor(color(fleck, alpha: 0.28).cgColor)
-            bitmap.fill(CGRect(x: x + 1.5, y: y + 1, width: 0.75, height: 2))
+            let fleck: UInt32 = state == 2 ? 0xAC8968 : state == 1 ? 0xA5B77D : 0x94AE7A
+            bitmap.setFillColor(color(fleck, alpha: 0.16).cgColor)
+            bitmap.fillEllipse(in: CGRect(x: x + 1.5, y: y + 1, width: 1.25, height: 0.75))
         }
         if state == 2 && row % 3 == 0 {
             bitmap.setFillColor(color(0x684D34, alpha: 0.16).cgColor)
@@ -187,22 +205,24 @@ final class FieldRenderer {
             return Double(seed) / 4_294_967_296
         }
         var plantIndex = 0
-        var z = FieldGrid.minZ + 0.24
+        var z = FieldGrid.minZ + 0.30
         while z < FieldGrid.maxZ {
-            var x = FieldGrid.minX + 0.22
+            var x = FieldGrid.minX + 0.30
             while x < FieldGrid.maxX {
-                let px = x + (random() - 0.5) * 0.3
-                let pz = z + (random() - 0.5) * 0.3
+                let px = min(FieldGrid.maxX - 0.02, x + (random() - 0.5) * 0.54)
+                let pz = min(FieldGrid.maxZ - 0.02, z + (random() - 0.5) * 0.54)
                 let column = Int((px - FieldGrid.minX) / FieldGrid.cellSize)
                 let row = Int((pz - FieldGrid.minZ) / FieldGrid.cellSize)
                 let cell = row * FieldGrid.columns + column
                 let plant = Plant(
                     x: Float(px),
                     z: Float(pz),
-                    height: Float(0.45 + random() * 0.5),
+                    height: Float(0.28 + random() * 0.36),
                     angle: Float(random() * Double.pi * 2),
                     cell: cell,
-                    hasFlower: plantIndex % 3 != 0
+                    hasFlower: plantIndex % 3 != 0,
+                    wildflower: plantIndex % 19 == 0,
+                    tone: UInt32(plantIndex % 3)
                 )
                 result[tileIndex(forCell: cell)].append(plant)
                 plantIndex += 1
@@ -227,24 +247,21 @@ final class FieldRenderer {
             let state = cells[plant.cell]
             guard state == 0 || state == 3 else { continue }
             let height = plant.height * (state == 3 ? 0.85 : 1)
-            let rotation = simd_quatf(angle: plant.angle, axis: [0, 1, 0])
             let origin = SIMD3<Float>(plant.x, 0.05, plant.z)
-            func point(_ local: SIMD3<Float>) -> SIMD3<Float> {
-                origin + rotation.act(local * height)
+            for blade in 0..<3 {
+                geometry.blade(origin: origin, angle: plant.angle + Float(blade) * 2.3,
+                               height: height * (1 - Float(blade) * 0.19),
+                               width: 0.035 + height * 0.025,
+                               bend: height * (0.28 + Float(blade) * 0.15), material: plant.tone)
             }
-            geometry.triangle(
-                point([-0.12, 0, 0]), point([0.12, 0, 0]), point([0.045, 0.7, 0]),
-                material: 0
-            )
-            geometry.triangle(
-                point([0, 0, -0.12]), point([0, 0, 0.12]), point([0.02, 0.52, 0.04]),
-                material: 0
-            )
-            if state == 3 && plant.hasFlower {
+            if (state == 3 && plant.hasFlower) || (state == 0 && plant.wildflower) {
+                geometry.blade(origin: origin, angle: plant.angle, height: height * 0.86,
+                               width: 0.009, bend: 0, material: 2)
                 geometry.flower(
-                    center: [plant.x, 0.06 + plant.height * 0.54, plant.z],
-                    radius: 0.14,
-                    material: 1
+                    center: [plant.x, 0.06 + height * 0.86, plant.z],
+                    radius: state == 3 ? 0.14 : 0.105,
+                    angle: plant.angle,
+                    material: state == 0 ? 3 : [3, 5, 6][Int(plant.tone)]
                 )
             }
         }
@@ -255,8 +272,8 @@ final class FieldRenderer {
         var descriptor = MeshDescriptor(name: "Meadow patch \(index)")
         descriptor.positions = .init(geometry.positions)
         descriptor.normals = .init(geometry.normals)
+        descriptor.textureCoordinates = .init(geometry.textureCoordinates)
         descriptor.primitives = .triangles(geometry.indices)
-        descriptor.materials = .perFace(geometry.faceMaterials)
         let mesh = try MeshResource.generate(from: [descriptor])
         tiles[index].model = ModelComponent(mesh: mesh, materials: materials)
     }
@@ -284,7 +301,11 @@ final class FieldRenderer {
         var positions: [SIMD3<Float>] = []
         var normals: [SIMD3<Float>] = []
         var indices: [UInt32] = []
-        var faceMaterials: [UInt32] = []
+        var textureCoordinates: [SIMD2<Float>] = []
+
+        private func swatch(_ material: UInt32) -> SIMD2<Float> {
+            [(Float(material) + 0.5) / 7, 0.5]
+        }
 
         mutating func triangle(
             _ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, material: UInt32
@@ -294,22 +315,54 @@ final class FieldRenderer {
             positions.append(contentsOf: [a, b, c])
             normals.append(contentsOf: [normal, normal, normal])
             indices.append(contentsOf: [start, start + 1, start + 2])
-            faceMaterials.append(material)
+            textureCoordinates.append(contentsOf: Array(repeating: swatch(material), count: 3))
         }
 
-        mutating func flower(center: SIMD3<Float>, radius: Float, material: UInt32) {
-            let top = center + SIMD3<Float>(0, radius * 0.7, 0)
-            let bottom = center - SIMD3<Float>(0, radius * 0.5, 0)
-            let ring = [
-                center + SIMD3<Float>(radius, 0, 0),
-                center + SIMD3<Float>(0, 0, -radius),
-                center + SIMD3<Float>(-radius, 0, 0),
-                center + SIMD3<Float>(0, 0, radius)
-            ]
-            for index in 0..<4 {
-                let next = (index + 1) % 4
-                triangle(top, ring[index], ring[next], material: material)
-                triangle(bottom, ring[next], ring[index], material: material)
+        mutating func blade(origin: SIMD3<Float>, angle: Float, height: Float,
+                            width: Float, bend: Float, material: UInt32) {
+            let direction = SIMD3<Float>(sin(angle), 0, cos(angle))
+            let side = SIMD3<Float>(cos(angle), 0, -sin(angle))
+            let start = UInt32(positions.count)
+            let widths: [Float] = [0.45, 1, 0.55, 0]
+            for step in 0...3 {
+                let t = Float(step) / 3
+                let center = origin + direction * (bend * t * t) + SIMD3(0, height * t, 0)
+                // Tilt the leaf normals toward the sky for soft foliage shading.
+                let normal = simd_normalize(direction + SIMD3<Float>(0, 1.3 + t, 0))
+                positions += [center - side * width * widths[step], center + side * width * widths[step]]
+                normals += [normal, normal]
+                textureCoordinates += [swatch(material), swatch(material)]
+                if step < 3 {
+                    let i = start + UInt32(step * 2)
+                    indices += [i, i + 1, i + 2]
+                    if step < 2 {
+                        indices += [i + 1, i + 3, i + 2]
+                    }
+                }
+            }
+        }
+
+        mutating func flower(center: SIMD3<Float>, radius: Float, angle: Float, material: UInt32) {
+            // Five cupped, oval petals and a honey-colored center, not a diamond.
+            for petal in 0..<5 {
+                let a = angle + Float(petal) * .pi * 2 / 5
+                let outward = SIMD3<Float>(sin(a), 0, cos(a))
+                let side = SIMD3<Float>(cos(a), 0, -sin(a))
+                let petalCenter = center + outward * radius * 0.65
+                for segment in 0..<6 {
+                    func edge(_ index: Int) -> SIMD3<Float> {
+                        let t = Float(index) * .pi / 3
+                        return petalCenter + outward * (cos(t) * radius * 0.65)
+                            + side * (sin(t) * radius * 0.36) + SIMD3(0, -radius * 0.08, 0)
+                    }
+                    triangle(petalCenter + SIMD3(0, radius * 0.12, 0), edge(segment), edge(segment + 1), material: material)
+                }
+            }
+            for segment in 0..<8 {
+                let a = Float(segment) * .pi / 4, b = Float(segment + 1) * .pi / 4
+                triangle(center + SIMD3(0, radius * 0.28, 0),
+                         center + SIMD3(sin(a) * radius * 0.36, radius * 0.08, cos(a) * radius * 0.36),
+                         center + SIMD3(sin(b) * radius * 0.36, radius * 0.08, cos(b) * radius * 0.36), material: 4)
             }
         }
     }

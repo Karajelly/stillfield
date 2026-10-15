@@ -13,9 +13,19 @@ struct FarmViewport: View {
                 content.renderingEffects.depthOfField = .disabled
                 content.renderingEffects.cameraGrain = .disabled
                 content.renderingEffects.dynamicRange = .standard
-                await game.load(into: content, size: geometry.size)
+                let daylight = try? await FarmArtwork.makeDaylight()
+                await game.load(into: content, size: geometry.size, daylight: daylight)
             }
             .realityViewCameraControls(.none)
+            .background {
+                if game.cameraMode == .tractor {
+                    // Keep the illustrated sky's color independent of scene exposure.
+                    LinearGradient(colors: [Color(red: 0.72, green: 0.85, blue: 0.89),
+                                            Color(red: 0.95, green: 0.94, blue: 0.83)],
+                                   startPoint: .top, endPoint: .bottom)
+                        .allowsHitTesting(false)
+                }
+            }
             .onChange(of: geometry.size) { _, size in game.setViewportSize(size) }
             .gesture(DragGesture(minimumDistance: 0).onChanged { value in game.steer(at: value.location) })
             .simultaneousGesture(
@@ -32,7 +42,9 @@ struct FarmViewport: View {
             .onDisappear { game.endPinch() }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Your meadow")
-            .accessibilityHint("Tap a destination or drag to drive. Pinch to zoom.")
+            .accessibilityHint(game.cameraMode == .tractor
+                ? "Following behind your tractor. Tap the ground ahead or drag to drive. Pinch to change camera distance."
+                : "Tap a destination or drag to drive. Pinch to zoom.")
             .accessibilityIdentifier("farm.surface")
 #if DEBUG
             .accessibilityValue(game.testTelemetry)

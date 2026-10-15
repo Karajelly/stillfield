@@ -9,6 +9,7 @@ import os
 @MainActor @Observable
 final class FarmController {
     var tool: FarmTool
+    private(set) var cameraMode: FarmCameraMode
     var isPaused = false
     var soundEnabled = false
     var rowAssist: Bool { didSet { persist() } }
@@ -58,7 +59,13 @@ final class FarmController {
     @ObservationIgnored private var lastSave = 0.0
     @ObservationIgnored private var blockedTime = 0.0
     @ObservationIgnored private var wheelAngle: Float = 0
-    @ObservationIgnored private var zoom: Float = 1
+    @ObservationIgnored private var overviewZoom: Float = 1
+    @ObservationIgnored private var tractorZoom = Float(TractorFollowCamera.defaultZoom)
+    private var zoom: Float {
+        get { cameraMode == .overview ? overviewZoom : tractorZoom }
+        set { if cameraMode == .overview { overviewZoom = newValue } else { tractorZoom = newValue } }
+    }
+    @ObservationIgnored private var followCamera = TractorFollowCamera()
     @ObservationIgnored private var pinchStartZoom: Float?
     @ObservationIgnored private var viewport = CGSize(width: 1024, height: 768)
     @ObservationIgnored private var isActive = true
@@ -83,6 +90,7 @@ final class FarmController {
         tractorState = saved.tractor
         tractorState.speed = 0
         tool = saved.tool
+        cameraMode = saved.cameraMode ?? .overview
         rowAssist = saved.rowAssist
         goldenLight = saved.goldenLight
         haptics = saved.haptics
@@ -97,10 +105,14 @@ final class FarmController {
         }
     }
 
-    func load(into content: RealityViewCameraContent, size: CGSize) async {
+    func load(into content: RealityViewCameraContent, size: CGSize, daylight: EnvironmentResource?) async {
         guard self.content == nil else { return }
         self.content = content
         viewport = size
+        if let daylight {
+            root.components.set(ImageBasedLightComponent(source: .single(daylight), intensityExponent: 0))
+            root.components.set(ImageBasedLightReceiverComponent(imageBasedLight: root))
+        }
         do {
             let artwork = try await FarmArtwork.load()
             let world = try await artwork.world.makeEntity()
@@ -111,20 +123,19 @@ final class FarmController {
             root.addChild(tractor)
             if let fieldRenderer { root.addChild(fieldRenderer.entity) }
             camera.name = "The unhurried camera"
-            camera.look(at: [-1, 0, -2], from: [59, 73, 87], relativeTo: nil)
             setViewportSize(size)
             root.addChild(camera)
             sun.components.set(DirectionalLightComponent(color: UIColor(farmHex: "#FFF0CE"), intensity: 1800))
             var shadows = DirectionalLightComponent.Shadow()
             shadows.shadowProjection = .automatic(maximumDistance: 160)
-            shadows.depthBias = 1.4
+            shadows.depthBias = 1.0
             sun.components.set(shadows)
             sun.look(at: .zero, from: [-32, 55, 22], relativeTo: nil)
             fillLight.components.set(DirectionalLightComponent(color: UIColor(farmHex: "#DBE8D4"), intensity: 650))
             fillLight.look(at: .zero, from: [40, 38, -45], relativeTo: nil)
             root.addChild(sun)
             root.addChild(fillLight)
-            destinationMarker = try Self.makeDestinationMarker()
+            destinationMarker = try Self.makeDestinationMarker(readsDepth: cameraMode == .tractor)
             updateDestinationMarkerScale()
             destinationMarker.isEnabled = false
             root.addChild(destinationMarker)
@@ -161,14 +172,24 @@ final class FarmController {
         guard size.width > 0, size.height > 0 else { return }
         viewport = size
         let aspect = Float(size.width / size.height)
-        var component = OrthographicCameraComponent()
-        component.near = 0.1
-        component.far = 300
-        component.scaleDirection = .vertical
-        // RealityKit's orthographic scale is a half-extent. Fit at least 64
-        // metres across portrait screens while keeping the full vertical span.
-        component.scale = max(66, 64 / aspect) * 0.5 / zoom
-        camera.components.set(component)
+        if cameraMode == .overview {
+            camera.components.remove(PerspectiveCameraComponent.self)
+            var component = OrthographicCameraComponent()
+            component.near = 0.1
+            component.far = 300
+            component.scaleDirection = .vertical
+            // RealityKit's orthographic scale is a half-extent.
+            component.scale = max(66, 64 / aspect) * 0.5 / zoom
+            camera.components.set(component)
+            camera.look(at: [-1, 0, -2], from: [59, 73, 87], relativeTo: nil)
+        } else {
+            camera.components.remove(OrthographicCameraComponent.self)
+            camera.components.set(PerspectiveCameraComponent(
+                near: 0.1, far: 300,
+                fieldOfViewInDegrees: Float(TractorFollowCamera.verticalFieldOfView(aspect: Double(aspect)))
+            ))
+            updateFollowCamera(snap: true)
+        }
         updateDestinationMarkerScale()
 #if DEBUG
         updateTestTelemetry(force: true)
@@ -180,27 +201,34 @@ final class FarmController {
         if isUITesting { testTouchCount += 1 }
         defer { updateTestTelemetry(force: true) }
 #endif
-        guard !isLoading, isActive, !isPaused, activeSheet == nil, pinchStartZoom == nil,
-              let projection = camera.components[OrthographicCameraComponent.self] else { return }
+        guard !isLoading, isActive, !isPaused, activeSheet == nil, pinchStartZoom == nil else { return }
         let transform = camera.transformMatrix(relativeTo: nil)
         func vector(_ column: SIMD4<Float>) -> SIMD3<Double> {
             SIMD3(Double(column.x), Double(column.y), Double(column.z))
         }
-        // RealityView's general-purpose ray can point behind the ground with
-        // this virtual orthographic camera. Construct its parallel rays from
-        // the actual camera transform so every visible field tap maps correctly.
-        guard let destination = OrthographicGroundProjection.project(
-            screenPoint: SIMD2(Double(point.x), Double(point.y)),
-            viewportSize: SIMD2(Double(viewport.width), Double(viewport.height)),
-            cameraPosition: vector(transform.columns.3),
-            cameraRight: vector(transform.columns.0),
-            cameraUp: vector(transform.columns.1),
-            cameraForward: -vector(transform.columns.2),
-            verticalHalfExtent: Double(projection.scale)
-        ) else { return }
+        let screenPoint = SIMD2(Double(point.x), Double(point.y))
+        let viewportSize = SIMD2(Double(viewport.width), Double(viewport.height))
+        let destination: FarmPoint?
+        if let projection = camera.components[OrthographicCameraComponent.self] {
+            // Construct rays from the actual rendered transform, not the
+            // RealityView default camera, in both projection modes.
+            destination = OrthographicGroundProjection.project(
+                screenPoint: screenPoint, viewportSize: viewportSize,
+                cameraPosition: vector(transform.columns.3), cameraRight: vector(transform.columns.0),
+                cameraUp: vector(transform.columns.1), cameraForward: -vector(transform.columns.2),
+                verticalHalfExtent: Double(projection.scale))
+        } else if let projection = camera.components[PerspectiveCameraComponent.self] {
+            destination = PerspectiveGroundProjection.project(
+                screenPoint: screenPoint, viewportSize: viewportSize,
+                cameraPosition: vector(transform.columns.3), cameraRight: vector(transform.columns.0),
+                cameraUp: vector(transform.columns.1), cameraForward: -vector(transform.columns.2),
+                verticalFieldOfView: Double(projection.fieldOfViewInDegrees))
+        } else { destination = nil }
+        guard let destination else { return }
         target = FarmPoint(x: min(39, max(-39, destination.x)), z: min(28, max(-30, destination.z)))
         destinationMarker.position = [Float(target!.x), 0.10, Float(target!.z)]
         destinationMarker.isEnabled = true
+        updateDestinationMarkerScale()
         blockedTime = 0
 #if DEBUG
         if isUITesting { testSteeringCount += 1 }
@@ -210,9 +238,41 @@ final class FarmController {
 
     private func updateDestinationMarkerScale() {
         // Keep tap feedback readable on a phone and at every zoom level.
-        let aspect = Float(viewport.width / viewport.height)
-        let metresPerPoint = max(66, 64 / aspect) / (zoom * Float(viewport.height))
-        destinationMarker.scale = SIMD3(repeating: metresPerPoint * 12)
+        if let projection = camera.components[PerspectiveCameraComponent.self] {
+            let transform = camera.transformMatrix(relativeTo: nil)
+            let forward = -SIMD3(transform.columns.2.x, transform.columns.2.y, transform.columns.2.z)
+            let depth = max(1, simd_dot(destinationMarker.position - camera.position, forward))
+            let metresPerPoint = 2 * depth * tan(projection.fieldOfViewInDegrees * .pi / 360) / Float(viewport.height)
+            destinationMarker.scale = SIMD3(repeating: min(1.4, max(0.35, metresPerPoint * 12)))
+        } else {
+            let aspect = Float(viewport.width / viewport.height)
+            let metresPerPoint = max(66, 64 / aspect) / (zoom * Float(viewport.height))
+            destinationMarker.scale = SIMD3(repeating: metresPerPoint * 12)
+        }
+    }
+
+    func toggleCamera() {
+        endPinch()
+        cameraMode = cameraMode == .overview ? .tractor : .overview
+        if let marker = destinationMarker as? ModelEntity,
+           var material = marker.model?.materials.first as? UnlitMaterial {
+            material.readsDepth = cameraMode == .tractor
+            marker.model?.materials = [material]
+        }
+        setViewportSize(viewport)
+        updateLight()
+        if !introDismissed { dismissIntro() }
+        selectionFeedback()
+        persist()
+        showToast(cameraMode == .tractor ? "Along for the ride. Tap the ground to steer." : "A little room to see it all.")
+    }
+
+    private func updateFollowCamera(deltaTime: Double = 0, snap: Bool = false) {
+        guard cameraMode == .tractor else { return }
+        let pose = followCamera.update(tractor: tractorState, zoom: Double(zoom), deltaTime: deltaTime,
+                                       obstacles: obstacles, snap: snap || UIAccessibility.isReduceMotionEnabled)
+        camera.look(at: SIMD3<Float>(pose.focus), from: SIMD3<Float>(pose.position), relativeTo: nil)
+        updateDestinationMarkerScale()
     }
 
     func pinch(_ magnification: CGFloat) {
@@ -223,7 +283,11 @@ final class FarmController {
     func endPinch() { pinchStartZoom = nil }
     func zoomIn() { zoom = min(1.8, zoom + 0.15); setViewportSize(viewport); selectionFeedback() }
     func zoomOut() { zoom = max(0.65, zoom - 0.15); setViewportSize(viewport); selectionFeedback() }
-    func recenter() { zoom = 1; setViewportSize(viewport); selectionFeedback() }
+    func recenter() {
+        zoom = cameraMode == .tractor ? Float(TractorFollowCamera.defaultZoom) : 1
+        setViewportSize(viewport)
+        selectionFeedback()
+    }
 
     func selectTool(_ value: FarmTool) {
         guard value != tool else { return }
@@ -249,6 +313,7 @@ final class FarmController {
         field.reset()
         tractorState = TractorState()
         syncTractor()
+        updateFollowCamera(snap: true)
         fieldRenderer?.reset(grid: field)
         do { try fieldRenderer?.flush() } catch { recordRenderingError(error) }
         dirty = true
@@ -290,6 +355,7 @@ final class FarmController {
             lastFlush = elapsed
         }
         syncTractor()
+        updateFollowCamera(deltaTime: dt)
         for (wheel, original) in wheels { wheel.orientation = original * simd_quatf(angle: wheelAngle, axis: [1, 0, 0]) }
         if !UIAccessibility.isReduceMotionEnabled {
             for (sail, original, rate) in sails { sail.orientation = original * simd_quatf(angle: Float(elapsed) * rate, axis: [0, 0, 1]) }
@@ -321,6 +387,9 @@ final class FarmController {
             + ",painted=\(testPaintedCells)"
             + ",steeringCount=\(testSteeringCount),marker=\(destinationMarker.isEnabled ? 1 : 0)"
             + ",touchCount=\(testTouchCount)"
+            + ",tractorView=\(cameraMode == .tractor ? 1 : 0)"
+            + String(format: ",heading=%.3f,cameraX=%.3f,cameraY=%.3f,cameraZ=%.3f",
+                     tractorState.heading, Double(camera.position.x), Double(camera.position.y), Double(camera.position.z))
         if let target {
             testTelemetry += String(format: ",targetX=%.3f,targetZ=%.3f", target.x, target.z)
         }
@@ -339,16 +408,20 @@ final class FarmController {
         if let mower = tractor.findEntity(named: "mower") {
             for case let part as ModelEntity in mower.children {
                 var material = PhysicallyBasedMaterial()
-                material.baseColor = .init(tint: UIColor(farmHex: tool == .till ? "#8D674E" : "#89A38A"))
-                material.roughness = 1.0
-                material.specular = 0.0
+                material.baseColor = .init(tint: UIColor(farmHex: tool == .till ? "#AE7859" : "#91B399"))
+                material.roughness = 0.65
+                material.specular = 0.22
                 part.model?.materials = [material]
             }
         }
     }
     private func updateLight() {
-        sun.components.set(DirectionalLightComponent(color: UIColor(farmHex: goldenLight ? "#FFD69C" : "#FFF0CE"), intensity: goldenLight ? 2200 : 1800))
-        fillLight.components.set(DirectionalLightComponent(color: UIColor(farmHex: goldenLight ? "#F2DCB3" : "#DBE8D4"), intensity: 650))
+        sun.components.set(DirectionalLightComponent(color: UIColor(farmHex: goldenLight ? "#FFD8A5" : "#FFF2D9"), intensity: goldenLight ? 1700 : 1400))
+        fillLight.components.set(DirectionalLightComponent(color: UIColor(farmHex: goldenLight ? "#F2DFBE" : "#E3EEDF"), intensity: 850))
+        var shadows = DirectionalLightComponent.Shadow()
+        shadows.shadowProjection = .automatic(maximumDistance: cameraMode == .tractor ? 65 : 160)
+        shadows.depthBias = 1.0
+        sun.components.set(shadows)
     }
     private func persist() {
         guard saveReady else { return }
@@ -368,7 +441,7 @@ final class FarmController {
         let saved = MeadowSave(field: field, tractor: TractorState(x: tractorState.x, z: tractorState.z,
                                heading: tractorState.heading, speed: 0), tool: tool, rowAssist: rowAssist,
                                pace: pace, goldenLight: goldenLight, volume: volume,
-                               haptics: haptics, introDismissed: introDismissed)
+                               haptics: haptics, introDismissed: introDismissed, cameraMode: cameraMode)
         do { try MeadowStore.save(saved, to: saveURL); hasSaveError = false; dirty = false }
         catch { hasSaveError = true; logger.error("Save failed: \(String(describing: error), privacy: .public)") }
     }
@@ -387,7 +460,7 @@ final class FarmController {
             if !Task.isCancelled { self?.toast = nil }
         }
     }
-    private static func makeDestinationMarker() throws -> Entity {
+    private static func makeDestinationMarker(readsDepth: Bool) throws -> Entity {
         var descriptor = MeshDescriptor()
         var positions: [SIMD3<Float>] = [], normals: [SIMD3<Float>] = [], indices: [UInt32] = []
         for index in 0...48 {
@@ -401,8 +474,9 @@ final class FarmController {
         descriptor.primitives = .triangles(indices)
         var material = UnlitMaterial(color: UIColor(farmHex: "#F8F1D9"))
         material.blending = .transparent(opacity: .init(floatLiteral: 0.92))
-        // Feedback sits on the ground but remains visible through meadow grass.
-        material.readsDepth = false
+        // The overhead marker stays readable through grass; in tractor view it
+        // must sit behind the tractor and scenery rather than showing on the roof.
+        material.readsDepth = readsDepth
         material.writesDepth = false
         return ModelEntity(mesh: try MeshResource.generate(from: [descriptor]), materials: [material])
     }

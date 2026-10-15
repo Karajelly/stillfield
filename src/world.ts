@@ -14,19 +14,19 @@ export function createWorld(scene: THREE.Scene): {
   const material = (color: string, roughness = 1) =>
     new THREE.MeshStandardMaterial({ color, roughness });
   const palette = {
-    grass: material("#9aaf79"),
+    grass: material("#a0b783"),
     grassLight: material("#a3b580"),
-    hill: material("#a4b789"),
-    hillLight: material("#b3c293"),
+    hill: material("#adc39a"),
+    hillLight: material("#bfd0a8"),
     path: material("#ddcda6"),
     pathEdge: material("#c8bc92"),
     trunk: material("#79664d"),
     wood: material("#a28a65"),
     lightWood: material("#c2aa7d"),
-    leaf: material("#7e9b65"),
-    leafLight: material("#a6b578"),
-    leafDark: material("#668967"),
-    leafGold: material("#bcc387"),
+    leaf: material("#8eae7c"),
+    leafLight: material("#aec78e"),
+    leafDark: material("#7c9e7b"),
+    leafGold: material("#b8c98e"),
     cream: material("#f6eacf"),
     ivory: material("#ede3c8"),
     terracotta: material("#b97858"),
@@ -50,7 +50,9 @@ export function createWorld(scene: THREE.Scene): {
   const box = new THREE.BoxGeometry(1, 1, 1);
   const cylinder = new THREE.CylinderGeometry(1, 1, 1, 8);
   const cone = new THREE.ConeGeometry(1, 1, 8);
-  const sphere = new THREE.IcosahedronGeometry(1, 1);
+  // Smooth, modestly tessellated forms keep the storybook silhouettes at eye level.
+  const sphere = new THREE.SphereGeometry(1, 12, 8);
+  const hillGeometry = new THREE.SphereGeometry(1, 24, 12);
   const pebble = new THREE.IcosahedronGeometry(1, 0);
   const batches = new Map<
     string,
@@ -104,7 +106,7 @@ export function createWorld(scene: THREE.Scene): {
   };
 
   // The broad ground dissolves into the scene's mist, without a hard board edge.
-  add(box, palette.grass, 0, -0.7, 0, 240, 1.3, 220);
+  add(box, palette.grass, 0, -0.7, 0, 600, 1.3, 600);
   const hills = [
     [-43, -0.5, -41, 18, 5, 14],
     [-18, -1, -48, 21, 6, 15],
@@ -117,7 +119,7 @@ export function createWorld(scene: THREE.Scene): {
   ];
   hills.forEach((h, i) =>
     add(
-      sphere,
+      hillGeometry,
       i % 2 ? palette.hill : palette.hillLight,
       ...(h as [number, number, number, number, number, number]),
     ),
@@ -223,43 +225,15 @@ export function createWorld(scene: THREE.Scene): {
       palette.leafDark,
       palette.leafGold,
     ][variant % 4];
-    add(
-      sphere,
-      foliage,
-      x,
-      height * 0.82,
-      z,
-      2.1 * scale,
-      2.5 * scale,
-      1.9 * scale,
-      0,
-      rand() * 6,
-      0.1,
-    );
-    add(
-      sphere,
-      foliage,
-      x - 1.1 * scale,
-      height * 0.66,
-      z + 0.25,
-      1.55 * scale,
-      1.7 * scale,
-      1.55 * scale,
-      0,
-      rand() * 6,
-    );
-    add(
-      sphere,
-      variant % 2 ? foliage : palette.leafLight,
-      x + 0.95 * scale,
-      height * 0.86,
-      z + 0.25,
-      1.5 * scale,
-      1.8 * scale,
-      1.45 * scale,
-      0,
-      rand() * 6,
-    );
+    // Overlapping, broad crowns feel like soft bunches of leaves, not cut gems.
+    const turn = rand() * 6;
+    add(sphere, foliage, x, height * 0.87, z, 1.85 * scale, 1.85 * scale, 1.75 * scale, 0, turn, 0.1);
+    add(sphere, foliage, x - 1.15 * scale, height * 0.71, z + 0.15,
+        1.50 * scale, 1.45 * scale, 1.45 * scale, 0, rand() * 6);
+    add(sphere, foliage, x + 1.05 * scale, height * 0.76, z + 0.30,
+        1.55 * scale, 1.50 * scale, 1.40 * scale, 0, rand() * 6);
+    add(sphere, foliage, x + 0.25 * scale, height * 0.66, z - 0.95 * scale,
+        1.65 * scale, 1.30 * scale, 1.40 * scale, 0, turn);
     obstacles.push({ x, z, radius: 1.2 * scale });
   }
   const trees = [

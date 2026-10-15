@@ -11,6 +11,8 @@ public struct MeadowSave: Codable, Equatable, Sendable {
     public var volume: Double
     public var haptics: Bool
     public var introDismissed: Bool
+    // Optional on disk so meadows saved before camera switching still decode.
+    public var cameraMode: FarmCameraMode?
 
     public init(
         version: Int = 1,
@@ -22,7 +24,8 @@ public struct MeadowSave: Codable, Equatable, Sendable {
         goldenLight: Bool = false,
         volume: Double = 0.45,
         haptics: Bool = true,
-        introDismissed: Bool = false
+        introDismissed: Bool = false,
+        cameraMode: FarmCameraMode? = nil
     ) {
         self.version = version
         self.field = field
@@ -34,6 +37,7 @@ public struct MeadowSave: Codable, Equatable, Sendable {
         self.volume = volume
         self.haptics = haptics
         self.introDismissed = introDismissed
+        self.cameraMode = cameraMode
     }
 
     public var isValid: Bool {

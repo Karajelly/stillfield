@@ -5,8 +5,87 @@ final class StillfieldUITests: XCTestCase {
     private let meadowControlIdentifiers = [
         "tool.mow", "tool.till", "tool.sow", "tool.wander",
         "action.pause", "action.sound", "action.settings", "action.help",
+        "action.camera",
         "Zoom out", "Center the farm", "Zoom in"
     ]
+
+    func testTractorViewFollowsDrivingZoomsAndRestores() throws {
+        let app = launchFreshMeadow()
+        defer {
+            XCUIDevice.shared.orientation = .portrait
+            app.terminate()
+        }
+        app.buttons["Zoom in"].tap()
+        let overviewZoom = try XCTUnwrap(telemetry(in: app)).zoom
+        let surface = meadowSurface(in: app)
+        let initial = try XCTUnwrap(telemetry(in: app))
+        surface.coordinate(withNormalizedOffset: CGVector(dx: 0.33, dy: 0.51)).tap()
+        _ = try waitForSteering(after: initial.steeringCount, in: app)
+        app.buttons["action.camera"].tap()
+        XCTAssertTrue(waitUntil(timeout: 5) { self.telemetry(in: app)?.tractorView == true })
+        XCTAssertTrue(app.buttons["action.camera"].isSelected)
+        XCTAssertEqual(try XCTUnwrap(telemetry(in: app)).zoom, 0.65,
+                       "Tractor view starts at its widest zoom independently of overview.")
+        let following = try XCTUnwrap(telemetry(in: app))
+        XCTAssertGreaterThan(following.cameraY, 10)
+        XCTAssertLessThan(following.cameraY, 20)
+        XCTAssertTrue(waitUntil(timeout: 8) {
+            guard let now = self.telemetry(in: app) else { return false }
+            return now.distance(from: following) > 0.5 && now.cameraDistance(from: following) > 0.5
+        }, "Changing view during a drive must keep the tractor moving and the camera following.")
+        attachScreenshot("Behind the tractor in portrait", app: app)
+
+        let beforeTap = try XCTUnwrap(telemetry(in: app))
+        surface.coordinate(withNormalizedOffset: CGVector(dx: 0.57, dy: 0.48)).tap()
+        let steering = try waitForSteering(after: beforeTap.steeringCount, in: app)
+        let destination = try XCTUnwrap(steering.destination)
+        XCTAssertGreaterThan((destination.x - beforeTap.x) * sin(beforeTap.heading)
+                             + (destination.z - beforeTap.z) * cos(beforeTap.heading), 0,
+                             "Ground ahead on screen must steer ahead of the tractor.")
+        XCTAssertTrue(waitUntil(timeout: 8) {
+            guard let now = self.telemetry(in: app) else { return false }
+            return now.distance(from: steering) > 0.5 && now.painted > steering.painted
+        })
+
+        surface.pinch(withScale: 1.3, velocity: 1)
+        XCTAssertTrue(waitUntil(timeout: 5) { (self.telemetry(in: app)?.zoom ?? 0) > following.zoom + 0.1 })
+        let afterPinch = try XCTUnwrap(telemetry(in: app))
+        surface.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.50)).tap()
+        _ = try waitForSteering(after: afterPinch.steeringCount, in: app)
+        app.buttons["Center behind the tractor"].tap()
+        XCTAssertTrue(waitUntil(timeout: 5) { self.telemetry(in: app)?.zoom == 0.65 })
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        waitForMeadowLayout(in: app, portrait: false, tractorView: true)
+        XCTAssertTrue(app.buttons["action.camera"].isHittable)
+        XCTAssertTrue(app.buttons["Zoom in"].isHittable)
+        let landscape = try XCTUnwrap(telemetry(in: app))
+        surface.coordinate(withNormalizedOffset: CGVector(dx: 0.53, dy: 0.46)).tap()
+        _ = try waitForSteering(after: landscape.steeringCount, in: app)
+        attachScreenshot("Behind the tractor in landscape", app: app)
+        for _ in 0..<8 { app.buttons["Zoom in"].tap() }
+        XCTAssertTrue(waitUntil(timeout: 5) { self.telemetry(in: app)?.zoom == 1.8 })
+        attachScreenshot("Tractor and attachment at closest landscape zoom", app: app)
+        app.buttons["Center behind the tractor"].tap()
+
+        app.buttons["action.camera"].tap()
+        XCTAssertTrue(waitUntil(timeout: 5) { self.telemetry(in: app)?.tractorView == false })
+        XCTAssertEqual(try XCTUnwrap(telemetry(in: app)).zoom, overviewZoom)
+        XCTAssertGreaterThan(try XCTUnwrap(telemetry(in: app)).cameraY, 70)
+        app.buttons["action.camera"].tap()
+        app.buttons["action.pause"].tap()
+        XCTAssertTrue(app.buttons["pause.resume"].waitForExistence(timeout: 3))
+        XCTAssertEqual(try XCTUnwrap(telemetry(in: app)).speed, 0)
+        app.buttons["pause.resume"].tap()
+        app.terminate()
+        app.launchArguments = ["--ui-testing"]
+        app.launch()
+        XCTAssertTrue(app.buttons["action.camera"].waitForExistence(timeout: 40))
+        XCTAssertTrue(waitUntil(timeout: 5) { self.telemetry(in: app)?.tractorView == true })
+        XCTAssertTrue(app.buttons["action.camera"].isSelected)
+        XCTAssertEqual(try XCTUnwrap(telemetry(in: app)).zoom, 0.65)
+        attachScreenshot("Tractor view restored after relaunch", app: app)
+    }
 
     func testNativeToolsSettingsAndPause() throws {
         let app = launchFreshMeadow()
@@ -159,7 +238,9 @@ final class StillfieldUITests: XCTestCase {
         surface.pinch(withScale: 1.3, velocity: 1)
         XCTAssertTrue(waitUntil(timeout: 5) { (self.telemetry(in: app)?.zoom ?? 0) > 1.1 })
         let pinched = try XCTUnwrap(telemetry(in: app))
-        left.tap()
+        // The pinch can leave the tractor beside the old left destination.
+        // Choose a clear point farther across the meadow to observe movement.
+        surface.coordinate(withNormalizedOffset: CGVector(dx: 0.60, dy: 0.50)).tap()
         let resumed = try waitForSteering(after: pinched.steeringCount, in: app)
         XCTAssertTrue(resumed.markerVisible,
                       "A completed pinch must release steering and show the next tap's destination.")
@@ -227,7 +308,11 @@ final class StillfieldUITests: XCTestCase {
         }, "The sheet must finish dismissing before another layout transition begins.", file: file, line: line)
     }
 
-    private func waitForMeadowLayout(in app: XCUIApplication, portrait: Bool, file: StaticString = #filePath, line: UInt = #line) {
+    private func waitForMeadowLayout(in app: XCUIApplication, portrait: Bool, tractorView: Bool = false,
+                                    file: StaticString = #filePath, line: UInt = #line) {
+        let identifiers = meadowControlIdentifiers.map {
+            tractorView && $0 == "Center the farm" ? "Center behind the tractor" : $0
+        }
         var previousFrames: [CGRect] = []
         var stableSince: Date?
         let settled = waitUntil(timeout: 12) {
@@ -239,7 +324,7 @@ final class StillfieldUITests: XCTestCase {
             }
 
             var frames = [screen]
-            for identifier in self.meadowControlIdentifiers {
+            for identifier in identifiers {
                 let control = app.buttons[identifier]
                 guard control.exists else {
                     stableSince = nil
@@ -268,7 +353,7 @@ final class StillfieldUITests: XCTestCase {
             guard Date().timeIntervalSince(since) >= 0.4 else { return false }
             // Asking UIKit for an activation point during a rotation can throw
             // before it has valid bounds. Check hittability after frames settle.
-            return self.meadowControlIdentifiers.allSatisfy { app.buttons[$0].isHittable }
+            return identifiers.allSatisfy { app.buttons[$0].isHittable }
         }
         if !settled { attachScreenshot("Unsettled \(portrait ? "portrait" : "landscape") layout", app: app) }
         XCTAssertTrue(settled, "The \(portrait ? "portrait" : "landscape") meadow must settle with every control visible, tappable, and at least 44 points.", file: file, line: line)
@@ -301,7 +386,9 @@ final class StillfieldUITests: XCTestCase {
             destination = nil
         }
         return Telemetry(x: x, z: z, speed: speed, painted: Int(painted), zoom: zoom,
-                         steeringCount: Int(steeringCount), destination: destination, markerVisible: marker == 1)
+                         steeringCount: Int(steeringCount), destination: destination, markerVisible: marker == 1,
+                         tractorView: values["tractorView"] == 1, heading: values["heading"] ?? 0,
+                         cameraX: values["cameraX"] ?? 0, cameraY: values["cameraY"] ?? 0, cameraZ: values["cameraZ"] ?? 0)
     }
 
     private func waitUntil(timeout: TimeInterval, condition: () -> Bool) -> Bool {
@@ -331,9 +418,18 @@ final class StillfieldUITests: XCTestCase {
         let steeringCount: Int
         let destination: Destination?
         let markerVisible: Bool
+        let tractorView: Bool
+        let heading: Double
+        let cameraX: Double
+        let cameraY: Double
+        let cameraZ: Double
 
         func distance(from other: Telemetry) -> Double {
             hypot(x - other.x, z - other.z)
+        }
+
+        func cameraDistance(from other: Telemetry) -> Double {
+            hypot(cameraX - other.cameraX, cameraZ - other.cameraZ)
         }
     }
 

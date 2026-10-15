@@ -40,7 +40,7 @@ To run the native UI test, supply the name or identifier of an installed simulat
 npm run ios:test-ui -- -destination 'platform=iOS Simulator,name=iPhone 17'
 ```
 
-The UI suite checks real touch/drag steering and field painting, repeated taps replacing the destination, steering after pinch zoom, wandering without painting, background/foreground stopping, tool selection, pausing, settings restoration, rotation, and reachable touch targets. It retains screenshots and uses a separate save file from regular play. Core tests also cover quick steering response, close destinations, braking on retargeting, and consistent movement at 30/60/120 Hz. Simulator results do not replace physical-device testing for performance, sound, and haptics.
+The UI suite checks real touch/drag steering and field painting, repeated taps replacing the destination, steering after pinch zoom, wandering without painting, background/foreground stopping, tool selection, pausing, settings restoration, rotation, and reachable touch targets. It also checks switching into tractor view while driving, camera following, perspective steering, separate zoom levels, and restoring the view after relaunch. It retains screenshots and uses a separate save file from regular play. Core tests cover quick steering response, close destinations, braking on retargeting, consistent movement at 30/60/120 Hz, camera turn smoothing and obstacle clearance, perspective ground projection, and loading older saves. Simulator results do not replace physical-device testing for performance, sound, and haptics.
 
 ### Native project and artwork maintenance
 
@@ -50,7 +50,7 @@ The UI suite checks real touch/drag steering and field painting, repeated taps r
 npm run ios:project
 ```
 
-Native geometry was exported from the prototype’s original scene into `ios/Stillfield/Resources/FarmScene.json`, preserving the meadow’s low-poly artwork. The app loads those meshes directly into RealityKit. Native play uses no browser, web view, JavaScript engine, or development server.
+Native geometry is exported from `src/tractor.ts` and `src/world.ts` into `ios/Stillfield/Resources/FarmScene.json`. The shared artwork uses rounded enamel bodywork, curved fenders, cushioned tires, and soft tree crowns; the native field renderer adds curved grass and petaled wildflowers. RealityKit loads the bundled meshes directly, with locally generated diffuse daylight. Native play uses no browser, web view, JavaScript engine, or development server.
 
 To rebuild the bundled artwork and icon after changing their sources:
 
@@ -64,6 +64,7 @@ Commit regenerated resources and project changes alongside their source changes.
 ## Play
 
 - Tap a destination or drag across the meadow to steer. Pinch or use the zoom buttons to change your view.
+- In the native app, tap the vehicle button beside the zoom controls to switch into **Tractor view**, a perspective view following behind you. Tap the ground ahead to steer and pinch to adjust the camera distance. Tap the vehicle button again to return to the overhead farm view. Each view keeps its own zoom during play, and your chosen view saves with your meadow.
 - A cream ring marks your destination. Tap again to redirect the tractor immediately; its cruising pace stays gentle.
 - Choose **Mow**, **Till**, **Sow**, or **Wander**. Wandering leaves the field as it is.
 - The pause button gives you a moment to breathe.

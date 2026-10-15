@@ -314,8 +314,21 @@ struct FarmScreen: View {
 
     private var zoomControls: some View {
         HStack(spacing: 0) {
+            Button(action: game.toggleCamera) {
+                Image(systemName: game.cameraMode == .tractor ? "car.rear.fill" : "car.rear")
+                    .font(.system(size: 17))
+                    .frame(width: 44, height: 44)
+                    .background(game.cameraMode == .tractor ? MeadowPalette.sage : .clear, in: Circle())
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(game.cameraMode == .tractor ? "Return to farm view" : "Drive in tractor view")
+            .accessibilityValue(game.cameraMode == .tractor ? "Tractor view" : "Farm view")
+            .accessibilityHint("Switch between an overhead view and following behind the tractor.")
+            .accessibilityAddTraits(game.cameraMode == .tractor ? [.isSelected] : [])
+            .accessibilityIdentifier("action.camera")
             zoomButton("minus", label: "Zoom out", action: game.zoomOut)
-            zoomButton("viewfinder", label: "Center the farm", action: game.recenter)
+            zoomButton("viewfinder", label: game.cameraMode == .tractor ? "Center behind the tractor" : "Center the farm", action: game.recenter)
             zoomButton("plus", label: "Zoom in", action: game.zoomIn)
         }
         .background(MeadowPalette.cream.opacity(0.88), in: Capsule())
@@ -527,6 +540,7 @@ private struct FarmHelpSheet: View {
                             .font(.subheadline).foregroundStyle(MeadowPalette.muted).lineSpacing(4)
                     }
                     helpRow("hand.draw", title: "Find your way", text: "Tap a spot in the meadow to drive there. Drag your finger to keep steering. Pinch to look a little closer.")
+                    helpRow("car.rear", title: "Come along for the ride", text: "Tap the vehicle button beside the zoom controls to follow behind your tractor. Tap the ground ahead to steer, and pinch to move closer or farther away. Tap the vehicle button again to see the whole farm.")
                     helpRow("leaf", title: "Make your mark", text: "Mow soft paths, till tidy rows, or sow wildflowers. Choose Wander to enjoy the ride without changing the meadow.")
                     helpRow("wind", title: "Stay for a while", text: "Set your own pace, turn on the birdsong, and take a breath. Your meadow saves on this device. Nothing changes while you’re away.")
                     Button(action: { dismiss() }) {

@@ -1,0 +1,79 @@
+name: Stillfield
+options:
+  bundleIdPrefix: com.stillfield
+  deploymentTarget:
+    iOS: '18.0'
+  xcodeVersion: '27.0'
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    TARGETED_DEVICE_FAMILY: '1,2'
+    SUPPORTS_MACCATALYST: NO
+    SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    CODE_SIGN_STYLE: Automatic
+packages:
+  StillfieldCore:
+    path: StillfieldCore
+targets:
+  Stillfield:
+    type: application
+    platform: iOS
+    sources:
+      - path: Stillfield/Sources
+      - path: Stillfield/Resources
+    dependencies:
+      - package: StillfieldCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.stillfield.app
+        PRODUCT_NAME: Stillfield
+        MARKETING_VERSION: '0.2.0'
+        CURRENT_PROJECT_VERSION: '1'
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_CFBundleDisplayName: Stillfield
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.simulation-games
+        SWIFT_EMIT_LOC_STRINGS: YES
+    info:
+      path: Stillfield/Info.plist
+      properties:
+        CFBundleDisplayName: Stillfield
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIRequiresFullScreen: false
+        ITSAppUsesNonExemptEncryption: false
+        UIUserInterfaceStyle: Light
+  StillfieldUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: StillfieldUITests
+    dependencies:
+      - target: Stillfield
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.stillfield.uitests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Stillfield:
+    build:
+      targets:
+        Stillfield: all
+        StillfieldUITests: [test]
+    test:
+      targets:
+        - StillfieldUITests

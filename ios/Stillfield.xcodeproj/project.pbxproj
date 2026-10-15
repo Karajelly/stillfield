@@ -1,0 +1,546 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		01F7FDD741F0BD68005C2A8A /* FarmController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84D4459AF8D8A41901FD95AE /* FarmController.swift */; };
+		1BF5DDFD084E9DC27BEE5488 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B48D270D7DE3033FA136BDC9 /* Assets.xcassets */; };
+		2AE89F3569E2BE0DFB68124A /* StillfieldCore in Frameworks */ = {isa = PBXBuildFile; productRef = B34BC02C80CCDF1B1E6EECC7 /* StillfieldCore */; };
+		38275791EC71A6A83554539D /* FarmViewport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2756F70899724DF42E65E832 /* FarmViewport.swift */; };
+		5F3A38B13644BFF23AF9EB68 /* FarmAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41632DB2771CDCDB6D3B2875 /* FarmAudio.swift */; };
+		7C8753FDFECE6FF4090B8E9C /* StillfieldApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C196C075E0CE17BAEE432E73 /* StillfieldApp.swift */; };
+		838671660274EF1F9D8E2457 /* StillfieldUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11FEB246D6EF1C6F2FC56AF7 /* StillfieldUITests.swift */; };
+		981F1510515134659672C5E8 /* FarmScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8F2E1F0B1ACD7F2209A5087 /* FarmScreen.swift */; };
+		AF246900C3F39786246C4053 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E03E5FB2FBF35854D6C9407D /* PrivacyInfo.xcprivacy */; };
+		AFFCF064E6C16CFB529C6EBE /* NativeArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 361694CE96158ABDD1A1DBA1 /* NativeArtwork.swift */; };
+		D05B7F4BA42A3D08DEC88B09 /* FarmScene.json in Resources */ = {isa = PBXBuildFile; fileRef = 561D543CE55DBB61DF37BF6F /* FarmScene.json */; };
+		EA404C084D565C0660442D98 /* FieldRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B0101E891852596BA8EB67 /* FieldRenderer.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		F9BBF0B967B53407F788D832 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 46D0B67CD6364E7B2D082D0A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 62B0013E9C336CD05720DBFB;
+			remoteInfo = Stillfield;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		11FEB246D6EF1C6F2FC56AF7 /* StillfieldUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillfieldUITests.swift; sourceTree = "<group>"; };
+		23B0101E891852596BA8EB67 /* FieldRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldRenderer.swift; sourceTree = "<group>"; };
+		2756F70899724DF42E65E832 /* FarmViewport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmViewport.swift; sourceTree = "<group>"; };
+		361694CE96158ABDD1A1DBA1 /* NativeArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeArtwork.swift; sourceTree = "<group>"; };
+		41632DB2771CDCDB6D3B2875 /* FarmAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmAudio.swift; sourceTree = "<group>"; };
+		55BF890D38EA62A229201D5D /* Stillfield.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Stillfield.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		561D543CE55DBB61DF37BF6F /* FarmScene.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FarmScene.json; sourceTree = "<group>"; };
+		84D4459AF8D8A41901FD95AE /* FarmController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmController.swift; sourceTree = "<group>"; };
+		A3484D93B0488A3347071975 /* StillfieldUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = StillfieldUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B48D270D7DE3033FA136BDC9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C196C075E0CE17BAEE432E73 /* StillfieldApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillfieldApp.swift; sourceTree = "<group>"; };
+		D4E93C64D019E0221E45F387 /* StillfieldCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = StillfieldCore; path = StillfieldCore; sourceTree = SOURCE_ROOT; };
+		E03E5FB2FBF35854D6C9407D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		E8F2E1F0B1ACD7F2209A5087 /* FarmScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmScreen.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		F1CF46780DE84CA4C200BE70 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2AE89F3569E2BE0DFB68124A /* StillfieldCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		405B61C281FF68182CA4404B /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				D4E93C64D019E0221E45F387 /* StillfieldCore */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		4F029660C92A113D59420F7C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				55BF890D38EA62A229201D5D /* Stillfield.app */,
+				A3484D93B0488A3347071975 /* StillfieldUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		59D9B7B4CDEE43254C50312E /* Audio */ = {
+			isa = PBXGroup;
+			children = (
+				41632DB2771CDCDB6D3B2875 /* FarmAudio.swift */,
+			);
+			path = Audio;
+			sourceTree = "<group>";
+		};
+		688921F524EF3B67CB0C3B07 = {
+			isa = PBXGroup;
+			children = (
+				405B61C281FF68182CA4404B /* Packages */,
+				E3F9F3DF746EDA138F1803D7 /* Stillfield */,
+				7C8BC223A7D1914AE269D685 /* StillfieldUITests */,
+				4F029660C92A113D59420F7C /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		7C8BC223A7D1914AE269D685 /* StillfieldUITests */ = {
+			isa = PBXGroup;
+			children = (
+				11FEB246D6EF1C6F2FC56AF7 /* StillfieldUITests.swift */,
+			);
+			path = StillfieldUITests;
+			sourceTree = "<group>";
+		};
+		90176878A8E5BBE2C2C602F9 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				B48D270D7DE3033FA136BDC9 /* Assets.xcassets */,
+				561D543CE55DBB61DF37BF6F /* FarmScene.json */,
+				E03E5FB2FBF35854D6C9407D /* PrivacyInfo.xcprivacy */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		96DFD7308804CC26D5911D48 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				C196C075E0CE17BAEE432E73 /* StillfieldApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		A1B5F4007318A7FCB9506486 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				E8F2E1F0B1ACD7F2209A5087 /* FarmScreen.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		AD689F0B8226C7270AF04C69 /* Rendering */ = {
+			isa = PBXGroup;
+			children = (
+				84D4459AF8D8A41901FD95AE /* FarmController.swift */,
+				2756F70899724DF42E65E832 /* FarmViewport.swift */,
+				23B0101E891852596BA8EB67 /* FieldRenderer.swift */,
+				361694CE96158ABDD1A1DBA1 /* NativeArtwork.swift */,
+			);
+			path = Rendering;
+			sourceTree = "<group>";
+		};
+		CAE96DBBDE4C99136CBB5D28 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				96DFD7308804CC26D5911D48 /* App */,
+				59D9B7B4CDEE43254C50312E /* Audio */,
+				AD689F0B8226C7270AF04C69 /* Rendering */,
+				A1B5F4007318A7FCB9506486 /* UI */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		E3F9F3DF746EDA138F1803D7 /* Stillfield */ = {
+			isa = PBXGroup;
+			children = (
+				90176878A8E5BBE2C2C602F9 /* Resources */,
+				CAE96DBBDE4C99136CBB5D28 /* Sources */,
+			);
+			path = Stillfield;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		21DA654D6E183771D58E974A /* StillfieldUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2A1631CBD9D81206B3E0FFD0 /* Build configuration list for PBXNativeTarget "StillfieldUITests" */;
+			buildPhases = (
+				BA235FE55B6EAAD0001F6C10 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				88508392CDA51622FBA1A682 /* PBXTargetDependency */,
+			);
+			name = StillfieldUITests;
+			packageProductDependencies = (
+			);
+			productName = StillfieldUITests;
+			productReference = A3484D93B0488A3347071975 /* StillfieldUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		62B0013E9C336CD05720DBFB /* Stillfield */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3A014579B0D6D6D5A82C585A /* Build configuration list for PBXNativeTarget "Stillfield" */;
+			buildPhases = (
+				97C4533365A71CC56320EC94 /* Sources */,
+				0A6DA6AC496A208800EC41A3 /* Resources */,
+				F1CF46780DE84CA4C200BE70 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Stillfield;
+			packageProductDependencies = (
+				B34BC02C80CCDF1B1E6EECC7 /* StillfieldCore */,
+			);
+			productName = Stillfield;
+			productReference = 55BF890D38EA62A229201D5D /* Stillfield.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		46D0B67CD6364E7B2D082D0A /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					21DA654D6E183771D58E974A = {
+						ProvisioningStyle = Automatic;
+						TestTargetID = 62B0013E9C336CD05720DBFB;
+					};
+					62B0013E9C336CD05720DBFB = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = F184530F665197E325112941 /* Build configuration list for PBXProject "Stillfield" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 688921F524EF3B67CB0C3B07;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C6351AF04925801CFBDA1E94 /* XCLocalSwiftPackageReference "StillfieldCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 4F029660C92A113D59420F7C /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				62B0013E9C336CD05720DBFB /* Stillfield */,
+				21DA654D6E183771D58E974A /* StillfieldUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0A6DA6AC496A208800EC41A3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1BF5DDFD084E9DC27BEE5488 /* Assets.xcassets in Resources */,
+				D05B7F4BA42A3D08DEC88B09 /* FarmScene.json in Resources */,
+				AF246900C3F39786246C4053 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		97C4533365A71CC56320EC94 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5F3A38B13644BFF23AF9EB68 /* FarmAudio.swift in Sources */,
+				01F7FDD741F0BD68005C2A8A /* FarmController.swift in Sources */,
+				981F1510515134659672C5E8 /* FarmScreen.swift in Sources */,
+				38275791EC71A6A83554539D /* FarmViewport.swift in Sources */,
+				EA404C084D565C0660442D98 /* FieldRenderer.swift in Sources */,
+				AFFCF064E6C16CFB529C6EBE /* NativeArtwork.swift in Sources */,
+				7C8753FDFECE6FF4090B8E9C /* StillfieldApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BA235FE55B6EAAD0001F6C10 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				838671660274EF1F9D8E2457 /* StillfieldUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		88508392CDA51622FBA1A682 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 62B0013E9C336CD05720DBFB /* Stillfield */;
+			targetProxy = F9BBF0B967B53407F788D832 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		7817CCF3173D2C03687B005C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		82894E2483060FD2FD4A022E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.stillfield.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Stillfield;
+			};
+			name = Debug;
+		};
+		83B34F7580F8713CBDF95AF2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A42123E17AFDA51616672E60 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = Stillfield/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Stillfield;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.simulation-games";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stillfield.app;
+				PRODUCT_NAME = Stillfield;
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C84C59A965BE15B45C47AE1E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = Stillfield/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Stillfield;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.simulation-games";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stillfield.app;
+				PRODUCT_NAME = Stillfield;
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E5350E8579223F77425D9E22 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.stillfield.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Stillfield;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2A1631CBD9D81206B3E0FFD0 /* Build configuration list for PBXNativeTarget "StillfieldUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				82894E2483060FD2FD4A022E /* Debug */,
+				E5350E8579223F77425D9E22 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		3A014579B0D6D6D5A82C585A /* Build configuration list for PBXNativeTarget "Stillfield" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A42123E17AFDA51616672E60 /* Debug */,
+				C84C59A965BE15B45C47AE1E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F184530F665197E325112941 /* Build configuration list for PBXProject "Stillfield" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				83B34F7580F8713CBDF95AF2 /* Debug */,
+				7817CCF3173D2C03687B005C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		C6351AF04925801CFBDA1E94 /* XCLocalSwiftPackageReference "StillfieldCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = StillfieldCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B34BC02C80CCDF1B1E6EECC7 /* StillfieldCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = StillfieldCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 46D0B67CD6364E7B2D082D0A /* Project object */;
+}

@@ -1,0 +1,32 @@
+{
+  "name": "stillfield",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc && vite build && node scripts/build-sw.mjs",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --import tsx --test src/*.test.ts",
+    "icons": "node scripts/build-icons.mjs",
+    "ios:open": "open ios/Stillfield.xcodeproj",
+    "ios:build": "DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer} xcodebuild -project ios/Stillfield.xcodeproj -scheme Stillfield -destination 'generic/platform=iOS Simulator' -derivedDataPath ios/.build build CODE_SIGNING_ALLOWED=NO",
+    "ios:test": "DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer} swift test --package-path ios/StillfieldCore",
+    "ios:test-ui": "DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer} xcodebuild -project ios/Stillfield.xcodeproj -scheme Stillfield -derivedDataPath ios/.build test CODE_SIGNING_ALLOWED=NO",
+    "ios:assets": "node --import tsx scripts/export-native-assets.ts",
+    "ios:project": "xcodegen generate --spec ios/project.yml"
+  },
+  "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource-variable/lora": "^5.3.0",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/three": "^0.180.0",
+    "sharp": "^0.35.5",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9"
+  }
+}

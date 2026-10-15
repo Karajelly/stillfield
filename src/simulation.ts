@@ -1,0 +1,119 @@
+export type Tool = "mow" | "till" | "sow" | "wander";
+export interface Point {
+  x: number;
+  z: number;
+}
+export interface TractorState extends Point {
+  heading: number;
+  speed: number;
+}
+export interface Obstacle extends Point {
+  radius: number;
+}
+export const FIELD = { minX: -24, maxX: 19, minZ: -13, maxZ: 14, cell: 0.25 };
+export const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value));
+export const angleDifference = (a: number, b: number) =>
+  Math.atan2(Math.sin(a - b), Math.cos(a - b));
+export function seededRandom(seed: number) {
+  return () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+}
+export function advanceTractor(
+  state: TractorState,
+  target: Point | null,
+  dt: number,
+  obstacles: Obstacle[],
+  rowAssist: boolean,
+  pace = 1,
+): TractorState {
+  dt = clamp(dt, 0, 0.05);
+  let { x, z, heading, speed } = state;
+  const distance = target ? Math.hypot(target.x - x, target.z - z) : 0;
+  let desiredSpeed = 0;
+  if (target && distance > 0.38) {
+    let desiredHeading = Math.atan2(target.x - x, target.z - z);
+    const snap = (Math.round(desiredHeading / (Math.PI / 2)) * Math.PI) / 2;
+    if (
+      rowAssist &&
+      distance > 3 &&
+      Math.abs(angleDifference(snap, desiredHeading)) < 0.13
+    )
+      desiredHeading = snap;
+    const turn = angleDifference(desiredHeading, heading);
+    heading += clamp(turn, -dt * 2.4, dt * 2.4);
+    desiredSpeed =
+      Math.min(5.5 * pace, distance * 1.8) *
+      (0.18 + 0.82 * Math.max(0, Math.cos(turn)));
+  }
+  speed += (desiredSpeed - speed) * Math.min(1, dt * (desiredSpeed ? 3.8 : 7));
+  if (speed < 0.015) speed = 0;
+  x += Math.sin(heading) * speed * dt;
+  z += Math.cos(heading) * speed * dt;
+  let constrained = false;
+  for (const obstacle of obstacles) {
+    const dx = x - obstacle.x,
+      dz = z - obstacle.z;
+    const distanceToObstacle = Math.hypot(dx, dz),
+      clearance = obstacle.radius + 0.9;
+    if (distanceToObstacle < clearance) {
+      const direction =
+        distanceToObstacle > 0.001 ? Math.atan2(dx, dz) : heading + Math.PI;
+      x = obstacle.x + Math.sin(direction) * clearance;
+      z = obstacle.z + Math.cos(direction) * clearance;
+      constrained = true;
+    }
+  }
+  const boundedX = clamp(x, -39, 39),
+    boundedZ = clamp(z, -30, 28);
+  constrained ||= boundedX !== x || boundedZ !== z;
+  x = boundedX;
+  z = boundedZ;
+  if (constrained && dt > 0) {
+    // Let glancing contact slide along an obstacle, but make the wheels and
+    // engine reflect actual travel when the tractor meets it head-on. Capping
+    // at the requested speed also avoids acceleration from overlap recovery.
+    speed = Math.min(speed, Math.hypot(x - state.x, z - state.z) / dt);
+    if (speed < 0.015) speed = 0;
+  }
+  return { x, z, heading, speed };
+}
+export function cellsUnderBrush(
+  x: number,
+  z: number,
+  radius: number,
+): number[] {
+  const columns = Math.round((FIELD.maxX - FIELD.minX) / FIELD.cell);
+  const rows = Math.round((FIELD.maxZ - FIELD.minZ) / FIELD.cell);
+  const result: number[] = [];
+  const minCol = clamp(
+    Math.floor((x - radius - FIELD.minX) / FIELD.cell),
+    0,
+    columns - 1,
+  );
+  const maxCol = clamp(
+    Math.floor((x + radius - FIELD.minX) / FIELD.cell),
+    0,
+    columns - 1,
+  );
+  const minRow = clamp(
+    Math.floor((z - radius - FIELD.minZ) / FIELD.cell),
+    0,
+    rows - 1,
+  );
+  const maxRow = clamp(
+    Math.floor((z + radius - FIELD.minZ) / FIELD.cell),
+    0,
+    rows - 1,
+  );
+  for (let row = minRow; row <= maxRow; row++)
+    for (let col = minCol; col <= maxCol; col++) {
+      const cx = FIELD.minX + (col + 0.5) * FIELD.cell,
+        cz = FIELD.minZ + (row + 0.5) * FIELD.cell;
+      if ((x - cx) ** 2 + (z - cz) ** 2 <= radius ** 2)
+        result.push(row * columns + col);
+    }
+  return result;
+}

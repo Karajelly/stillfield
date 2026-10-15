@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.DS_Store
+test-results/
+playwright-report/
+ios/.build/
+ios/**/.build/
+ios/**/.swiftpm/
+ios/**/xcuserdata/
+DerivedData/
+*.xcuserstate
+*.xcresult
+*.xcarchive/
+*.ipa

@@ -7,9 +7,10 @@ export const tuning = {
   turnRate: 1.2, tapTurnRate: 1.4, steeringResponse: 12,
   acceleration: 4, braking: 10, deadzone: 10, dragRange: 110,
   brushRadius: 1.25, rowPitch: 2.15, rowCapture: 0.55,
+  tightTurnSpeed: 1.29,
 };
 
-function constrain(before: TractorState, after: TractorState, dt: number, obstacles: Obstacle[]) {
+export function constrain(before: TractorState, after: TractorState, dt: number, obstacles: Obstacle[]) {
   let { x, z, heading, speed } = after;
   let constrained = false;
   for (const obstacle of obstacles) {
@@ -80,7 +81,9 @@ export class GentleDrive {
       this.steering = requested === 0 ? 0 : this.steering + (requested - this.steering) * (1 - Math.exp(-tuning.steeringResponse * dt));
       // Heading-positive is screen-left for the +Z forward tractor.
       heading -= this.steering * tuning.turnRate * dt;
-      desiredSpeed = 5.5 * 0.85 * (1 - 0.4 * Math.abs(this.steering));
+      // A small radius comes from slowing travel, without increasing camera yaw.
+      const cruise = 5.5 * 0.85;
+      desiredSpeed = cruise - (cruise - tuning.tightTurnSpeed) * Math.abs(this.steering) ** 1.3;
     } else if (input && "target" in input) {
       this.steering = 0;
       const distance = Math.hypot(input.target.x - x, input.target.z - z);

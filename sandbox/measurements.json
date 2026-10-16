@@ -24,15 +24,15 @@
         "viewport": "402×874",
         "maxTurnRate": 42.85626733877926,
         "postReleaseTurn": 0,
-        "speedAtRelease": 3.5230572796209008,
-        "stopAfterSeconds": 0.5333333333333332,
-        "travelAfterRelease": 0.2954110229211088,
+        "speedAtRelease": 2.8723184396622963,
+        "stopAfterSeconds": 0.5,
+        "travelAfterRelease": 0.24038383102102293,
         "cameraTurnAfter": 4.597636335826668,
         "releasePosition": {
-          "x": -10.692055679755299,
-          "z": -5.248079563735034,
+          "x": -11.230342363620071,
+          "z": -5.552255713147064,
           "heading": 0.7028378764502834,
-          "speed": 3.5230572796209008
+          "speed": 2.8723184396622963
         }
       }
     },
@@ -58,15 +58,15 @@
         "viewport": "402×874",
         "maxTurnRate": 42.856267338779254,
         "postReleaseTurn": 0,
-        "speedAtRelease": 3.524266208744807,
-        "stopAfterSeconds": 0.5333333333333332,
-        "travelAfterRelease": 0.32230951730374124,
+        "speedAtRelease": 2.8746105592589144,
+        "stopAfterSeconds": 0.5166666666666666,
+        "travelAfterRelease": 0.2626643664882377,
         "cameraTurnAfter": 4.921627059125769,
         "releasePosition": {
-          "x": -10.692893029251074,
-          "z": -5.289085805624818,
+          "x": -11.227492452548656,
+          "z": -5.586079861505581,
           "heading": 0.7084255144616008,
-          "speed": 3.524266208744807
+          "speed": 2.8746105592589144
         }
       }
     },
@@ -92,15 +92,15 @@
         "viewport": "402×874",
         "maxTurnRate": 42.856267338779254,
         "postReleaseTurn": 0,
-        "speedAtRelease": 3.5248299749210426,
-        "stopAfterSeconds": 0.5416666666666665,
-        "travelAfterRelease": 0.3364987929975167,
+        "speedAtRelease": 2.8757394747129483,
+        "stopAfterSeconds": 0.5249999999999999,
+        "travelAfterRelease": 0.27431105480392326,
         "cameraTurnAfter": 5.089087766244024,
         "releasePosition": {
-          "x": -10.693366343232666,
-          "z": -5.310102666884645,
+          "x": -11.225943352260792,
+          "z": -5.60340366366809,
           "heading": 0.7113735873195731,
-          "speed": 3.5248299749210426
+          "speed": 2.8757394747129483
         }
       }
     }
@@ -127,15 +127,15 @@
       "viewport": "402×874",
       "maxTurnRate": 42.856267338779254,
       "postReleaseTurn": 0,
-      "speedAtRelease": 3.524266208744807,
-      "stopAfterSeconds": 0.5333333333333332,
-      "travelAfterRelease": 0.32230951730374124,
+      "speedAtRelease": 2.8746105592589144,
+      "stopAfterSeconds": 0.5166666666666666,
+      "travelAfterRelease": 0.2626643664882377,
       "cameraTurnAfter": 4.921627059125769,
       "releasePosition": {
-        "x": -10.692893029251074,
-        "z": -5.289085805624818,
+        "x": -11.227492452548656,
+        "z": -5.586079861505581,
         "heading": 0.7084255144616008,
-        "speed": 3.524266208744807
+        "speed": 2.8746105592589144
       }
     }
   },
@@ -161,15 +161,15 @@
       "viewport": "1440×900",
       "maxTurnRate": 42.856267338779254,
       "postReleaseTurn": 0,
-      "speedAtRelease": 3.524266208744807,
-      "stopAfterSeconds": 0.5333333333333332,
-      "travelAfterRelease": 0.32230951730374124,
+      "speedAtRelease": 2.8746105592589144,
+      "stopAfterSeconds": 0.5166666666666666,
+      "travelAfterRelease": 0.2626643664882377,
       "cameraTurnAfter": 4.921627059125769,
       "releasePosition": {
-        "x": -10.692893029251074,
-        "z": -5.289085805624818,
+        "x": -11.227492452548656,
+        "z": -5.586079861505581,
         "heading": 0.7084255144616008,
-        "speed": 3.524266208744807
+        "speed": 2.8746105592589144
       }
     }
   },

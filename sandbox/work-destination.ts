@@ -18,6 +18,8 @@ export class WorkDestination {
   private routePoint: Point;
   private locked = false;
   private aligning = false;
+  private rowFinish = false;
+  row: { axis: number; lane: number; heading: number } | null = null;
 
   static create(point: Point, state: TractorState, tool: Tool): WorkDestination | null {
     if (tool === "wander" || !Number.isFinite(point.x) || !Number.isFinite(point.z)
@@ -71,6 +73,14 @@ export class WorkDestination {
   }
   covered(state: TractorState): boolean {
     const brush = attachmentPoint(state);
-    return this.corners.every(corner => Math.hypot(corner.x - brush.x, corner.z - brush.z) <= tuning.brushRadius);
+    const throughEnd = (brush.x - this.routePoint.x) * Math.sin(this.heading)
+      + (brush.z - this.routePoint.z) * Math.cos(this.heading);
+    return (!this.rowFinish || throughEnd >= 0)
+      && this.corners.every(corner => Math.hypot(corner.x - brush.x, corner.z - brush.z) <= tuning.brushRadius);
+  }
+  alignToRow(axis: number, lane: number, heading: number) {
+    this.row = { axis, lane, heading };
+    this.routePoint = axis === 0 ? { x: this.center.x, z: lane } : { x: lane, z: this.center.z };
+    this.heading = heading; this.locked = true; this.aligning = false; this.rowFinish = true;
   }
 }

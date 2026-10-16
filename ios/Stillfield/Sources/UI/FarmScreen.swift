@@ -121,6 +121,7 @@ struct FarmScreen: View {
         GeometryReader { geometry in
             let compactHeight = geometry.size.height < 500
             let wide = geometry.size.width >= 700
+            let portrait = geometry.size.height > geometry.size.width
             ZStack {
                 FarmViewport(game: game)
                     .ignoresSafeArea()
@@ -175,19 +176,28 @@ struct FarmScreen: View {
                     }
 
                     if !game.introDismissed {
-                        welcome(compact: compactHeight, wide: wide)
-                            .padding(!wide && !compactHeight ? 16 : 0)
-                            .background {
-                                if !wide && !compactHeight {
-                                    RoundedRectangle(cornerRadius: 24)
-                                        .fill(MeadowPalette.cream.opacity(0.92))
-                                }
+                        Group {
+                            if portrait {
+                                portraitWelcome(wide: wide, short: geometry.size.height < 700)
+                                    .padding(.horizontal, 24)
+                                    .padding(.top, wide ? 100 : geometry.size.height < 700 ? 58 : 70)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                            } else {
+                                welcome(compact: compactHeight, wide: wide)
+                                    .padding(!wide && !compactHeight ? 16 : 0)
+                                    .background {
+                                        if !wide && !compactHeight {
+                                            RoundedRectangle(cornerRadius: 24)
+                                                .fill(MeadowPalette.cream.opacity(0.92))
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                    .padding(.leading, wide ? 40 : 24)
+                                    .padding(.top, compactHeight ? 70 : wide ? 120 : 90)
                             }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                            .padding(.leading, wide ? 40 : 24)
-                            .padding(.top, compactHeight ? 70 : wide ? 120 : 90)
-                            .transition(.opacity)
-                    } else if wide && !compactHeight {
+                        }
+                        .transition(.opacity)
+                    } else if !portrait && wide && !compactHeight {
                         fieldNote
                             .modifier(AmbientCopy(hidden: game.hasDriven))
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -299,6 +309,25 @@ struct FarmScreen: View {
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 
+    private func portraitWelcome(wide: Bool, short: Bool) -> some View {
+        VStack(spacing: wide ? 10 : 8) {
+            if !short {
+                Text("THERE’S NO HURRY HERE")
+                    .font(.system(size: 9, weight: .medium))
+                    .tracking(1.5)
+                    .foregroundStyle(MeadowPalette.welcomeEyebrow)
+            }
+            (Text(short ? "Take it " : "A good day\nto take it ") + Text("slow.").italic().foregroundColor(MeadowPalette.welcomeEmphasis))
+                .font(.system(size: wide ? 35 : 27, weight: .regular, design: .serif))
+                .lineSpacing(-1)
+                .multilineTextAlignment(.center)
+            welcomeButton
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .accessibilityElement(children: .contain)
+    }
+
     private func welcome(compact: Bool, wide: Bool) -> some View {
         VStack(alignment: .leading, spacing: compact ? 9 : 15) {
             if !compact {
@@ -319,23 +348,27 @@ struct FarmScreen: View {
                     .lineSpacing(5)
                     .foregroundStyle(MeadowPalette.welcomeCopy)
             }
-            Button(action: game.dismissIntro) {
-                HStack(spacing: 17) {
-                    Text("Let’s wander")
-                        .font(.system(size: 13, weight: .medium))
-                    Image(systemName: "arrow.right").font(.system(size: 13))
-                }
-                .padding(.horizontal, 19)
-                .frame(minHeight: 46)
-                .foregroundStyle(MeadowPalette.ink)
-                .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("action.begin")
+            welcomeButton
         }
         .fixedSize(horizontal: false, vertical: true)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .accessibilityElement(children: .contain)
+    }
+
+    private var welcomeButton: some View {
+        Button(action: game.dismissIntro) {
+            HStack(spacing: 17) {
+                Text("Let’s wander")
+                    .font(.system(size: 13, weight: .medium))
+                Image(systemName: "arrow.right").font(.system(size: 13))
+            }
+            .padding(.horizontal, 19)
+            .frame(minHeight: 46)
+            .foregroundStyle(MeadowPalette.ink)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("action.begin")
     }
 
     private var fieldNote: some View {

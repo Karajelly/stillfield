@@ -10,6 +10,8 @@ The native app lives in `ios/`. SwiftUI provides the interface and settings; Rea
 
 The app supports iOS/iPadOS 18 or later, portrait and landscape, touch steering, pinch zoom, and optional haptics. Scene artwork and the app icon are bundled, and audio is generated on the device. Play works entirely offline, including the first launch. Meadows save atomically in the app’s Application Support directory. Nothing changes while the app is inactive.
 
+Portrait farm view looks along the meadow’s longer rows, with the barn above and the pond below, leaving room for the tools and a quiet welcome. Landscape keeps the broad countryside view. Rotating the device reframes the same meadow without moving saved paths or changing your zoom. The browser prototype uses the same portrait composition.
+
 ### Run in Xcode
 
 Open the checked-in project on a Mac with full Xcode and an iOS Simulator runtime installed:

@@ -86,7 +86,9 @@ final class StillfieldUITests: XCTestCase {
         let overviewZoom = try XCTUnwrap(telemetry(in: app)).zoom
         let surface = meadowSurface(in: app)
         let initial = try XCTUnwrap(telemetry(in: app))
-        surface.coordinate(withNormalizedOffset: CGVector(dx: 0.33, dy: 0.51)).tap()
+        // Leave enough open meadow ahead to switch views during the drive,
+        // including the time accessibility needs to locate the camera button.
+        surface.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.40)).tap()
         _ = try waitForSteering(after: initial.steeringCount, in: app)
         revealControls(in: app)
         app.buttons["action.camera"].tap()
@@ -325,8 +327,16 @@ final class StillfieldUITests: XCTestCase {
 
     private func revealControls(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
         let recall = app.buttons["action.controls"]
-        if recall.exists && recall.label == "Show controls" { recall.tap() }
-        XCTAssertTrue(waitUntil(timeout: 3) { app.buttons["tool.mow"].isHittable }, file: file, line: line)
+        if recall.exists && recall.label == "Show controls" {
+            recall.tap()
+            // Mow enters first during the slide; the controls on its right may
+            // still be outside the screen even though Mow is already hittable.
+            waitForMeadowLayout(in: app, portrait: app.frame.height > app.frame.width,
+                                tractorView: telemetry(in: app)?.tractorView == true,
+                                file: file, line: line)
+        } else {
+            XCTAssertTrue(waitUntil(timeout: 3) { app.buttons["tool.mow"].isHittable }, file: file, line: line)
+        }
     }
 
     private func waitForSteering(after count: Int, in app: XCUIApplication,

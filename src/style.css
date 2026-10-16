@@ -266,6 +266,9 @@ button:disabled {
   align-items: center;
   color: #7b8a6b;
 }
+.welcome-title-short {
+  display: none;
+}
 .welcome .eyebrow span {
   display: block;
   width: 14px;
@@ -1147,6 +1150,80 @@ dialog .ipad-tip {
   }
   .pause-veil {
     top: 85px;
+  }
+}
+/* A quiet vertical composition, including portrait iPad and narrow split views. */
+@media (max-aspect-ratio: 1/1) {
+  .welcome {
+    top: calc(clamp(105px, 12vh, 145px) + env(safe-area-inset-top));
+    left: 20px;
+    right: 20px;
+    max-width: none;
+    text-align: center;
+  }
+  .welcome .eyebrow {
+    justify-content: center;
+    font-size: 8px;
+    letter-spacing: 1.5px;
+  }
+  .welcome h1 {
+    font-size: clamp(27px, 4.2vw, 35px);
+    letter-spacing: -0.9px;
+    margin: 12px 0 4px;
+  }
+  .welcome p,
+  .field-note,
+  .world-label,
+  .place-pill,
+  .weather {
+    display: none;
+  }
+  .welcome-button {
+    margin: 0 auto;
+    min-height: 44px;
+    font-size: 12px;
+  }
+  .round-button,
+  .zoom-controls button {
+    width: 44px;
+    height: 44px;
+  }
+  .bottom-center {
+    bottom: calc(78px + env(safe-area-inset-bottom));
+  }
+  .bottom-bar {
+    bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+}
+@media (max-aspect-ratio: 1/1) and (max-width: 380px) {
+  .topbar {
+    padding-left: 14px;
+    padding-right: 14px;
+    gap: 6px;
+  }
+  .brand {
+    font-size: 25px;
+  }
+  .brand > svg {
+    width: 28px;
+  }
+  .brand-tagline {
+    display: none;
+  }
+}
+@media (max-aspect-ratio: 1/1) and (max-height: 740px) {
+  .welcome {
+    top: calc(82px + env(safe-area-inset-top));
+  }
+  .welcome .eyebrow,
+  .welcome-title {
+    display: none;
+  }
+  .welcome-title-short {
+    display: inline;
+  }
+  .welcome h1 {
+    margin: 0;
   }
 }
 .ambient-copy {

@@ -7,6 +7,7 @@ import { FarmAudio } from "./audio";
 import { advanceTractor, clamp, FIELD } from "./simulation";
 import type { Point, Tool, TractorState } from "./simulation";
 import { icon, brandMark } from "./icons";
+import { overviewFraming } from "./overview";
 
 interface Save {
   version: 1;
@@ -67,7 +68,7 @@ app.innerHTML = `
     </header>
     <section class="welcome ${introDismissed ? "dismissed" : ""}" id="welcome">
       <div class="eyebrow"><span></span> THERE’S NO HURRY HERE</div>
-      <h1>A good day<br>to take it <em>slow.</em></h1>
+      <h1><span class="welcome-title">A good day<br>to take it <em>slow.</em></span><span class="welcome-title-short">Take it <em>slow.</em></span></h1>
       <p>A little fresh air. A few tidy rows.<br>Nothing you need to finish.</p>
       <button class="welcome-button" id="begin">Let’s wander ${icon("arrow")}</button>
     </section>
@@ -170,8 +171,8 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color("#e8ecda");
 scene.fog = new THREE.Fog("#e8ecda", 125, 230);
 const camera = new THREE.OrthographicCamera(-55, 55, 35, -35, 0.1, 300);
-camera.position.set(59, 73, 87);
-camera.lookAt(-1, 0, -2);
+const keyboardRight = new THREE.Vector3();
+const keyboardDown = new THREE.Vector3();
 const hemi = new THREE.HemisphereLight("#fff8df", "#7c9060", 2.5);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight("#fff1ce", 3.1);
@@ -242,7 +243,12 @@ function resize() {
     height = window.innerHeight;
   renderer.setSize(width, height);
   const aspect = width / height;
-  let vertical = aspect < 1 ? 94 : aspect < 1.35 ? 76 : 66;
+  const { position, focus, vertical } = overviewFraming(aspect);
+  camera.position.copy(position);
+  camera.lookAt(focus);
+  camera.updateMatrixWorld();
+  keyboardRight.setFromMatrixColumn(camera.matrixWorld, 0);
+  keyboardDown.copy(position).sub(focus).setY(0).normalize();
   camera.left = (-vertical * aspect) / 2;
   camera.right = (vertical * aspect) / 2;
   camera.top = vertical / 2;
@@ -581,7 +587,10 @@ function animate(now: number) {
       if (keys.has("arrowleft") || keys.has("a")) sx -= 1;
       if (keys.has("arrowright") || keys.has("d")) sx += 1;
       if (sx || sy) {
-        const angle = Math.atan2(sx * 0.83 + sy * 0.56, -sx * 0.56 + sy * 0.83);
+        const angle = Math.atan2(
+          sx * keyboardRight.x + sy * keyboardDown.x,
+          sx * keyboardRight.z + sy * keyboardDown.z,
+        );
         target = {
           x: tractorState.x + Math.sin(angle) * 12,
           z: tractorState.z + Math.cos(angle) * 12,

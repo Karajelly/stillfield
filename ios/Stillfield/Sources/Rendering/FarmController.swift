@@ -166,19 +166,20 @@ final class FarmController {
     }
 
     func setViewportSize(_ size: CGSize) {
-        guard size.width > 0, size.height > 0 else { return }
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else { return }
         viewport = size
         let aspect = Float(size.width / size.height)
         if cameraMode == .overview {
+            let framing = OverviewCamera.frame(aspect: Double(aspect), zoom: Double(zoom))
             camera.components.remove(PerspectiveCameraComponent.self)
             var component = OrthographicCameraComponent()
             component.near = 0.1
             component.far = 300
             component.scaleDirection = .vertical
             // RealityKit's orthographic scale is a half-extent.
-            component.scale = max(66, 64 / aspect) * 0.5 / zoom
+            component.scale = Float(framing.verticalHalfExtent)
             camera.components.set(component)
-            camera.look(at: [-1, 0, -2], from: [59, 73, 87], relativeTo: nil)
+            camera.look(at: SIMD3<Float>(framing.focus), from: SIMD3<Float>(framing.position), relativeTo: nil)
         } else {
             camera.components.remove(OrthographicCameraComponent.self)
             camera.components.set(PerspectiveCameraComponent(
@@ -242,9 +243,8 @@ final class FarmController {
             let depth = max(1, simd_dot(destinationMarker.position - camera.position, forward))
             let metresPerPoint = 2 * depth * tan(projection.fieldOfViewInDegrees * .pi / 360) / Float(viewport.height)
             destinationMarker.scale = SIMD3(repeating: min(1.4, max(0.35, metresPerPoint * 12)))
-        } else {
-            let aspect = Float(viewport.width / viewport.height)
-            let metresPerPoint = max(66, 64 / aspect) / (zoom * Float(viewport.height))
+        } else if let projection = camera.components[OrthographicCameraComponent.self] {
+            let metresPerPoint = projection.scale * 2 / Float(viewport.height)
             destinationMarker.scale = SIMD3(repeating: metresPerPoint * 12)
         }
     }

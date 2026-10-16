@@ -591,8 +591,6 @@ private struct FarmSettingsSheet: View {
                             .font(.subheadline).foregroundStyle(MeadowPalette.dialogCopy)
                     }
                     VStack(spacing: 20) {
-                        settingToggle("A helping hand", subtitle: "Gently straighten near-perfect rows.", isOn: $game.rowAssist, identifier: "settings.guide")
-                        Divider().overlay(MeadowPalette.settingBorder)
                         settingToggle("Golden light", subtitle: "A warmer kind of afternoon.", isOn: $game.goldenLight, identifier: "settings.golden")
                         Divider().overlay(MeadowPalette.settingBorder)
                         settingToggle("A little feeling", subtitle: "Gentle haptics when you change tools.", isOn: $game.haptics, identifier: "settings.haptics")
@@ -709,8 +707,8 @@ private struct FarmHelpSheet: View {
                         Text("There’s nothing to win and nowhere to fall behind. Just a little land to make your own.")
                             .font(.subheadline).foregroundStyle(MeadowPalette.dialogCopy).lineSpacing(4)
                     }
-                    helpRow("hand.draw", title: "Find your way", text: "Tap a spot in the meadow to drive there. Drag your finger to keep steering. Pinch to look a little closer.")
-                    helpRow("car.rear", title: "Come along for the ride", text: "Tap the vehicle button beside the zoom controls to follow behind your tractor. Tap the ground ahead to steer, and pinch to move closer or farther away. Tap the vehicle button again to see the whole farm.")
+                    helpRow("hand.draw", title: "Find your way", text: "Tap where mowing or planting should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop. Pinch to look a little closer.")
+                    helpRow("car.rear", title: "Come along for the ride", text: "Tap the vehicle button beside the zoom controls to follow behind your tractor. Hold to roll, move your finger left or right to steer, and lift to settle. A quick tap chooses where work should finish. Pinch to move closer or farther away. Tap the vehicle button again to see the whole farm.")
                     helpRow("leaf", title: "Make your mark", text: "Mow soft paths, till tidy rows, or sow wildflowers. Choose Wander to enjoy the ride without changing the meadow.")
                     helpRow("wind", title: "Stay for a while", text: "Set your own pace, turn on the birdsong, and take a breath. Your meadow saves on this device. Nothing changes while you’re away.")
                     Button(action: { dismiss() }) {

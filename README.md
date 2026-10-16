@@ -42,7 +42,7 @@ To run the native UI test, supply the name or identifier of an installed simulat
 npm run ios:test-ui -- -destination 'platform=iOS Simulator,name=iPhone 17'
 ```
 
-The UI suite checks real touch/drag steering and field painting, repeated taps replacing the destination, steering after pinch zoom, wandering without painting, background/foreground stopping, tool selection, pausing, settings restoration, rotation, and reachable touch targets. It also checks switching into tractor view while driving, camera following, perspective steering, separate zoom levels, and restoring the view after relaunch. It retains screenshots and uses a separate save file from regular play. Core tests cover quick steering response, close destinations, braking on retargeting, consistent movement at 30/60/120 Hz, camera turn smoothing and obstacle clearance, perspective ground projection, and loading older saves. Simulator results do not replace physical-device testing for performance, sound, and haptics.
+The UI suite checks real touch/drag steering and field painting, release without continued turning, repeated taps replacing the destination, steering after pinch zoom, wandering without painting, background/foreground stopping, tool selection, pausing, settings restoration, rotation, and reachable touch targets. It also checks switching into tractor view while driving, camera following, perspective steering, separate zoom levels, and restoring the view after relaunch. It retains screenshots and uses a separate save file from regular play. Core tests cover work-through endpoints, nearby row-end taps that align and stop, six consecutive player-selected rows 2.5 m apart, tool changes during arrivals, close destinations, consistent movement at 30/60/120 Hz, camera smoothing and obstacle clearance, perspective ground projection, and loading older saves. Simulator results do not replace physical-device testing for performance, sound, and haptics.
 
 ### Native project and artwork maintenance
 
@@ -67,12 +67,13 @@ Commit regenerated resources and project changes alongside their source changes.
 
 ## Play
 
-- Tap a destination or drag across the meadow to steer. Pinch or use the zoom buttons to change your view.
-- In the native app, tap the vehicle button beside the zoom controls to switch into **Tractor view**, a perspective view following behind you. Tap the ground ahead to steer and pinch to adjust the camera distance. Tap the vehicle button again to return to the overhead farm view. Each view keeps its own zoom during play, and your chosen view saves with your meadow.
-- A cream ring marks your destination. Tap again to redirect the tractor immediately; its cruising pace stays gentle.
+- Tap where mowing, tilling, or sowing should finish. The tractor continues until its trailing implement works that square, then stops. In overhead view, drag across the meadow to keep choosing destinations. Pinch or use the zoom buttons to change your view.
+- In the native app, tap the vehicle button beside the zoom controls to switch into **Tractor view**, a perspective view following behind you. Hold to roll, move left or right from where you touched to steer, return to center to go straight, and lift to coast to a stop. A quick tap still chooses a work endpoint. Pinch to adjust camera distance. Each view keeps its own zoom during play, and your chosen view saves with your meadow.
+- After a straight row, let the tractor settle and tap the neighboring ground beside its end. It lifts the implement, turns into your chosen spot, faces back along the row, works the spot, and stops ready for your next input. There are no suggested lanes, spacing correction, or automatic next passes.
+- A cream ring stays on the spot you chose. Tap again to redirect the tractor; its cruising pace stays gentle. The 2.57 m working swath matches the visible deck and covers its continuous movement between frames.
 - Choose **Mow**, **Till**, **Sow**, or **Wander**. Wandering leaves the field as it is.
 - The pause button gives you a moment to breathe.
-- Settings control pace, gentle row alignment, golden light, haptics, and nature-sound volume.
+- Settings control pace, golden light, haptics, and nature-sound volume.
 - Enable sound with the speaker button for wind, birds, and a soft tractor hum.
 - Your field, tractor position, tool, and settings save on this device. There is no account or cloud sync.
 - **Settings → A fresh meadow** asks before clearing the field. The rest of your preferences stay in place.

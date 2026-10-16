@@ -38,6 +38,11 @@ public struct FieldGrid: Codable, Equatable, Sendable {
     /// part of the field while driving instead of rebuilding the entire meadow.
     @discardableResult
     public mutating func paint(x: Double, z: Double, tool: FarmTool) -> [Int] {
+        paint(from: FarmPoint(x: x, z: z), to: FarmPoint(x: x, z: z), tool: tool)
+    }
+
+    @discardableResult
+    public mutating func paint(from: FarmPoint, to: FarmPoint, tool: FarmTool) -> [Int] {
         guard tool != .wander, cells.count == Self.columns * Self.rows else { return [] }
         let value: UInt8 = switch tool {
         case .mow: 1
@@ -46,7 +51,7 @@ public struct FieldGrid: Codable, Equatable, Sendable {
         case .wander: 0
         }
         var changed: [Int] = []
-        for index in FarmSimulation.cellsUnderBrush(x: x, z: z, radius: 1.15) {
+        for index in FarmSimulation.cellsUnderSweep(from: from, to: to, radius: TractorHandling.brushRadius) {
             if cells[index] != value {
                 cells[index] = value
                 changed.append(index)

@@ -12,7 +12,6 @@ final class FarmController {
     private(set) var cameraMode: FarmCameraMode
     var isPaused = false
     var soundEnabled = false
-    var rowAssist: Bool { didSet { persist() } }
     var goldenLight: Bool { didSet { updateLight(); persist() } }
     var haptics: Bool { didSet { persist() } }
     var introDismissed: Bool
@@ -56,12 +55,13 @@ final class FarmController {
     @ObservationIgnored private var birds: [(Entity, SIMD3<Float>)] = []
     @ObservationIgnored private let audio = FarmAudio()
     @ObservationIgnored private let feedback = UISelectionFeedbackGenerator()
+    @ObservationIgnored private var navigation = TractorNavigation()
+    @ObservationIgnored private var steeringGesture: SteeringGesture?
+    @ObservationIgnored private var steeringSuppressed = false
     @ObservationIgnored private var target: FarmPoint?
     @ObservationIgnored private var elapsed = 0.0
     @ObservationIgnored private var lastFlush = 0.0
-    @ObservationIgnored private var lastPaint = 0.0
     @ObservationIgnored private var lastSave = 0.0
-    @ObservationIgnored private var blockedTime = 0.0
     @ObservationIgnored private var wheelAngle: Float = 0
     @ObservationIgnored private var overviewZoom: Float = 1
     @ObservationIgnored private var tractorZoom = Float(TractorFollowCamera.defaultZoom)
@@ -96,7 +96,6 @@ final class FarmController {
         tractorState.speed = 0
         tool = saved.tool
         cameraMode = saved.cameraMode ?? .overview
-        rowAssist = saved.rowAssist
         goldenLight = saved.goldenLight
         haptics = saved.haptics
         introDismissed = saved.introDismissed
@@ -167,6 +166,7 @@ final class FarmController {
 
     func setViewportSize(_ size: CGSize) {
         guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else { return }
+        if pinchStartZoom == nil { cancelSteering() }
         viewport = size
         let aspect = Float(size.width / size.height)
         if cameraMode == .overview {
@@ -194,12 +194,39 @@ final class FarmController {
 #endif
     }
 
-    func steer(at point: CGPoint) {
+    func steer(at point: CGPoint, from origin: CGPoint) {
 #if DEBUG
         if isUITesting { testTouchCount += 1 }
         defer { updateTestTelemetry(force: true) }
 #endif
-        guard !isLoading, isActive, !isPaused, activeSheet == nil, pinchStartZoom == nil else { return }
+        guard !isLoading, isActive, !isPaused, activeSheet == nil,
+              pinchStartZoom == nil, !steeringSuppressed else { return }
+        let started = steeringGesture == nil
+        if started {
+            navigation.cancel(); target = nil; destinationMarker.isEnabled = false
+            steeringGesture = SteeringGesture(location: SIMD2(Double(origin.x), Double(origin.y)), time: elapsed)
+        }
+        steeringGesture?.update(SIMD2(Double(point.x), Double(point.y)))
+        if cameraMode == .overview && (started || steeringGesture?.moved == true) { chooseGround(at: point) }
+        if !introDismissed { dismissIntro() }
+        if hasDriven { scheduleControlsHide() }
+    }
+
+    func endSteering() {
+        defer { steeringGesture = nil; steeringSuppressed = false }
+        guard !steeringSuppressed, let gesture = steeringGesture else { return }
+        if cameraMode == .tractor && !gesture.isDriving(at: elapsed) {
+            chooseGround(at: CGPoint(x: gesture.location.x, y: gesture.location.y))
+        }
+        // The next frame has no drag input: yaw stops immediately, travel coasts.
+    }
+
+    func cancelSteering() {
+        if steeringGesture != nil || steeringSuppressed { stop() }
+        steeringSuppressed = false
+    }
+
+    private func chooseGround(at point: CGPoint) {
         let transform = camera.transformMatrix(relativeTo: nil)
         func vector(_ column: SIMD4<Float>) -> SIMD3<Double> {
             SIMD3(Double(column.x), Double(column.y), Double(column.z))
@@ -224,10 +251,10 @@ final class FarmController {
         } else { destination = nil }
         guard let destination else { return }
         target = FarmPoint(x: min(39, max(-39, destination.x)), z: min(28, max(-30, destination.z)))
+        navigation.choose(target!, state: tractorState, tool: tool, obstacles: obstacles)
         destinationMarker.position = [Float(target!.x), 0.10, Float(target!.z)]
         destinationMarker.isEnabled = true
         updateDestinationMarkerScale()
-        blockedTime = 0
 #if DEBUG
         if isUITesting { testSteeringCount += 1 }
 #endif
@@ -252,6 +279,7 @@ final class FarmController {
     func toggleCamera() {
         showControls()
         endPinch()
+        cancelSteering()
         cameraMode = cameraMode == .overview ? .tractor : .overview
         if let marker = destinationMarker as? ModelEntity,
            var material = marker.model?.materials.first as? UnlitMaterial {
@@ -263,7 +291,7 @@ final class FarmController {
         if !introDismissed { dismissIntro() }
         selectionFeedback()
         persist()
-        showToast(cameraMode == .tractor ? "Along for the ride. Tap the ground to steer." : "A little room to see it all.")
+        showToast(cameraMode == .tractor ? "Hold to roll. Steer gently, then lift to settle." : "A little room to see it all.")
     }
 
     private func updateFollowCamera(deltaTime: Double = 0, snap: Bool = false) {
@@ -275,7 +303,7 @@ final class FarmController {
     }
 
     func pinch(_ magnification: CGFloat) {
-        if pinchStartZoom == nil { pinchStartZoom = zoom; stop() }
+        if pinchStartZoom == nil { pinchStartZoom = zoom; stop(); steeringSuppressed = true }
         zoom = min(1.8, max(0.65, (pinchStartZoom ?? 1) * Float(magnification)))
         setViewportSize(viewport)
     }
@@ -293,6 +321,8 @@ final class FarmController {
         showControls()
         guard value != tool else { return }
         tool = value
+        navigation.changeTool(state: tractorState, tool: tool, obstacles: obstacles)
+        target = navigation.target
         updateAttachment()
         selectionFeedback()
         persist()
@@ -341,6 +371,7 @@ final class FarmController {
     func resetMeadow() {
         stop()
         field.reset()
+        navigation = TractorNavigation()
         tractorState = TractorState()
         syncTractor()
         updateFollowCamera(snap: true)
@@ -356,16 +387,23 @@ final class FarmController {
         guard !isLoading, isActive, !isPaused, activeSheet == nil else { return }
         let dt = min(0.05, max(0, deltaTime))
         elapsed += dt
-        let previous = tractorState
-        tractorState = FarmSimulation.advance(tractorState, toward: target, deltaTime: dt,
-                                              obstacles: obstacles, rowAssist: rowAssist, pace: pace)
-        if target != nil && hypot(tractorState.x - previous.x, tractorState.z - previous.z) < 0.003 && tractorState.speed < 0.15 {
-            blockedTime += dt
-            if blockedTime > 1 { target = nil; destinationMarker.isEnabled = false }
-        } else { blockedTime = 0 }
-        if let target, hypot(target.x - tractorState.x, target.z - tractorState.z) < 0.5 {
-            self.target = nil
-            destinationMarker.isEnabled = false
+        let input: DriveInput? = cameraMode == .tractor && steeringGesture?.isDriving(at: elapsed) == true
+            ? .drag(steeringGesture!.drag) : nil
+        let movement = navigation.step(tractorState, deltaTime: dt, tool: tool, obstacles: obstacles,
+                                       pace: pace, manual: input, follow: cameraMode == .tractor)
+        tractorState = movement.state
+        target = navigation.target
+        destinationMarker.isEnabled = target != nil
+        var changedCells: [Int] = []
+        for (index, point) in movement.paint.enumerated() {
+            changedCells += field.paint(from: movement.paint[max(0, index - 1)], to: point, tool: tool)
+        }
+        if !changedCells.isEmpty {
+            fieldRenderer?.update(grid: field, changedCells: changedCells)
+            dirty = true
+#if DEBUG
+            if isUITesting { testPaintedCells += changedCells.count }
+#endif
         }
         if tractorState.speed > 0.1 {
             if !hasDriven {
@@ -376,15 +414,10 @@ final class FarmController {
             }
             dirty = true
             wheelAngle += Float(tractorState.speed * dt / 0.7)
-            if elapsed - lastPaint >= 1.0 / 24 {
-                let cells = field.paint(x: tractorState.x - sin(tractorState.heading) * 2.1,
-                                       z: tractorState.z - cos(tractorState.heading) * 2.1, tool: tool)
-                if !cells.isEmpty { fieldRenderer?.update(grid: field, changedCells: cells) }
-#if DEBUG
-                if isUITesting { testPaintedCells += cells.count }
-#endif
-                lastPaint = elapsed
-            }
+        }
+        if let attachment = tractor.findEntity(named: "attachment") {
+            let desired: Float = navigation.turningAtRowEnd ? 0.4 : 0
+            attachment.position.y += (desired - attachment.position.y) * Float(1 - exp(-8 * dt))
         }
         if elapsed - lastFlush >= 1.0 / 12 {
             do { try fieldRenderer?.flush() } catch { recordRenderingError(error) }
@@ -408,6 +441,8 @@ final class FarmController {
     }
 
     private func stop() {
+        navigation.cancel()
+        steeringGesture = nil
         target = nil
         tractorState.speed = 0
         destinationMarker.isEnabled = false
@@ -423,6 +458,7 @@ final class FarmController {
             + ",painted=\(testPaintedCells)"
             + ",steeringCount=\(testSteeringCount),marker=\(destinationMarker.isEnabled ? 1 : 0)"
             + ",touchCount=\(testTouchCount)"
+            + ",rowTurn=\(navigation.turningAtRowEnd ? 1 : 0)"
             + ",tractorView=\(cameraMode == .tractor ? 1 : 0)"
             + String(format: ",heading=%.3f,cameraX=%.3f,cameraY=%.3f,cameraZ=%.3f",
                      tractorState.heading, Double(camera.position.x), Double(camera.position.y), Double(camera.position.z))
@@ -481,7 +517,7 @@ final class FarmController {
             }
         }
         let saved = MeadowSave(field: field, tractor: TractorState(x: tractorState.x, z: tractorState.z,
-                               heading: tractorState.heading, speed: 0), tool: tool, rowAssist: rowAssist,
+                               heading: tractorState.heading, speed: 0), tool: tool, rowAssist: false,
                                pace: pace, goldenLight: goldenLight, volume: volume,
                                haptics: haptics, introDismissed: introDismissed, cameraMode: cameraMode)
         do { try MeadowStore.save(saved, to: saveURL); hasSaveError = false; dirty = false }

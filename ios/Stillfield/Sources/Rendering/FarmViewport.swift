@@ -4,6 +4,7 @@ import SwiftUI
 struct FarmViewport: View {
     let game: FarmController
     @GestureState private var isPinching = false
+    @GestureState private var isDragging = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -30,24 +31,30 @@ struct FarmViewport: View {
                     .allowsHitTesting(false)
             }
             .onChange(of: geometry.size) { _, size in game.setViewportSize(size) }
-            .gesture(DragGesture(minimumDistance: 0).onChanged { value in game.steer(at: value.location) })
+            .gesture(DragGesture(minimumDistance: 0)
+                .updating($isDragging) { _, dragging, _ in dragging = true }
+                .onChanged { value in game.steer(at: value.location, from: value.startLocation) }
+                .onEnded { _ in game.endSteering() })
+            .onChange(of: isDragging) { _, dragging in
+                if !dragging { game.cancelSteering() }
+            }
             .simultaneousGesture(
                 MagnifyGesture()
                     .updating($isPinching) { _, pinching, _ in pinching = true }
                     .onChanged { value in game.pinch(value.magnification) }
-                    .onEnded { _ in game.endPinch() }
+                    .onEnded { _ in game.endPinch(); if !isDragging { game.cancelSteering() } }
             )
             // GestureState resets on cancellation as well as normal completion;
             // onEnded alone is not called when a system gesture interrupts us.
             .onChange(of: isPinching) { _, pinching in
-                if !pinching { game.endPinch() }
+                if !pinching { game.endPinch(); if !isDragging { game.cancelSteering() } }
             }
-            .onDisappear { game.endPinch() }
+            .onDisappear { game.endPinch(); game.cancelSteering() }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Your meadow")
             .accessibilityHint(game.cameraMode == .tractor
-                ? "Following behind your tractor. Tap the ground ahead or drag to drive. Pinch to change camera distance."
-                : "Tap a destination or drag to drive. Pinch to zoom.")
+                ? "Hold to roll and move your finger left or right to steer. Lift to stop. Tap where work should finish. Pinch to change camera distance."
+                : "Tap where work should finish or drag to drive. Tap beside a finished row to line up and stop. Pinch to zoom.")
             .accessibilityIdentifier("farm.surface")
 #if DEBUG
             .accessibilityValue(game.testTelemetry)

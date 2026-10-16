@@ -9,6 +9,37 @@ final class StillfieldUITests: XCTestCase {
         "Zoom out", "Center the farm", "Zoom in"
     ]
 
+    func testTractorDragReleaseStopsTurningAndPinchAllowsANewTap() throws {
+        let app = launchFreshMeadow()
+        defer { app.terminate() }
+        app.buttons["action.camera"].tap()
+        XCTAssertTrue(waitUntil(timeout: 5) { self.telemetry(in: app)?.tractorView == true })
+        let surface = meadowSurface(in: app)
+        let before = try XCTUnwrap(telemetry(in: app))
+        let start = surface.coordinate(withNormalizedOffset: CGVector(dx: 0.42, dy: 0.51))
+        let finish = start.withOffset(CGVector(dx: 95, dy: 0))
+        start.press(forDuration: 0.35, thenDragTo: finish, withVelocity: .slow, thenHoldForDuration: 0.6)
+        XCTAssertTrue(waitUntil(timeout: 3) { self.telemetry(in: app)?.speed == 0 })
+        let released = try XCTUnwrap(telemetry(in: app))
+        XCTAssertGreaterThan(released.distance(from: before), 0.2)
+        XCTAssertGreaterThan(abs(released.heading - before.heading), 0.05)
+        XCTAssertNil(released.destination)
+        let restingUntil = Date().addingTimeInterval(1.5)
+        XCTAssertTrue(waitUntil(timeout: 3) { Date() >= restingUntil })
+        let resting = try XCTUnwrap(telemetry(in: app))
+        XCTAssertEqual(resting.heading, released.heading, accuracy: 0.002)
+        XCTAssertLessThan(resting.distance(from: released), 0.01)
+        surface.pinch(withScale: 1.2, velocity: 1)
+        let afterPinch = try XCTUnwrap(telemetry(in: app))
+        surface.coordinate(withNormalizedOffset: CGVector(dx: 0.56, dy: 0.49)).tap()
+        _ = try waitForSteering(after: afterPinch.steeringCount, in: app)
+        XCTAssertTrue(waitUntil(timeout: 6) {
+            guard let now = self.telemetry(in: app) else { return false }
+            return now.distance(from: afterPinch) > 0.4
+        })
+        attachScreenshot("Calm drag release and tap after pinch", app: app)
+    }
+
     func testControlsTuckAwayAndCanBeRecalledWhileDriving() throws {
         let app = launchFreshMeadow()
         defer {

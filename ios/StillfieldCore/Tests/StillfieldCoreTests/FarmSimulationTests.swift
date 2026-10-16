@@ -194,7 +194,7 @@ private func drive(
 
 @Test func toolsPaintChangedCellsAndWanderingLeavesMeadowAlone() {
     var field = FieldGrid(starterRows: false)
-    let expected = FarmSimulation.cellsUnderBrush(x: 0, z: 0, radius: 1.15)
+    let expected = FarmSimulation.cellsUnderBrush(x: 0, z: 0, radius: 1.285)
     #expect(field.paint(x: 0, z: 0, tool: .wander).isEmpty)
     #expect(field.paint(x: 0, z: 0, tool: .mow) == expected)
     #expect(field.paint(x: 0, z: 0, tool: .mow).isEmpty)

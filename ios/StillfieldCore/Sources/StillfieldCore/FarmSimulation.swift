@@ -113,19 +113,25 @@ public enum FarmSimulation {
     }
 
     public static func cellsUnderBrush(x: Double, z: Double, radius: Double) -> [Int] {
-        guard x.isFinite, z.isFinite, radius.isFinite, radius >= 0 else { return [] }
-        let minCol = Int(clamp(floor((x - radius - FieldGrid.minX) / FieldGrid.cellSize), 0, Double(FieldGrid.columns - 1)))
-        let maxCol = Int(clamp(floor((x + radius - FieldGrid.minX) / FieldGrid.cellSize), 0, Double(FieldGrid.columns - 1)))
-        let minRow = Int(clamp(floor((z - radius - FieldGrid.minZ) / FieldGrid.cellSize), 0, Double(FieldGrid.rows - 1)))
-        let maxRow = Int(clamp(floor((z + radius - FieldGrid.minZ) / FieldGrid.cellSize), 0, Double(FieldGrid.rows - 1)))
+        cellsUnderSweep(from: FarmPoint(x: x, z: z), to: FarmPoint(x: x, z: z), radius: radius)
+    }
+
+    /// Continuous attachment coverage, including cells tangent to the swath between frames.
+    public static func cellsUnderSweep(from: FarmPoint, to: FarmPoint, radius: Double) -> [Int] {
+        guard from.x.isFinite, from.z.isFinite, to.x.isFinite, to.z.isFinite, radius.isFinite, radius >= 0 else { return [] }
+        let dx = to.x - from.x, dz = to.z - from.z, lengthSquared = dx * dx + dz * dz
+        let minCol = Int(clamp(floor((min(from.x, to.x) - radius - FieldGrid.minX) / FieldGrid.cellSize), 0, Double(FieldGrid.columns - 1)))
+        let maxCol = Int(clamp(floor((max(from.x, to.x) + radius - FieldGrid.minX) / FieldGrid.cellSize), 0, Double(FieldGrid.columns - 1)))
+        let minRow = Int(clamp(floor((min(from.z, to.z) - radius - FieldGrid.minZ) / FieldGrid.cellSize), 0, Double(FieldGrid.rows - 1)))
+        let maxRow = Int(clamp(floor((max(from.z, to.z) + radius - FieldGrid.minZ) / FieldGrid.cellSize), 0, Double(FieldGrid.rows - 1)))
         var result: [Int] = []
         for row in minRow...maxRow {
             for col in minCol...maxCol {
                 let cx = FieldGrid.minX + (Double(col) + 0.5) * FieldGrid.cellSize
                 let cz = FieldGrid.minZ + (Double(row) + 0.5) * FieldGrid.cellSize
-                let dx = x - cx
-                let dz = z - cz
-                if dx * dx + dz * dz <= radius * radius {
+                let t = lengthSquared > 0 ? clamp(((cx - from.x) * dx + (cz - from.z) * dz) / lengthSquared, 0, 1) : 0
+                let cxDistance = from.x + t * dx - cx, czDistance = from.z + t * dz - cz
+                if cxDistance * cxDistance + czDistance * czDistance <= radius * radius + 1e-10 {
                     result.append(row * FieldGrid.columns + col)
                 }
             }

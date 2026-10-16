@@ -4,7 +4,8 @@ import { createWorld } from "./world";
 import { createField } from "./field";
 import { createTractor } from "./tractor";
 import { FarmAudio } from "./audio";
-import { advanceTractor, clamp, FIELD } from "./simulation";
+import { clamp, FIELD } from "./simulation";
+import { TractorNavigation } from "./tractor-navigation";
 import type { Point, Tool, TractorState } from "./simulation";
 import { icon, brandMark } from "./icons";
 import { overviewFraming } from "./overview";
@@ -29,8 +30,7 @@ try {
 }
 const tools: Tool[] = ["mow", "till", "sow", "wander"];
 let selectedTool: Tool = tools.includes(saved.tool!) ? saved.tool! : "mow";
-let guide = saved.guide ?? true,
-  pace = typeof saved.pace === "number" ? clamp(saved.pace, 0.55, 1.25) : 0.85,
+let pace = typeof saved.pace === "number" ? clamp(saved.pace, 0.55, 1.25) : 0.85,
   golden = saved.golden ?? false;
 let paused = false,
   soundEnabled = false,
@@ -53,6 +53,7 @@ let tractorState: TractorState =
 tractorState.x = clamp(tractorState.x, -39, 39);
 tractorState.z = clamp(tractorState.z, -30, 28);
 let target: Point | null = null;
+let navigation = new TractorNavigation();
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
   <main class="farm-app">
@@ -88,7 +89,7 @@ app.innerHTML = `
             `<button class="tool-button ${id === selectedTool ? "selected" : ""}" data-tool="${id}" aria-pressed="${id === selectedTool}" title="${desc} (${i + 1})"><span class="tool-illustration ${id}">${icon(id)}</span><span>${name}</span><kbd>${i + 1}</kbd></button>`,
         )
         .join("")}</nav>
-      <div class="drive-hint" id="drive-hint"><span class="hint-desktop"><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> to drive <span class="hint-dot">·</span></span> tap or drag to find your way</div>
+      <div class="drive-hint" id="drive-hint"><span class="hint-desktop"><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> to drive <span class="hint-dot">·</span></span> tap where the work should finish</div>
     </section>
     <footer class="bottom-bar menu-panel" id="view-controls">
       <div class="zoom-controls"><button id="zoom-out" aria-label="Zoom out">−</button><button id="recenter" aria-label="Center the farm" title="Center the farm">${icon("expand")}</button><button id="zoom-in" aria-label="Zoom in">+</button></div>
@@ -217,12 +218,13 @@ const raycaster = new THREE.Raycaster(),
 let zoom = 1,
   lastTime = 0,
   time = 0,
-  lastPaint = 0,
   lastSave = 0,
   hasDriven = false;
 const keys = new Set<string>();
 function updateTool(tool: Tool) {
   selectedTool = tool;
+  navigation.changeTool(tractorState, tool, world.obstacles);
+  target = navigation.target;
   tractor.setTool(tool);
   document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((b) => {
     const active = b.dataset.tool === tool;
@@ -292,7 +294,7 @@ function persist() {
       grid: Array.from(field.grid),
       tractor: { ...tractorState, speed: 0 },
       tool: selectedTool,
-      guide,
+      guide: false,
       pace,
       golden,
       intro: introDismissed,
@@ -312,6 +314,8 @@ function toast(message: string) {
   toastTimer = window.setTimeout(() => el.classList.remove("visible"), 3400);
 }
 function stop() {
+  navigation.cancel();
+  pointerId = null;
   target = null;
   keys.clear();
   cursor.visible = false;
@@ -367,18 +371,14 @@ function openDialog(content: string) {
 }
 function showHelp() {
   openDialog(
-    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO WILLOWBROOK</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>Tap a spot to drive there. Drag to keep steering.<br>Arrow keys or WASD work, too.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Mow soft paths, till tidy rows, or sow wildflowers. Switch tools whenever you like.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Your meadow saves on this device. Pause with the space bar. Nothing changes while you’re away.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
+    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO WILLOWBROOK</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>Tap where mowing or planting should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop.<br>Arrow keys or WASD work, too.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Mow soft paths, till tidy rows, or sow wildflowers. Switch tools whenever you like.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Your meadow saves on this device. Pause with the space bar. Nothing changes while you’re away.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
   );
   dialog.querySelector("#help-done")!.addEventListener("click", closeDialog);
 }
 function showSettings() {
   openDialog(
-    `<div class="eyebrow">THE WAY YOU LIKE IT</div><h2 id="dialog-title">Settle <em>in.</em></h2><p>A few small comforts for your time outside.</p><div class="settings-list"><label class="setting-row"><span><strong>A helping hand</strong><small>Gently straighten near-perfect rows.</small></span><input type="checkbox" id="guide-setting" ${guide ? "checked" : ""}><span class="switch"></span></label><label class="setting-row"><span><strong>Golden light</strong><small>A warmer kind of afternoon.</small></span><input type="checkbox" id="golden-setting" ${golden ? "checked" : ""}><span class="switch"></span></label><label class="range-setting" for="pace-setting"><strong>Your pace</strong><input type="range" id="pace-setting" min="0.55" max="1.25" step="0.05" value="${pace}"><span><small>Unhurried</small><small>A little breezier</small></span></label><label class="range-setting" for="volume-setting"><strong>Nature sounds</strong><input type="range" id="volume-setting" min="0" max="1" step="0.05" value="${volume}"><span><small>A whisper</small><small>All around you</small></span></label></div><button class="reset-button" id="fresh">${icon("reset")} A fresh meadow</button><p class="settings-footnote">${storageAvailable ? "Your meadow is saved automatically on this device." : "Browser storage is unavailable. This meadow lasts for this visit."}</p>`,
+    `<div class="eyebrow">THE WAY YOU LIKE IT</div><h2 id="dialog-title">Settle <em>in.</em></h2><p>A few small comforts for your time outside.</p><div class="settings-list"><label class="setting-row"><span><strong>Golden light</strong><small>A warmer kind of afternoon.</small></span><input type="checkbox" id="golden-setting" ${golden ? "checked" : ""}><span class="switch"></span></label><label class="range-setting" for="pace-setting"><strong>Your pace</strong><input type="range" id="pace-setting" min="0.55" max="1.25" step="0.05" value="${pace}"><span><small>Unhurried</small><small>A little breezier</small></span></label><label class="range-setting" for="volume-setting"><strong>Nature sounds</strong><input type="range" id="volume-setting" min="0" max="1" step="0.05" value="${volume}"><span><small>A whisper</small><small>All around you</small></span></label></div><button class="reset-button" id="fresh">${icon("reset")} A fresh meadow</button><p class="settings-footnote">${storageAvailable ? "Your meadow is saved automatically on this device." : "Browser storage is unavailable. This meadow lasts for this visit."}</p>`,
   );
-  dialog.querySelector("#guide-setting")!.addEventListener("change", (e) => {
-    guide = (e.target as HTMLInputElement).checked;
-    persist();
-  });
   dialog.querySelector("#golden-setting")!.addEventListener("change", (e) => {
     golden = (e.target as HTMLInputElement).checked;
     setLight();
@@ -404,6 +404,7 @@ function showReset() {
   );
   dialog.querySelector("#confirm-reset")!.addEventListener("click", () => {
     field.reset();
+    navigation = new TractorNavigation();
     tractorState = { ...defaultTractor };
     stop();
     persist();
@@ -424,6 +425,7 @@ function pointerTarget(event: PointerEvent) {
       x: clamp(intersection.x, -39, 39),
       z: clamp(intersection.z, -30, 28),
     };
+    navigation.choose(target, tractorState, selectedTool, world.obstacles);
     cursor.position.set(target.x, 0.09, target.z);
     cursor.visible = true;
     dismissIntro();
@@ -431,6 +433,7 @@ function pointerTarget(event: PointerEvent) {
   }
 }
 let pointerId: number | null = null;
+let pointerOrigin = { x: 0, y: 0 }, pointerMoved = false;
 sceneContainer.addEventListener("pointerdown", (e) => {
   if (
     paused ||
@@ -441,12 +444,15 @@ sceneContainer.addEventListener("pointerdown", (e) => {
   )
     return;
   pointerId = e.pointerId;
+  pointerOrigin = { x: e.clientX, y: e.clientY }; pointerMoved = false;
   sceneContainer.setPointerCapture(e.pointerId);
   pointerTarget(e);
   sceneContainer.focus({ preventScroll: true });
 });
 sceneContainer.addEventListener("pointermove", (e) => {
-  if (e.pointerId === pointerId && !paused && !modalOpen) pointerTarget(e);
+  if (e.pointerId !== pointerId || paused || modalOpen) return;
+  pointerMoved ||= Math.hypot(e.clientX - pointerOrigin.x, e.clientY - pointerOrigin.y) > 8;
+  if (pointerMoved) pointerTarget(e);
 });
 sceneContainer.addEventListener("pointerup", (e) => {
   if (e.pointerId === pointerId) {
@@ -459,6 +465,7 @@ sceneContainer.addEventListener("pointercancel", () => {
   pointerId = null;
   stop();
 });
+sceneContainer.addEventListener("lostpointercapture", () => { if (pointerId !== null) stop(); });
 sceneContainer.addEventListener("contextmenu", (e) => e.preventDefault());
 const driveKeys = [
   "ArrowUp",
@@ -479,6 +486,7 @@ window.addEventListener("keydown", (e) => {
   if (driveKeys.includes(e.key)) {
     e.preventDefault();
     if (!paused) {
+      navigation.cancel();
       keys.add(e.key.toLowerCase());
       dismissIntro();
       scheduleControlsHide();
@@ -567,8 +575,8 @@ setLight();
 resize();
 updateTool(selectedTool);
 document.querySelector<HTMLElement>("#welcome")!.inert = introDismissed;
-let changedSinceSave = false,
-  blockedTime = 0;
+let changedSinceSave = false;
+const attachment = tractor.group.getObjectByName("attachment")!;
 const reducedMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)",
 ).matches;
@@ -600,34 +608,14 @@ function animate(now: number) {
         target = null;
       }
     }
-    const beforeMove = { x: tractorState.x, z: tractorState.z };
-    tractorState = advanceTractor(
-      tractorState,
-      target,
-      dt,
-      world.obstacles,
-      guide,
-      pace,
-    );
-    if (
-      target &&
-      Math.hypot(tractorState.x - beforeMove.x, tractorState.z - beforeMove.z) <
-        0.003 &&
-      tractorState.speed < 0.15
-    ) {
-      blockedTime += dt;
-      if (blockedTime > 1) {
-        target = null;
-        cursor.visible = false;
-      }
-    } else blockedTime = 0;
-    if (
-      target &&
-      Math.hypot(target.x - tractorState.x, target.z - tractorState.z) < 0.5
-    ) {
-      target = null;
-      cursor.visible = false;
-    }
+    const movement = navigation.step(tractorState, dt, selectedTool, world.obstacles, pace,
+      keys.size && target ? { target } : null);
+    tractorState = movement.state;
+    target = navigation.target;
+    cursor.visible = target !== null;
+    movement.paint.forEach((point, index, points) => {
+      changedSinceSave = field.paint(point.x, point.z, selectedTool, points[Math.max(0, index - 1)]) || changedSinceSave;
+    });
     if (tractorState.speed > 0.1) {
       if (!hasDriven) {
         hasDriven = true;
@@ -642,18 +630,11 @@ function animate(now: number) {
         scheduleControlsHide(3200);
       }
       changedSinceSave = true;
-      if (time - lastPaint > 1 / 24) {
-        field.paint(
-          tractorState.x - Math.sin(tractorState.heading) * 2.1,
-          tractorState.z - Math.cos(tractorState.heading) * 2.1,
-          selectedTool,
-        );
-        lastPaint = time;
-      }
     }
     tractor.group.position.set(tractorState.x, 0, tractorState.z);
     tractor.group.rotation.y = tractorState.heading;
     tractor.update(tractorState.speed, dt, time);
+    attachment.position.y += ((navigation.turn ? 0.4 : 0) - attachment.position.y) * (1 - Math.exp(-8 * dt));
     world.update(reducedMotion ? 0 : time, reducedMotion ? 0 : dt);
     audio.setDriving(tractorState.speed / 6);
     cursor.scale.setScalar(1 + Math.sin(time * 3) * 0.08);
@@ -673,7 +654,7 @@ if (import.meta.env.DEV)
       tractor: { ...tractorState },
       tool: selectedTool,
       paused,
-      guide,
+      guide: false,
       pace,
       golden,
       hasDriven,
@@ -687,6 +668,8 @@ if (import.meta.env.DEV)
         bottom: camera.bottom,
       },
       target,
+      turningAtRowEnd: !!navigation.turn,
+      workedRow: navigation.rows.last,
     }),
   });
 if ("serviceWorker" in navigator && import.meta.env.PROD)

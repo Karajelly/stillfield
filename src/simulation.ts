@@ -85,26 +85,33 @@ export function cellsUnderBrush(
   z: number,
   radius: number,
 ): number[] {
+  return cellsUnderSweep({ x, z }, { x, z }, radius);
+}
+
+/** Paint the actual swept disk, including tangent cells between render frames. */
+export function cellsUnderSweep(from: Point, to: Point, radius: number): number[] {
+  if (![from.x, from.z, to.x, to.z, radius].every(Number.isFinite) || radius < 0) return [];
+  const dx = to.x - from.x, dz = to.z - from.z, lengthSquared = dx * dx + dz * dz;
   const columns = Math.round((FIELD.maxX - FIELD.minX) / FIELD.cell);
   const rows = Math.round((FIELD.maxZ - FIELD.minZ) / FIELD.cell);
   const result: number[] = [];
   const minCol = clamp(
-    Math.floor((x - radius - FIELD.minX) / FIELD.cell),
+    Math.floor((Math.min(from.x, to.x) - radius - FIELD.minX) / FIELD.cell),
     0,
     columns - 1,
   );
   const maxCol = clamp(
-    Math.floor((x + radius - FIELD.minX) / FIELD.cell),
+    Math.floor((Math.max(from.x, to.x) + radius - FIELD.minX) / FIELD.cell),
     0,
     columns - 1,
   );
   const minRow = clamp(
-    Math.floor((z - radius - FIELD.minZ) / FIELD.cell),
+    Math.floor((Math.min(from.z, to.z) - radius - FIELD.minZ) / FIELD.cell),
     0,
     rows - 1,
   );
   const maxRow = clamp(
-    Math.floor((z + radius - FIELD.minZ) / FIELD.cell),
+    Math.floor((Math.max(from.z, to.z) + radius - FIELD.minZ) / FIELD.cell),
     0,
     rows - 1,
   );
@@ -112,7 +119,8 @@ export function cellsUnderBrush(
     for (let col = minCol; col <= maxCol; col++) {
       const cx = FIELD.minX + (col + 0.5) * FIELD.cell,
         cz = FIELD.minZ + (row + 0.5) * FIELD.cell;
-      if ((x - cx) ** 2 + (z - cz) ** 2 <= radius ** 2)
+      const t = lengthSquared ? clamp(((cx - from.x) * dx + (cz - from.z) * dz) / lengthSquared, 0, 1) : 0;
+      if ((from.x + t * dx - cx) ** 2 + (from.z + t * dz - cz) ** 2 <= radius ** 2 + 1e-10)
         result.push(row * columns + col);
     }
   return result;

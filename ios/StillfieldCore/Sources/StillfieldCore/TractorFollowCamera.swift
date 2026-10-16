@@ -14,13 +14,15 @@ public struct TractorFollowCamera: Sendable {
     }
 
     public private(set) var heading: Double?
+    public private(set) var distance: Double?
 
     public init() {}
 
     public mutating func update(tractor: TractorState, zoom: Double, deltaTime: Double,
                                 obstacles: [Obstacle] = [], snap: Bool = false) -> Pose {
         let previous = heading ?? tractor.heading
-        let turn = atan2(sin(tractor.heading - previous), cos(tractor.heading - previous))
+        var turn = atan2(sin(tractor.heading - previous), cos(tractor.heading - previous))
+        if !snap { turn = (turn < 0 ? -1 : 1) * max(0, abs(turn) - 1.3 * .pi / 180) }
         let response = snap ? 1 : 1 - exp(-8 * max(0, min(0.05, deltaTime)))
         let angle = previous + turn * response
         heading = atan2(sin(angle), cos(angle))
@@ -51,6 +53,12 @@ public struct TractorFollowCamera: Sendable {
             guard along + halfChord > 0 else { continue }
             distance = min(distance, max(0.25, along - halfChord))
         }
+
+        // Clear obstructions immediately; ease outward after they leave the boom.
+        if !snap, let previous = self.distance, distance > previous {
+            distance = previous + (distance - previous) * (1 - exp(-3 * max(0, min(0.05, deltaTime))))
+        }
+        self.distance = distance
 
         // In a tight space, look down toward the tractor instead of past it.
         let focusAhead = lookAhead * min(1, distance / 8)

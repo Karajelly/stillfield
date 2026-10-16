@@ -1,6 +1,7 @@
+import { tuning } from "./handling";
 import * as THREE from "three";
-import { FIELD, cellsUnderBrush, seededRandom } from "./simulation";
-import type { Tool } from "./simulation";
+import { FIELD, cellsUnderBrush, cellsUnderSweep, seededRandom } from "./simulation";
+import type { Point, Tool } from "./simulation";
 export const COLUMNS = Math.round((FIELD.maxX - FIELD.minX) / FIELD.cell);
 export const ROWS = Math.round((FIELD.maxZ - FIELD.minZ) / FIELD.cell);
 const SIZE = COLUMNS * ROWS;
@@ -162,11 +163,11 @@ export function createField(scene: THREE.Scene, saved?: number[]) {
   let dirty = false;
   return {
     grid,
-    paint(x: number, z: number, tool: Tool) {
+    paint(x: number, z: number, tool: Tool, from: Point = { x, z }) {
       if (tool === "wander") return false;
       const value = tool === "mow" ? 1 : tool === "till" ? 2 : 3;
       let changed = false;
-      for (const cell of cellsUnderBrush(x, z, 1.15)) {
+      for (const cell of cellsUnderSweep(from, { x, z }, tuning.brushRadius)) {
         if (grid[cell] === value) continue;
         grid[cell] = value;
         drawCell(cell);

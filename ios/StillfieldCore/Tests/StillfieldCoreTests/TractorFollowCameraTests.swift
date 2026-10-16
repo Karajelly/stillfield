@@ -57,7 +57,7 @@ import Testing
     }
     #expect(abs(results[0] - results[1]) < 0.000_001)
     #expect(abs(results[1] - results[2]) < 0.000_001)
-    #expect(abs(results[0] - (-.pi + 0.1)) < 0.004)
+    #expect(abs(results[0] - (-.pi + 0.1)) < 0.027) // Includes the 1.3° quiet zone.
 }
 
 @Test func cameraBoomStopsBeforeSceneryAndReturnsToFullDistance() {
@@ -67,10 +67,16 @@ import Testing
     let pose = camera.update(tractor: tractor, zoom: 1, deltaTime: 0, obstacles: [wall], snap: true)
     #expect(abs(pose.position.z + 5.6) < 0.000_001)
     #expect(pose.position.y > pose.focus.y)
-    let restored = camera.update(tractor: tractor, zoom: 1, deltaTime: 0, obstacles: [Obstacle(x: 10, z: -8, radius: 2)])
-    let unobstructed = camera.update(tractor: tractor, zoom: 1, deltaTime: 0)
-    #expect(restored.position == unobstructed.position)
-    #expect(restored.position.z < -10)
+    let first = camera.update(tractor: tractor, zoom: 1, deltaTime: 1 / 60)
+    #expect(first.position.z < pose.position.z && first.position.z > -6)
+    var restored = first
+    for _ in 0..<240 { restored = camera.update(tractor: tractor, zoom: 1, deltaTime: 1 / 60) }
+    var clearCamera = TractorFollowCamera()
+    let unobstructed = clearCamera.update(tractor: tractor, zoom: 1, deltaTime: 0, snap: true)
+    #expect(abs(restored.position.z - unobstructed.position.z) < 0.0001)
+    let retracted = camera.update(tractor: tractor, zoom: 1, deltaTime: 1 / 60, obstacles: [wall])
+    #expect(abs(retracted.position.z + 5.6) < 0.000_001)
+
 }
 
 @Test func perspectiveGroundTapsRoundTripThroughTurnsZoomAndOrientation() throws {

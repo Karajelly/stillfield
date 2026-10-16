@@ -1,0 +1,279 @@
+{
+  "sourceCommit": "4acab01",
+  "note": "Deterministic model experiments; no device frame-time or subjective comfort claims.",
+  "release": [
+    {
+      "current": {
+        "fps": 30,
+        "viewport": "402×874",
+        "maxTurnRate": 275.0197416627954,
+        "postReleaseTurn": 2.137332745943485e-12,
+        "speedAtRelease": 4.67485431985258,
+        "stopAfterSeconds": 2.466666666666667,
+        "travelAfterRelease": 9.418157296097856,
+        "cameraTurnAfter": 23.604544886498356,
+        "releasePosition": {
+          "x": -16.154474266450713,
+          "z": -6.407222293349235,
+          "heading": -3.5771636050965068,
+          "speed": 4.67485431985258
+        }
+      },
+      "proposed": {
+        "fps": 30,
+        "viewport": "402×874",
+        "maxTurnRate": 42.85626733877926,
+        "postReleaseTurn": 0,
+        "speedAtRelease": 3.5230572796209008,
+        "stopAfterSeconds": 0.5333333333333332,
+        "travelAfterRelease": 0.2954110229211088,
+        "cameraTurnAfter": 4.597636335826668,
+        "releasePosition": {
+          "x": -10.692055679755299,
+          "z": -5.248079563735034,
+          "heading": 0.7028378764502834,
+          "speed": 3.5230572796209008
+        }
+      }
+    },
+    {
+      "current": {
+        "fps": 60,
+        "viewport": "402×874",
+        "maxTurnRate": 275.0197416627954,
+        "postReleaseTurn": 3.527840571732798,
+        "speedAtRelease": 4.664956994128479,
+        "stopAfterSeconds": 2.45,
+        "travelAfterRelease": 9.404865210449334,
+        "cameraTurnAfter": 25.000598356201216,
+        "releasePosition": {
+          "x": -16.32318913352526,
+          "z": -6.0749027640133155,
+          "heading": -3.301592653589794,
+          "speed": 4.664956994128479
+        }
+      },
+      "proposed": {
+        "fps": 60,
+        "viewport": "402×874",
+        "maxTurnRate": 42.856267338779254,
+        "postReleaseTurn": 0,
+        "speedAtRelease": 3.524266208744807,
+        "stopAfterSeconds": 0.5333333333333332,
+        "travelAfterRelease": 0.32230951730374124,
+        "cameraTurnAfter": 4.921627059125769,
+        "releasePosition": {
+          "x": -10.692893029251074,
+          "z": -5.289085805624818,
+          "heading": 0.7084255144616008,
+          "speed": 3.524266208744807
+        }
+      }
+    },
+    {
+      "current": {
+        "fps": 120,
+        "viewport": "402×874",
+        "maxTurnRate": 275.0197416627954,
+        "postReleaseTurn": 7.684220110415863e-12,
+        "speedAtRelease": 4.662418461035452,
+        "stopAfterSeconds": 2.45,
+        "travelAfterRelease": 9.409059964020226,
+        "cameraTurnAfter": 24.166862663906688,
+        "releasePosition": {
+          "x": -16.401671638849074,
+          "z": -5.9011612532687625,
+          "heading": -3.2782481785065354,
+          "speed": 4.662418461035452
+        }
+      },
+      "proposed": {
+        "fps": 120,
+        "viewport": "402×874",
+        "maxTurnRate": 42.856267338779254,
+        "postReleaseTurn": 0,
+        "speedAtRelease": 3.5248299749210426,
+        "stopAfterSeconds": 0.5416666666666665,
+        "travelAfterRelease": 0.3364987929975167,
+        "cameraTurnAfter": 5.089087766244024,
+        "releasePosition": {
+          "x": -10.693366343232666,
+          "z": -5.310102666884645,
+          "heading": 0.7113735873195731,
+          "speed": 3.5248299749210426
+        }
+      }
+    }
+  ],
+  "lowDragNearTractor": {
+    "current": {
+      "fps": 60,
+      "viewport": "402×874",
+      "maxTurnRate": 275.0197416627954,
+      "postReleaseTurn": 69.5426234698945,
+      "speedAtRelease": 2.2066575380101705,
+      "stopAfterSeconds": 1.25,
+      "travelAfterRelease": 3.373691302161934,
+      "cameraTurnAfter": 101.678856355384,
+      "releasePosition": {
+        "x": -15.071626832729118,
+        "z": -7.2604504810466475,
+        "heading": -5.309203673205107,
+        "speed": 2.2066575380101705
+      }
+    },
+    "proposed": {
+      "fps": 60,
+      "viewport": "402×874",
+      "maxTurnRate": 42.856267338779254,
+      "postReleaseTurn": 0,
+      "speedAtRelease": 3.524266208744807,
+      "stopAfterSeconds": 0.5333333333333332,
+      "travelAfterRelease": 0.32230951730374124,
+      "cameraTurnAfter": 4.921627059125769,
+      "releasePosition": {
+        "x": -10.692893029251074,
+        "z": -5.289085805624818,
+        "heading": 0.7084255144616008,
+        "speed": 3.524266208744807
+      }
+    }
+  },
+  "landscapeRelease": {
+    "current": {
+      "fps": 60,
+      "viewport": "1440×900",
+      "maxTurnRate": 275.0197416627954,
+      "postReleaseTurn": 4.834443115824546e-13,
+      "speedAtRelease": 4.673979725295948,
+      "stopAfterSeconds": 1.7999999999999998,
+      "travelAfterRelease": 6.378809669741025,
+      "cameraTurnAfter": 17.25413978348241,
+      "releasePosition": {
+        "x": -15.919935327597495,
+        "z": -3.737805104550572,
+        "heading": -2.075547381975194,
+        "speed": 4.673979725295948
+      }
+    },
+    "proposed": {
+      "fps": 60,
+      "viewport": "1440×900",
+      "maxTurnRate": 42.856267338779254,
+      "postReleaseTurn": 0,
+      "speedAtRelease": 3.524266208744807,
+      "stopAfterSeconds": 0.5333333333333332,
+      "travelAfterRelease": 0.32230951730374124,
+      "cameraTurnAfter": 4.921627059125769,
+      "releasePosition": {
+        "x": -10.692893029251074,
+        "z": -5.289085805624818,
+        "heading": 0.7084255144616008,
+        "speed": 3.524266208744807
+      }
+    }
+  },
+  "tremorDegreesOver3Seconds": {
+    "current": 0,
+    "proposed": 0
+  },
+  "retarget": [
+    {
+      "profile": "native",
+      "maxYaw": 275.0197416627954,
+      "timeTo80Degrees": 0.3
+    },
+    {
+      "profile": "web",
+      "maxYaw": 137.5098708313977,
+      "timeTo80Degrees": 0.5833333333333334
+    },
+    {
+      "profile": "gentle",
+      "maxYaw": 80.21409131831558,
+      "timeTo80Degrees": 1.0166666666666666
+    }
+  ],
+  "coverage": {
+    "current": {
+      "radius": 1.15,
+      "assisted": false,
+      "swept": false,
+      "lanes": [
+        -8,
+        -5.38,
+        -2.98,
+        -0.3,
+        2.12,
+        4.66
+      ],
+      "measuredCells": 5916,
+      "missedCells": 501,
+      "missedPercent": 8.468559837728193
+    },
+    "widthOnly": {
+      "radius": 1.25,
+      "assisted": false,
+      "swept": false,
+      "lanes": [
+        -8,
+        -5.38,
+        -2.98,
+        -0.3,
+        2.12,
+        4.66
+      ],
+      "measuredCells": 5916,
+      "missedCells": 265,
+      "missedPercent": 4.479377958079784
+    },
+    "sweepOnly": {
+      "radius": 1.15,
+      "assisted": false,
+      "swept": true,
+      "lanes": [
+        -8,
+        -5.38,
+        -2.98,
+        -0.3,
+        2.12,
+        4.66
+      ],
+      "measuredCells": 5916,
+      "missedCells": 464,
+      "missedPercent": 7.8431372549019605
+    },
+    "spacingOnly": {
+      "radius": 1.15,
+      "assisted": true,
+      "swept": false,
+      "lanes": [
+        -8,
+        -5.85,
+        -3.6999999999999997,
+        -1.5499999999999998,
+        0.6000000000000001,
+        2.75
+      ],
+      "measuredCells": 4988,
+      "missedCells": 0,
+      "missedPercent": 0
+    },
+    "proposed": {
+      "radius": 1.25,
+      "assisted": true,
+      "swept": true,
+      "lanes": [
+        -8,
+        -5.85,
+        -3.6999999999999997,
+        -1.5499999999999998,
+        0.6000000000000001,
+        2.75
+      ],
+      "measuredCells": 4988,
+      "missedCells": 0,
+      "missedPercent": 0
+    }
+  }
+}

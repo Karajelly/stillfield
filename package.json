@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc && vite build && node scripts/build-sw.mjs",
+    "build": "tsc && npm run icons && vite build && node scripts/build-sw.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --import tsx --test src/*.test.ts",
     "icons": "node scripts/build-icons.mjs",

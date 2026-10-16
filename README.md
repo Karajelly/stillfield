@@ -113,4 +113,8 @@ The browser version also supports arrow keys/WASD to steer, number keys 1–4 to
 
 Deploy `dist/` at the root of an HTTPS static host for browser installation and offline caching. Safari → Share → Add to Home Screen opens the prototype as a standalone web app. The HTTP LAN preview cannot register a service worker; browser offline play requires an HTTPS production deployment and one successful initial visit. Fonts, icons, and production assets are bundled locally and precached.
 
+The web favicon and home-screen icons use Meadow Loop, with the original artwork in `assets/branding/meadow-loop.png`. `npm run icons` generates 16/32/48 px PNG favicons and a multi-size `favicon.ico` with rounded, transparent corners, plus the opaque 180 px Apple touch icon, 192/512 px PWA icons, and a separate 512 px maskable icon with extra space around the tree and tractor. `npm run build` regenerates these before bundling and precaching them. The native artwork exporter still uses `public/icon.svg` for the iOS app icon.
+
+Link previews use **A Little Farm**, the 1200 × 630 JPEG in `public/og-image.jpg`, with a lossless master in `assets/branding/a-little-farm.png`. Static Open Graph and large-image Twitter card metadata live in `index.html`, with `https://stillfield.io/` as the canonical URL. Vite copies the image into `dist/` and the service worker precaches it.
+
 Browser saves belong to their browser and origin. Native app saves belong to the installed app. They are separate meadows; there is no automatic migration between them.

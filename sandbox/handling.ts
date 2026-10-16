@@ -55,9 +55,9 @@ export function advanceNative(state: TractorState, target: Point | null, dt: num
 }
 
 export function baseline(profile: Profile, state: TractorState, target: Point | null,
-  dt: number, obstacles: Obstacle[] = [], rowAssist = true) {
-  return profile === "web" ? advanceTractor(state, target, dt, obstacles, rowAssist, 0.85)
-    : advanceNative(state, target, dt, obstacles, rowAssist);
+  dt: number, obstacles: Obstacle[] = [], rowAssist = true, paceScale = 1) {
+  return profile === "web" ? advanceTractor(state, target, dt, obstacles, rowAssist, 0.85 * paceScale)
+    : advanceNative(state, target, dt, obstacles, rowAssist, 0.85 * paceScale);
 }
 
 /** A neutral-centered, camera-independent gesture. Small finger tremor is ignored. */
@@ -70,7 +70,7 @@ export class GentleDrive {
   steering = 0;
   reset() { this.steering = 0; }
   step(state: TractorState, dt: number, input: { drag: number } | { target: Point } | null,
-    obstacles: Obstacle[] = []): TractorState {
+    obstacles: Obstacle[] = [], paceScale = 1): TractorState {
     dt = clamp(dt, 0, 0.05);
     let { x, z, heading, speed } = state;
     let desiredSpeed = 0;
@@ -88,7 +88,7 @@ export class GentleDrive {
         const turn = angleDifference(Math.atan2(input.target.x - x, input.target.z - z), heading);
         heading += clamp(turn * (1 - Math.exp(-4 * dt)), -tuning.tapTurnRate * dt, tuning.tapTurnRate * dt);
         const alignment = Math.max(0, Math.cos(turn));
-        desiredSpeed = Math.min(5.5 * 0.85, distance * 2.4) * (0.04 + 0.96 * alignment ** 2);
+        desiredSpeed = Math.min(5.5 * 0.85 * paceScale, distance * 2.4) * (0.04 + 0.96 * alignment ** 2);
       }
     } else this.steering = 0;
     speed += (desiredSpeed - speed) * (1 - Math.exp(-(desiredSpeed > speed ? tuning.acceleration : tuning.braking) * dt));

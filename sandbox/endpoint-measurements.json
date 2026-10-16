@@ -1,0 +1,132 @@
+{
+  "checked": 525,
+  "note": "Unobstructed work endpoints plus deliberate blockage; pure model checks, not touch hardware assessment.",
+  "comparison": [
+    {
+      "current": {
+        "model": "native",
+        "fps": 60,
+        "tool": "mow",
+        "proposed": false,
+        "status": "arrived",
+        "endpointValue": 0,
+        "completedAt": 3.1,
+        "distance": 13.62747964818545,
+        "final": {
+          "x": 18.62747964818545,
+          "z": 0.125,
+          "heading": 1.5707963267948966,
+          "speed": 0
+        },
+        "point": {
+          "x": 19,
+          "z": 0.125
+        }
+      },
+      "proposed": {
+        "model": "native",
+        "fps": 60,
+        "tool": "mow",
+        "proposed": true,
+        "status": "worked",
+        "endpointValue": 1,
+        "completedAt": 3.783333333333333,
+        "distance": 14.923117159471563,
+        "final": {
+          "x": 19.923117159471563,
+          "z": 0.125,
+          "heading": 1.5707963267948966,
+          "speed": 0
+        },
+        "point": {
+          "x": 19,
+          "z": 0.125
+        }
+      }
+    },
+    {
+      "current": {
+        "model": "web",
+        "fps": 60,
+        "tool": "mow",
+        "proposed": false,
+        "status": "arrived",
+        "endpointValue": 0,
+        "completedAt": 3.25,
+        "distance": 13.792966967451722,
+        "final": {
+          "x": 18.792966967451722,
+          "z": 0.125,
+          "heading": 1.5707963267948966,
+          "speed": 0
+        },
+        "point": {
+          "x": 19,
+          "z": 0.125
+        }
+      },
+      "proposed": {
+        "model": "web",
+        "fps": 60,
+        "tool": "mow",
+        "proposed": true,
+        "status": "worked",
+        "endpointValue": 1,
+        "completedAt": 3.6333333333333333,
+        "distance": 15.092774097115246,
+        "final": {
+          "x": 20.092774097115246,
+          "z": 0.125,
+          "heading": 1.5707963267948966,
+          "speed": 0
+        },
+        "point": {
+          "x": 19,
+          "z": 0.125
+        }
+      }
+    },
+    {
+      "current": {
+        "model": "gentle",
+        "fps": 60,
+        "tool": "mow",
+        "proposed": false,
+        "status": "arrived",
+        "endpointValue": 0,
+        "completedAt": 3.25,
+        "distance": 13.680096973983215,
+        "final": {
+          "x": 18.680096973983215,
+          "z": 0.125,
+          "heading": 1.5707963267948966,
+          "speed": 0
+        },
+        "point": {
+          "x": 19,
+          "z": 0.125
+        }
+      },
+      "proposed": {
+        "model": "gentle",
+        "fps": 60,
+        "tool": "mow",
+        "proposed": true,
+        "status": "worked",
+        "endpointValue": 1,
+        "completedAt": 3.8833333333333333,
+        "distance": 14.961432819798304,
+        "final": {
+          "x": 19.961432819798304,
+          "z": 0.125,
+          "heading": 1.5707963267948966,
+          "speed": 0
+        },
+        "point": {
+          "x": 19,
+          "z": 0.125
+        }
+      }
+    }
+  ]
+}

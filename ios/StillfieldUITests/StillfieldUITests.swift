@@ -4,10 +4,77 @@ import XCTest
 final class StillfieldUITests: XCTestCase {
     private let meadowControlIdentifiers = [
         "tool.mow", "tool.till", "tool.sow", "tool.wander",
-        "action.pause", "action.sound", "action.settings", "action.help",
+        "action.pause", "action.sound", "action.settings",
         "action.camera",
         "Zoom out", "Center the farm", "Zoom in"
     ]
+
+    func testControlsTuckAwayAndCanBeRecalledWhileDriving() throws {
+        let app = launchFreshMeadow()
+        defer {
+            XCUIDevice.shared.orientation = .portrait
+            app.terminate()
+        }
+        let surface = meadowSurface(in: app)
+        let initial = try XCTUnwrap(telemetry(in: app))
+        surface.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.47)).tap()
+        _ = try waitForSteering(after: initial.steeringCount, in: app)
+        XCTAssertTrue(app.buttons["tool.mow"].exists, "Menus should remain during the copy fade.")
+        let recall = app.buttons["action.controls"]
+        XCTAssertTrue(waitUntil(timeout: 6) { recall.label == "Show controls" })
+        XCTAssertTrue(waitUntil(timeout: 3) {
+            !app.buttons["tool.mow"].exists && !app.buttons["action.settings"].exists
+        }, "Dismissing menus must leave the accessibility tree.")
+        let automaticExitEnd = Date().addingTimeInterval(0.9)
+        XCTAssertTrue(waitUntil(timeout: 3) { Date() >= automaticExitEnd })
+
+        let hidden = try XCTUnwrap(telemetry(in: app))
+        surface.coordinate(withNormalizedOffset: CGVector(dx: 0.32, dy: 0.52)).tap()
+        _ = try waitForSteering(after: hidden.steeringCount, in: app)
+        XCTAssertTrue(waitUntil(timeout: 5) {
+            guard let current = self.telemetry(in: app) else { return false }
+            return current.distance(from: hidden) > 0.6
+        }, "Steering must work while the controls are tucked away.")
+        attachScreenshot("Quiet meadow with recall button", app: app)
+
+        revealControls(in: app)
+        assertControlsReachable(in: app)
+        let recalled = try XCTUnwrap(telemetry(in: app))
+        XCTAssertNotNil(recalled.destination, "Recalling menus must not stop the current drive.")
+        app.buttons["tool.sow"].tap()
+        let adjustmentsEnd = Date().addingTimeInterval(3.5)
+        XCTAssertTrue(waitUntil(timeout: 5) { Date() >= adjustmentsEnd })
+        XCTAssertTrue(app.buttons["tool.sow"].isHittable, "Recalled controls stay open until the next steering gesture.")
+        attachScreenshot("Controls recalled without decorative copy", app: app)
+
+        recall.tap()
+        XCTAssertTrue(waitUntil(timeout: 3) {
+            recall.label == "Show controls" && !app.buttons["tool.sow"].exists
+        }, "Manual dismissal must remove hidden controls from accessibility.")
+        // Accessibility disappears before the slide completes; let the full exit play.
+        let manualExitEnd = Date().addingTimeInterval(0.9)
+        XCTAssertTrue(waitUntil(timeout: 3) { Date() >= manualExitEnd })
+        attachScreenshot("Quiet meadow after manual dismissal", app: app)
+        revealControls(in: app)
+        XCTAssertTrue(app.buttons["tool.sow"].isSelected)
+
+        let beforeSteering = try XCTUnwrap(telemetry(in: app))
+        surface.coordinate(withNormalizedOffset: CGVector(dx: 0.60, dy: 0.50)).tap()
+        _ = try waitForSteering(after: beforeSteering.steeringCount, in: app)
+        XCTAssertTrue(waitUntil(timeout: 5) { recall.label == "Show controls" })
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            app.frame.width > app.frame.height && recall.isHittable && app.frame.contains(recall.frame)
+        })
+        attachScreenshot("Quiet landscape with recall button", app: app)
+        revealControls(in: app)
+        waitForMeadowLayout(in: app, portrait: false)
+        assertControlsReachable(in: app)
+        app.buttons["action.pause"].tap()
+        XCTAssertTrue(app.buttons["pause.resume"].waitForExistence(timeout: 3))
+        app.buttons["pause.resume"].tap()
+        XCTAssertTrue(app.buttons["tool.sow"].isHittable)
+    }
 
     func testTractorViewFollowsDrivingZoomsAndRestores() throws {
         let app = launchFreshMeadow()
@@ -21,6 +88,7 @@ final class StillfieldUITests: XCTestCase {
         let initial = try XCTUnwrap(telemetry(in: app))
         surface.coordinate(withNormalizedOffset: CGVector(dx: 0.33, dy: 0.51)).tap()
         _ = try waitForSteering(after: initial.steeringCount, in: app)
+        revealControls(in: app)
         app.buttons["action.camera"].tap()
         XCTAssertTrue(waitUntil(timeout: 5) { self.telemetry(in: app)?.tractorView == true })
         XCTAssertTrue(app.buttons["action.camera"].isSelected)
@@ -52,6 +120,7 @@ final class StillfieldUITests: XCTestCase {
         let afterPinch = try XCTUnwrap(telemetry(in: app))
         surface.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.50)).tap()
         _ = try waitForSteering(after: afterPinch.steeringCount, in: app)
+        revealControls(in: app)
         app.buttons["Center behind the tractor"].tap()
         XCTAssertTrue(waitUntil(timeout: 5) { self.telemetry(in: app)?.zoom == 0.65 })
 
@@ -63,6 +132,7 @@ final class StillfieldUITests: XCTestCase {
         surface.coordinate(withNormalizedOffset: CGVector(dx: 0.53, dy: 0.46)).tap()
         _ = try waitForSteering(after: landscape.steeringCount, in: app)
         attachScreenshot("Behind the tractor in landscape", app: app)
+        revealControls(in: app)
         for _ in 0..<8 { app.buttons["Zoom in"].tap() }
         XCTAssertTrue(waitUntil(timeout: 5) { self.telemetry(in: app)?.zoom == 1.8 })
         attachScreenshot("Tractor and attachment at closest landscape zoom", app: app)
@@ -140,6 +210,8 @@ final class StillfieldUITests: XCTestCase {
             app.state == .runningBackground || app.state == .runningBackgroundSuspended
         })
         app.activate()
+        XCTAssertTrue(meadowSurface(in: app).waitForExistence(timeout: 10))
+        revealControls(in: app)
         XCTAssertTrue(app.buttons["tool.sow"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["tool.sow"].isSelected)
         XCTAssertTrue(waitUntil(timeout: 5) { self.telemetry(in: app)?.speed == 0 },
@@ -195,9 +267,9 @@ final class StillfieldUITests: XCTestCase {
         assertControlsReachable(in: app)
         attachScreenshot("Landscape meadow", app: app)
 
-        app.buttons["action.help"].tap()
+        app.buttons["action.settings"].tap()
         XCTAssertTrue(app.buttons["sheet.close"].waitForExistence(timeout: 3))
-        attachScreenshot("Native help in landscape", app: app)
+        attachScreenshot("Native settings in landscape", app: app)
         dismissSheetAndWait(in: app)
 
         XCUIDevice.shared.orientation = .portrait
@@ -249,6 +321,12 @@ final class StillfieldUITests: XCTestCase {
             return current.distance(from: resumed) > 0.6
         }, "The tractor must drive toward a new tap after pinching, without another gesture to unstick it.")
         attachScreenshot("Steering resumes after pinching", app: app)
+    }
+
+    private func revealControls(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let recall = app.buttons["action.controls"]
+        if recall.exists && recall.label == "Show controls" { recall.tap() }
+        XCTAssertTrue(waitUntil(timeout: 3) { app.buttons["tool.mow"].isHittable }, file: file, line: line)
     }
 
     private func waitForSteering(after count: Int, in app: XCUIApplication,

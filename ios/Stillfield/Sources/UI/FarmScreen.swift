@@ -15,6 +15,19 @@ private enum MeadowPalette {
     static let gold = Color(red: 0.70, green: 0.57, blue: 0.29)
 }
 
+private struct AmbientCopy: ViewModifier {
+    let hidden: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(hidden ? 0 : 1)
+            .allowsHitTesting(!hidden)
+            .accessibilityHidden(hidden)
+            .animation(reduceMotion ? nil : .easeOut(duration: 1.2), value: hidden)
+    }
+}
+
 struct FarmScreen: View {
     @Bindable var game: FarmController
     @Environment(\.scenePhase) private var scenePhase
@@ -27,6 +40,7 @@ struct FarmScreen: View {
             ZStack {
                 FarmViewport(game: game)
                     .ignoresSafeArea()
+                    .zIndex(-2)
 
                 LinearGradient(
                     stops: [.init(color: MeadowPalette.cream.opacity(0.72), location: 0),
@@ -37,24 +51,46 @@ struct FarmScreen: View {
                 )
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
+                // Keep departing overlays above the opaque scene for their entire transition.
+                .zIndex(-1)
 
                 if game.isLoading {
                     loadingCard
                 } else if game.errorMessage != nil && !game.hasSaveError {
                     errorCard
                 } else {
-                    VStack(spacing: 0) {
-                        header(width: geometry.size.width, compact: compactHeight)
-                        Spacer(minLength: 0)
-                        if compactHeight {
-                            landscapeFooter
-                        } else {
-                            portraitFooter(wide: wide)
+                    if !game.controlsHidden {
+                        VStack(spacing: 0) {
+                            header(width: geometry.size.width, compact: compactHeight)
+                            Spacer(minLength: 0)
+                            if compactHeight {
+                                landscapeFooter
+                            } else {
+                                portraitFooter(wide: wide)
+                            }
                         }
+                        .padding(.horizontal, wide ? 28 : 16)
+                        .padding(.top, 8)
+                        .padding(.bottom, compactHeight ? 8 : 12)
+                        .transition(reduceMotion ? .identity : .offset(x: geometry.size.width))
                     }
-                    .padding(.horizontal, wide ? 28 : 16)
-                    .padding(.top, 8)
-                    .padding(.bottom, compactHeight ? 8 : 12)
+
+                    if game.hasDriven {
+                        Button(action: game.toggleControls) {
+                            Image(systemName: game.controlsHidden ? "line.3.horizontal" : "chevron.right")
+                                .font(.system(size: 17, weight: .regular))
+                                .frame(width: 44, height: 44)
+                                .background(MeadowPalette.cream.opacity(0.65), in: Circle())
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(game.controlsHidden ? "Show controls" : "Hide controls")
+                        .accessibilityHint("Tools, sound, pause, settings, and camera controls.")
+                        .accessibilityIdentifier("action.controls")
+                        .padding(.trailing, wide ? 28 : 16)
+                        .padding(.bottom, compactHeight ? 8 : 12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    }
 
                     if !game.introDismissed {
                         welcome(compact: compactHeight, wide: wide)
@@ -71,6 +107,7 @@ struct FarmScreen: View {
                             .transition(.opacity)
                     } else if wide && !compactHeight {
                         fieldNote
+                            .modifier(AmbientCopy(hidden: game.hasDriven))
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             .padding(.leading, 40)
                             .padding(.top, 94)
@@ -99,8 +136,12 @@ struct FarmScreen: View {
             }
             .foregroundStyle(MeadowPalette.ink)
             .tint(MeadowPalette.green)
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: game.introDismissed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 1.2), value: game.introDismissed)
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: game.isPaused)
+            .animation(
+                reduceMotion ? nil : .easeInOut(duration: 0.8),
+                value: game.controlsHidden
+            )
         }
         .background(MeadowPalette.sage)
         .preferredColorScheme(.light)
@@ -133,6 +174,7 @@ struct FarmScreen: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Stillfield. A little farm, a little peace.")
+            .modifier(AmbientCopy(hidden: game.hasDriven))
 
             Spacer(minLength: 4)
 
@@ -142,6 +184,7 @@ struct FarmScreen: View {
                     .padding(.horizontal, 17)
                     .padding(.vertical, 12)
                     .background(MeadowPalette.cream.opacity(0.65), in: Capsule())
+                    .modifier(AmbientCopy(hidden: game.hasDriven))
                 Spacer(minLength: 4)
             }
 
@@ -160,6 +203,7 @@ struct FarmScreen: View {
                 }
                 .padding(.trailing, 14)
                 .accessibilityElement(children: .combine)
+                .modifier(AmbientCopy(hidden: game.hasDriven))
             }
 
             HStack(spacing: 4) {
@@ -224,22 +268,14 @@ struct FarmScreen: View {
 
     private func portraitFooter(wide: Bool) -> some View {
         VStack(spacing: wide ? 14 : 9) {
-            Text(game.tool.caption)
-                .font(.system(size: 12, design: .serif)).italic()
-                .foregroundStyle(MeadowPalette.muted)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 7)
-                .background(MeadowPalette.cream.opacity(0.75), in: Capsule())
-                .accessibilityHidden(true)
             toolDock(compact: false)
                 .frame(maxWidth: wide ? 420 : 380)
             HStack(spacing: 8) {
-                roundButton("questionmark", label: "How to play", identifier: "action.help") { game.activeSheet = .help }
-                if wide {
-                    Text(game.hasSaveError ? "Your meadow couldn’t save." : "Your little corner, saved.")
+                if wide && game.hasSaveError {
+                    Text("Your meadow couldn’t save.")
                         .font(.system(size: 11))
                         .foregroundStyle(MeadowPalette.muted)
-                } else {
+                } else if !wide {
                     Button { game.activeSheet = .help } label: {
                         Text("Tap or drag\nto find your way")
                             .font(.system(size: 10))
@@ -249,6 +285,7 @@ struct FarmScreen: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Learn to drive. Tap or drag to find your way.")
+                    .modifier(AmbientCopy(hidden: game.hasDriven))
                 }
                 Spacer(minLength: 0)
                 zoomControls
@@ -267,7 +304,6 @@ struct FarmScreen: View {
 
     private var landscapeFooter: some View {
         HStack(alignment: .bottom, spacing: 12) {
-            roundButton("questionmark", label: "How to play", identifier: "action.help") { game.activeSheet = .help }
             Spacer(minLength: 0)
             toolDock(compact: true)
                 .frame(maxWidth: 320)
@@ -333,6 +369,7 @@ struct FarmScreen: View {
         }
         .background(MeadowPalette.cream.opacity(0.88), in: Capsule())
         .overlay(Capsule().strokeBorder(MeadowPalette.ink.opacity(0.08), lineWidth: 1))
+        .padding(.trailing, game.hasDriven ? 52 : 0)
     }
 
     private func zoomButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
@@ -620,14 +657,6 @@ private extension FarmTool {
     }
     var symbol: String {
         switch self { case .mow: "leaf"; case .till: "line.3.horizontal"; case .sow: "camera.macro"; case .wander: "wind" }
-    }
-    var caption: String {
-        switch self {
-        case .mow: "A softer path, one row at a time."
-        case .till: "Good things begin with a little earth."
-        case .sow: "Leave a little color wherever you go."
-        case .wander: "No particular place to be."
-        }
     }
     var accessibilityDescription: String {
         switch self {

@@ -255,9 +255,7 @@ button:disabled {
   top: 164px;
   left: 53px;
   pointer-events: none;
-  transition:
-    opacity 0.8s,
-    transform 0.8s;
+  transition: opacity 1.2s ease-out;
   max-width: 290px;
 }
 .welcome .eyebrow {
@@ -322,7 +320,6 @@ p {
 }
 .welcome.dismissed {
   opacity: 0;
-  transform: translateY(-12px);
   pointer-events: none;
 }
 .welcome.dismissed button {
@@ -391,22 +388,6 @@ p {
   align-items: center;
   flex-direction: column;
   pointer-events: none;
-}
-.tool-caption {
-  font-family: var(--serif);
-  font-size: 12px;
-  letter-spacing: 0.1px;
-  color: #708063;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 15px;
-  text-shadow: 0 1px 8px #f7f9e7;
-}
-.tool-caption .icon {
-  width: 15px;
-  height: 15px;
-  stroke-width: 1.4;
 }
 .tool-dock {
   display: flex;
@@ -501,9 +482,6 @@ p {
   letter-spacing: 0.2px;
   transition: opacity 1s;
 }
-.drive-hint.subtle {
-  opacity: 0.6;
-}
 .hint-desktop {
   display: flex;
   align-items: center;
@@ -532,47 +510,13 @@ p {
   right: 37px;
   bottom: 31px;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   pointer-events: none;
 }
-.bottom-left,
-.bottom-right {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  pointer-events: auto;
-}
-.bottom-left > span {
-  font-family: var(--serif);
-  font-size: 11px;
-  font-style: italic;
-  color: #8c987d;
-}
-.help-button {
-  width: 31px;
-  height: 31px;
-  color: #819172;
-}
-.help-button .icon {
-  width: 18px;
-  height: 18px;
-}
-.saved-note {
-  font-size: 9px;
-  color: #8b987d;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-right: 7px;
-}
-.saved-note .icon {
-  width: 12px;
-  height: 12px;
-  stroke-width: 1.5;
-}
 .zoom-controls {
   display: flex;
+  pointer-events: auto;
   align-items: center;
   padding: 4px;
   border: 1px solid #8b997333;
@@ -965,9 +909,6 @@ dialog .ipad-tip {
     right: 24px;
     bottom: 25px;
   }
-  .saved-note {
-    display: none;
-  }
   .bottom-center {
     bottom: 25px;
   }
@@ -992,12 +933,6 @@ dialog .ipad-tip {
   .welcome {
     top: 141px;
     left: 31px;
-  }
-  .bottom-left > span {
-    display: none;
-  }
-  .tool-caption {
-    font-size: 11px;
   }
   .field-note {
     left: 29px;
@@ -1043,10 +978,6 @@ dialog .ipad-tip {
   .zoom-controls button {
     width: 36px;
     height: 34px;
-  }
-  .help-button {
-    width: 44px;
-    height: 44px;
   }
 }
 @media (max-width: 600px) {
@@ -1100,7 +1031,7 @@ dialog .ipad-tip {
     width: 15px;
   }
   .bottom-center {
-    bottom: calc(23px + env(safe-area-inset-bottom));
+    bottom: calc(72px + env(safe-area-inset-bottom));
   }
   .tool-button {
     width: 68px;
@@ -1111,13 +1042,6 @@ dialog .ipad-tip {
     border-radius: 18px;
     gap: 2px;
   }
-  .tool-caption {
-    font-size: 10px;
-    margin-bottom: 12px;
-  }
-  .tool-caption .icon {
-    width: 13px;
-  }
   .drive-hint {
     font-size: 9px;
     margin-top: 13px;
@@ -1125,15 +1049,11 @@ dialog .ipad-tip {
   .bottom-bar {
     left: 16px;
     right: 16px;
-    bottom: calc(158px + env(safe-area-inset-bottom));
+    bottom: calc(16px + env(safe-area-inset-bottom));
   }
   .zoom-controls button {
     width: 29px;
     height: 28px;
-  }
-  .help-button {
-    width: 34px;
-    height: 34px;
   }
   .world-label {
     display: none;
@@ -1215,10 +1135,6 @@ dialog .ipad-tip {
     width: 24px;
     height: 24px;
   }
-  .tool-caption {
-    margin-bottom: 8px;
-    font-size: 10px;
-  }
   .drive-hint {
     margin-top: 9px;
     font-size: 8px;
@@ -1233,7 +1149,60 @@ dialog .ipad-tip {
     top: 85px;
   }
 }
+.ambient-copy {
+  transition: opacity 1.2s ease-out;
+}
+.menu-panel {
+  transition: translate 0.8s ease-in-out;
+}
+.controls-hidden .menu-panel {
+  translate: 100vw 0;
+}
+.controls-hidden .menu-panel,
+.controls-hidden .menu-panel * {
+  pointer-events: none;
+}
+.controls-toggle {
+  position: absolute;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  right: calc(16px + env(safe-area-inset-right));
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #f7f5e9a6;
+  color: var(--ink);
+}
+.controls-toggle[hidden] {
+  display: none;
+}
+.controls-toggle:hover,
+.controls-toggle:focus-visible {
+  background: var(--cream);
+}
+.controls-toggle:active {
+  transform: scale(0.96);
+}
+.farm-app.has-driven .bottom-bar {
+  padding-right: 52px;
+}
+.farm-app.has-driven .ambient-copy {
+  opacity: 0;
+  pointer-events: none;
+}
+.farm-app.has-driven .top-actions {
+  pointer-events: none;
+}
+.farm-app.has-driven .action-group {
+  pointer-events: auto;
+}
 @media (prefers-reduced-motion: reduce) {
+  .controls-hidden .menu-panel {
+    translate: none;
+    opacity: 0;
+  }
   *,
   *:before,
   *:after {

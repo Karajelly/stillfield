@@ -16,13 +16,15 @@ final class FarmController {
     var goldenLight: Bool { didSet { updateLight(); persist() } }
     var haptics: Bool { didSet { persist() } }
     var introDismissed: Bool
+    private(set) var hasDriven = false
+    private(set) var controlsHidden = false
     var pace: Double { didSet { persist() } }
     var volume: Double { didSet { audio.setVolume(volume); persist() } }
     var isLoading = true
     var hasSaveError = false
     var errorMessage: String?
     var toast: String?
-    var activeSheet: FarmSheet? { didSet { if activeSheet != nil { stop(); persist() } } }
+    var activeSheet: FarmSheet? { didSet { if activeSheet != nil { showControls(); stop(); persist() } } }
 #if DEBUG
     var testTelemetry = ""
     @ObservationIgnored private let isUITesting = ProcessInfo.processInfo.arguments.contains("--ui-testing")
@@ -71,6 +73,7 @@ final class FarmController {
     @ObservationIgnored private var isActive = true
     @ObservationIgnored private var dirty = false
     @ObservationIgnored private var toastTask: Task<Void, Never>?
+    @ObservationIgnored private var controlsHideTask: Task<Void, Never>?
     @ObservationIgnored private let logger = Logger(subsystem: "com.stillfield.app", category: "Meadow")
 
     init() {
@@ -234,6 +237,7 @@ final class FarmController {
         if isUITesting { testSteeringCount += 1 }
 #endif
         if !introDismissed { dismissIntro() }
+        if hasDriven { scheduleControlsHide() }
     }
 
     private func updateDestinationMarkerScale() {
@@ -252,6 +256,7 @@ final class FarmController {
     }
 
     func toggleCamera() {
+        showControls()
         endPinch()
         cameraMode = cameraMode == .overview ? .tractor : .overview
         if let marker = destinationMarker as? ModelEntity,
@@ -281,15 +286,17 @@ final class FarmController {
         setViewportSize(viewport)
     }
     func endPinch() { pinchStartZoom = nil }
-    func zoomIn() { zoom = min(1.8, zoom + 0.15); setViewportSize(viewport); selectionFeedback() }
-    func zoomOut() { zoom = max(0.65, zoom - 0.15); setViewportSize(viewport); selectionFeedback() }
+    func zoomIn() { showControls(); zoom = min(1.8, zoom + 0.15); setViewportSize(viewport); selectionFeedback() }
+    func zoomOut() { showControls(); zoom = max(0.65, zoom - 0.15); setViewportSize(viewport); selectionFeedback() }
     func recenter() {
+        showControls()
         zoom = cameraMode == .tractor ? Float(TractorFollowCamera.defaultZoom) : 1
         setViewportSize(viewport)
         selectionFeedback()
     }
 
     func selectTool(_ value: FarmTool) {
+        showControls()
         guard value != tool else { return }
         tool = value
         updateAttachment()
@@ -297,8 +304,9 @@ final class FarmController {
         persist()
     }
     func dismissIntro() { introDismissed = true; persist() }
-    func togglePause() { isPaused.toggle(); stop(); persist(); selectionFeedback() }
+    func togglePause() { showControls(); isPaused.toggle(); stop(); persist(); selectionFeedback() }
     func toggleSound() {
+        showControls()
         soundEnabled.toggle()
         audio.setEnabled(soundEnabled)
         selectionFeedback()
@@ -306,7 +314,35 @@ final class FarmController {
     func setActive(_ active: Bool) {
         isActive = active
         audio.setActive(active)
-        if !active { endPinch(); stop(); persist() }
+        if !active { cancelControlsHide(); endPinch(); stop(); persist() }
+    }
+
+    func showControls() {
+        cancelControlsHide()
+        controlsHidden = false
+    }
+
+    func toggleControls() {
+        if controlsHidden { showControls() }
+        else { cancelControlsHide(); controlsHidden = true }
+    }
+
+    private func cancelControlsHide() {
+        controlsHideTask?.cancel()
+        controlsHideTask = nil
+    }
+
+    private func scheduleControlsHide(after delay: Double = 2) {
+        guard !controlsHidden, controlsHideTask == nil else { return }
+        // Repeated drag events must not postpone the quiet view indefinitely.
+        controlsHideTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)) }
+            catch { return }
+            guard let self else { return }
+            self.controlsHideTask = nil
+            guard self.isActive, !self.isPaused, self.activeSheet == nil else { return }
+            self.controlsHidden = true
+        }
     }
     func resetMeadow() {
         stop()
@@ -338,6 +374,12 @@ final class FarmController {
             destinationMarker.isEnabled = false
         }
         if tractorState.speed > 0.1 {
+            if !hasDriven {
+                hasDriven = true
+                toastTask?.cancel()
+                toast = nil
+                scheduleControlsHide(after: 3.2)
+            }
             dirty = true
             wheelAngle += Float(tractorState.speed * dt / 0.7)
             if elapsed - lastPaint >= 1.0 / 24 {

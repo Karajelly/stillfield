@@ -57,7 +57,7 @@ app.innerHTML = `
   <main class="farm-app">
     <div id="scene" aria-label="Your pastoral farm. Tap or drag the meadow to drive, or use arrow keys." role="application" tabindex="0"></div>
     <div class="vignette" aria-hidden="true"></div>
-    <header class="topbar">
+    <header class="topbar menu-panel" id="top-controls">
       <a class="brand" href="#" aria-label="Stillfield home">${brandMark}<span>stillfield<span class="brand-tagline">a little farm. a little peace.</span></span></a>
       <button class="place-pill" id="place" aria-label="About Willowbrook farm"><span class="live-dot"></span>Willowbrook farm ${icon("down")}</button>
       <div class="top-actions">
@@ -75,8 +75,7 @@ app.innerHTML = `
     <div class="world-label" id="windmill-label"><span></span>Windmill hill</div>
     <div class="world-label" id="pond-label"><span></span>The quiet pond</div>
     <div id="destination" aria-hidden="true"><span></span></div>
-    <section class="bottom-center" aria-label="Tractor tools">
-      <div class="tool-caption" id="tool-caption">${icon("leaf")}<span>A softer path, one row at a time.</span></div>
+    <section class="bottom-center menu-panel" id="tool-controls" aria-label="Tractor tools">
       <nav class="tool-dock" aria-label="Choose your tool">${[
         ["mow", "Mow", "Trim the meadow"],
         ["till", "Till", "Turn the earth"],
@@ -90,15 +89,60 @@ app.innerHTML = `
         .join("")}</nav>
       <div class="drive-hint" id="drive-hint"><span class="hint-desktop"><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> to drive <span class="hint-dot">·</span></span> tap or drag to find your way</div>
     </section>
-    <footer class="bottom-bar">
-      <div class="bottom-left"><button class="round-button help-button" id="help" aria-label="How to play">${icon("help")}</button><span>Find your own rhythm.</span></div>
-      <div class="bottom-right"><span class="saved-note" id="saved-note">${icon("check")} Your little corner, saved.</span><div class="zoom-controls"><button id="zoom-out" aria-label="Zoom out">−</button><button id="recenter" aria-label="Center the farm" title="Center the farm">${icon("expand")}</button><button id="zoom-in" aria-label="Zoom in">+</button></div></div>
+    <footer class="bottom-bar menu-panel" id="view-controls">
+      <div class="zoom-controls"><button id="zoom-out" aria-label="Zoom out">−</button><button id="recenter" aria-label="Center the farm" title="Center the farm">${icon("expand")}</button><button id="zoom-in" aria-label="Zoom in">+</button></div>
     </footer>
+    <button class="controls-toggle" id="controls-toggle" aria-label="Hide controls" aria-expanded="true" aria-controls="top-controls tool-controls view-controls" title="Hide controls (M)" hidden>${icon("right")}</button>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="pause-veil" id="pause-veil" hidden><div>${icon("feather")}<span>A moment to breathe.</span><button id="resume">Back to the meadow ${icon("play")}</button></div></div>
     <dialog id="dialog" aria-labelledby="dialog-title"><div id="dialog-content"></div></dialog>
   </main>`;
 const sceneContainer = document.querySelector<HTMLDivElement>("#scene")!;
+const ambientCopy = document.querySelectorAll<HTMLElement>(
+  ".brand, .place-pill, .weather, .field-note, .world-label, .drive-hint",
+);
+ambientCopy.forEach((element) => element.classList.add("ambient-copy"));
+const menuPanels = document.querySelectorAll<HTMLElement>(".menu-panel");
+const controlsToggle = document.querySelector<HTMLButtonElement>("#controls-toggle")!;
+let controlsHidden = false;
+let controlsHideTimer: number | undefined;
+
+function cancelControlsHide() {
+  window.clearTimeout(controlsHideTimer);
+  controlsHideTimer = undefined;
+}
+function setControlsHidden(hidden: boolean) {
+  cancelControlsHide();
+  const moveFocus = hidden && Array.from(menuPanels).some((panel) =>
+    panel.contains(document.activeElement),
+  );
+  controlsHidden = hidden;
+  document.querySelector(".farm-app")!.classList.toggle("controls-hidden", hidden);
+  menuPanels.forEach((panel) => {
+    panel.inert = hidden;
+    if (hidden) panel.setAttribute("aria-hidden", "true");
+    else panel.removeAttribute("aria-hidden");
+  });
+  const label = hidden ? "Show controls" : "Hide controls";
+  controlsToggle.setAttribute("aria-label", label);
+  controlsToggle.setAttribute("aria-expanded", String(!hidden));
+  controlsToggle.title = `${label} (M)`;
+  controlsToggle.innerHTML = icon(hidden ? "menu" : "right");
+  if (moveFocus) controlsToggle.focus({ preventScroll: true });
+}
+function scheduleControlsHide(delay = 2000) {
+  if (!hasDriven || controlsHidden || controlsHideTimer !== undefined) return;
+  controlsHideTimer = window.setTimeout(() => {
+    controlsHideTimer = undefined;
+    if (!paused && !modalOpen && !document.hidden) setControlsHidden(true);
+  }, delay);
+}
+controlsToggle.addEventListener("click", () => setControlsHidden(!controlsHidden));
+menuPanels.forEach((panel) => {
+  panel.addEventListener("pointerdown", cancelControlsHide);
+  panel.addEventListener("focusin", cancelControlsHide);
+  panel.addEventListener("click", cancelControlsHide);
+});
 let renderer: THREE.WebGLRenderer;
 try {
   renderer = new THREE.WebGLRenderer({
@@ -176,12 +220,6 @@ let zoom = 1,
   lastSave = 0,
   hasDriven = false;
 const keys = new Set<string>();
-const captions: Record<Tool, string> = {
-  mow: "A softer path, one row at a time.",
-  till: "Good things begin with a little earth.",
-  sow: "Leave a little color wherever you go.",
-  wander: "No particular place to be.",
-};
 function updateTool(tool: Tool) {
   selectedTool = tool;
   tractor.setTool(tool);
@@ -190,9 +228,6 @@ function updateTool(tool: Tool) {
     b.classList.toggle("selected", active);
     b.setAttribute("aria-pressed", String(active));
   });
-  document.querySelector("#tool-caption")!.innerHTML =
-    icon(tool === "wander" ? "feather" : "leaf") +
-    `<span>${captions[tool]}</span>`;
   persist();
 }
 function dismissIntro() {
@@ -260,8 +295,6 @@ function persist() {
     localStorage.setItem("stillfield-v1", JSON.stringify(data));
   } catch {
     storageAvailable = false;
-    document.querySelector("#saved-note")!.innerHTML =
-      icon("leaf") + " Here for this moment.";
   }
 }
 let toastTimer: number | undefined;
@@ -280,6 +313,7 @@ function stop() {
   audio.setDriving(0);
 }
 function setPaused(value: boolean) {
+  setControlsHidden(false);
   paused = value;
   stop();
   document.querySelector<HTMLDivElement>("#pause-veil")!.hidden = !value;
@@ -316,6 +350,7 @@ function closeDialog() {
   modalOpener?.focus();
 }
 function openDialog(content: string) {
+  setControlsHidden(false);
   stop();
   modalOpener = document.activeElement as HTMLElement;
   modalOpen = true;
@@ -386,6 +421,7 @@ function pointerTarget(event: PointerEvent) {
     cursor.position.set(target.x, 0.09, target.z);
     cursor.visible = true;
     dismissIntro();
+    scheduleControlsHide();
   }
 }
 let pointerId: number | null = null;
@@ -439,12 +475,16 @@ window.addEventListener("keydown", (e) => {
     if (!paused) {
       keys.add(e.key.toLowerCase());
       dismissIntro();
+      scheduleControlsHide();
     }
   } else if (e.code === "Space" && !(e.target instanceof HTMLButtonElement)) {
     e.preventDefault();
     setPaused(!paused);
   } else if (["1", "2", "3", "4"].includes(e.key)) {
     updateTool(tools[Number(e.key) - 1]);
+  } else if (e.key.toLowerCase() === "m" && hasDriven && !paused && !e.repeat) {
+    e.preventDefault();
+    setControlsHidden(!controlsHidden);
   } else if (e.key === "Escape") {
     if (!paused) setPaused(true);
     else setPaused(false);
@@ -458,11 +498,13 @@ window.addEventListener("keyup", (e) => {
   }
 });
 window.addEventListener("blur", () => {
+  cancelControlsHide();
   stop();
   persist();
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
+    cancelControlsHide();
     stop();
     persist();
     if (soundEnabled) void audio.setEnabled(false);
@@ -496,7 +538,6 @@ document
   .querySelector("#resume")!
   .addEventListener("click", () => setPaused(false));
 document.querySelector("#settings")!.addEventListener("click", showSettings);
-document.querySelector("#help")!.addEventListener("click", showHelp);
 document.querySelector("#place")!.addEventListener("click", showHelp);
 document.querySelector("#zoom-in")!.addEventListener("click", () => {
   zoom = clamp(zoom + 0.12, 0.7, 1.65);
@@ -579,7 +620,18 @@ function animate(now: number) {
       cursor.visible = false;
     }
     if (tractorState.speed > 0.1) {
-      hasDriven = true;
+      if (!hasDriven) {
+        hasDriven = true;
+        document.querySelector(".farm-app")!.classList.add("has-driven");
+        ambientCopy.forEach((element) => {
+          element.inert = true;
+          element.setAttribute("aria-hidden", "true");
+        });
+        window.clearTimeout(toastTimer);
+        document.querySelector("#toast")!.classList.remove("visible");
+        controlsToggle.hidden = false;
+        scheduleControlsHide(3200);
+      }
       changedSinceSave = true;
       if (time - lastPaint > 1 / 24) {
         field.paint(
@@ -601,8 +653,6 @@ function animate(now: number) {
       changedSinceSave = false;
       lastSave = time;
     }
-    if (hasDriven && time > 15)
-      document.querySelector("#drive-hint")!.classList.add("subtle");
   }
   renderer.render(scene, camera);
 }
@@ -618,6 +668,7 @@ if (import.meta.env.DEV)
       pace,
       golden,
       hasDriven,
+      controlsHidden,
       grid: Array.from(field.grid),
       drawCalls: renderer.info.render.calls,
       camera: {

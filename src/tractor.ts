@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
+import { tuning } from "./handling";
 import type { Tool } from "./simulation";
 
 /** A small enamel toy tractor, built to hold up at the driver's-eye distance. */
@@ -172,9 +173,9 @@ export function createTractor(scene: THREE.Scene) {
   attachment.name = "attachment";
   group.add(attachment);
   for (const side of [-1, 1]) rod(new THREE.Vector3(side * 0.42, 0.58, -1.25), new THREE.Vector3(side * 0.65, 0.46, -2.0), 0.055, materials.metal, attachment);
-  const mower = panel(0, 0.35, -2.1, 2.57, 0.24, 0.82, 0.24, materials.light, attachment);
+  const mower = panel(0, 0.35, -2.1, tuning.brushRadius * 2, 0.24, 0.82, 0.24, materials.light, attachment);
   mower.name = "mower";
-  panel(0, 0.20, -2.1, 2.48, 0.08, 0.76, 0.22, materials.green, attachment);
+  panel(0, 0.20, -2.1, 2.41, 0.08, 0.76, 0.22, materials.green, attachment);
   for (const side of [-1, 1]) {
     oval(side * 1.11, 0.49, -2.14, 0.08, 0.045, 0.075, materials.cream, attachment);
     box(side * 0.94, 0.34, -2.535, 0.18, 0.07, 0.035, materials.red, attachment, 0.017, 1);
@@ -203,8 +204,8 @@ export function createTractor(scene: THREE.Scene) {
     },
     setTool(tool: Tool) {
       attachment.visible = tool !== "wander";
-      mower.material = tool === "till" ? materials.seat : materials.light;
-      teeth.forEach((tooth) => (tooth.visible = tool === "till"));
+      mower.material = tool === "cultivate" ? materials.seat : materials.light;
+      teeth.forEach((tooth) => (tooth.visible = tool === "cultivate"));
       seedBox.visible = tool === "sow";
     },
   };

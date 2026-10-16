@@ -1,5 +1,7 @@
+import type { Crop } from "./farming";
 /** A quiet, entirely synthesized soundscape, started only by a user gesture. */
 export class FarmAudio {
+  private lastHarvest = -10;
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
   private engineGain: GainNode | null = null;
@@ -57,6 +59,34 @@ export class FarmAudio {
       ? Math.max(0, Math.min(1, volume))
       : 0;
     this.updateVolume();
+  }
+
+  harvest(crop: Crop): void {
+    const ctx = this.context;
+    if (
+      !this.enabled ||
+      !ctx ||
+      !this.master ||
+      ctx.state !== "running" ||
+      ctx.currentTime - this.lastHarvest < 1.2
+    )
+      return;
+    this.lastHarvest = ctx.currentTime;
+    const note = ctx.createOscillator(),
+      gain = ctx.createGain();
+    note.type = "sine";
+    note.frequency.value =
+      crop === "sunflowers" ? 620 : crop === "wheat" ? 420 : 220;
+    note.connect(gain).connect(this.master);
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.025, ctx.currentTime + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.55);
+    note.onended = () => {
+      note.disconnect();
+      gain.disconnect();
+    };
+    note.start();
+    note.stop(ctx.currentTime + 0.6);
   }
 
   dispose(): void {

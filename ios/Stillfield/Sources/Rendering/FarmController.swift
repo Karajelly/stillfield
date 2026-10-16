@@ -9,6 +9,7 @@ import os
 @MainActor @Observable
 final class FarmController {
     var tool: FarmTool
+    var selectedCrop: Crop { didSet { persist() } }
     private(set) var cameraMode: FarmCameraMode
     var isPaused = false
     var soundEnabled = false
@@ -33,6 +34,7 @@ final class FarmController {
     @ObservationIgnored private var lastTelemetry = -1.0
 #endif
 
+    @ObservationIgnored private var farmingConfiguration = FarmingConfiguration()
     @ObservationIgnored private var field: FieldGrid
     @ObservationIgnored private var tractorState: TractorState
     @ObservationIgnored private let saveURL: URL
@@ -73,6 +75,8 @@ final class FarmController {
     @ObservationIgnored private var pinchStartZoom: Float?
     @ObservationIgnored private var viewport = CGSize(width: 1024, height: 768)
     @ObservationIgnored private var isActive = true
+    @ObservationIgnored private var skipGrowthFrame = true
+    @ObservationIgnored private var lastHarvestSound = -10.0
     @ObservationIgnored private var dirty = false
     @ObservationIgnored private var toastTask: Task<Void, Never>?
     @ObservationIgnored private var controlsHideTask: Task<Void, Never>?
@@ -92,9 +96,16 @@ final class FarmController {
         }
         let saved = loaded ?? MeadowSave()
         field = saved.field
+#if DEBUG
+        if testing && ProcessInfo.processInfo.arguments.contains("--fast-crops") {
+            // UI tests exercise automatic active-play growth without several-minute waits.
+            for crop in Crop.allCases { farmingConfiguration.growthSeconds[crop] = 45 }
+        }
+#endif
         tractorState = saved.tractor
         tractorState.speed = 0
-        tool = saved.tool
+        tool = saved.tool == .mow || saved.tool == .restore ? .wander : saved.tool
+        selectedCrop = saved.selectedCrop ?? .wheat
         cameraMode = saved.cameraMode ?? .overview
         goldenLight = saved.goldenLight
         haptics = saved.haptics
@@ -327,6 +338,12 @@ final class FarmController {
         selectionFeedback()
         persist()
     }
+    func selectCrop(_ value: Crop) {
+        showControls()
+        guard value != selectedCrop else { return }
+        selectedCrop = value
+        selectionFeedback()
+    }
     func dismissIntro() { introDismissed = true; persist() }
     func togglePause() { showControls(); isPaused.toggle(); stop(); persist(); selectionFeedback() }
     func toggleSound() {
@@ -337,6 +354,7 @@ final class FarmController {
     }
     func setActive(_ active: Bool) {
         isActive = active
+        skipGrowthFrame = true
         audio.setActive(active)
         if !active { cancelControlsHide(); endPinch(); stop(); persist() }
     }
@@ -385,7 +403,13 @@ final class FarmController {
 
     private func update(deltaTime: TimeInterval) {
         guard !isLoading, isActive, !isPaused, activeSheet == nil else { return }
-        let dt = min(0.05, max(0, deltaTime))
+        let activeSeconds = skipGrowthFrame || !deltaTime.isFinite ? 0 : max(0, deltaTime)
+        skipGrowthFrame = false
+        let dt = min(0.05, activeSeconds)
+        let growth = field.advance(seconds: activeSeconds, configuration: farmingConfiguration)
+        fieldRenderer?.respond(to: growth, grid: field)
+        fieldRenderer?.animate(seconds: dt)
+        if growth.advancedSeconds > 0 { dirty = true }
         elapsed += dt
         let input: DriveInput? = cameraMode == .tractor && steeringGesture?.isDriving(at: elapsed) == true
             ? .drag(steeringGesture!.drag) : nil
@@ -396,10 +420,14 @@ final class FarmController {
         destinationMarker.isEnabled = target != nil
         var changedCells: [Int] = []
         for (index, point) in movement.paint.enumerated() {
-            changedCells += field.paint(from: movement.paint[max(0, index - 1)], to: point, tool: tool)
+            let events = field.apply(from: movement.paint[max(0, index - 1)], to: point, tool: tool, crop: selectedCrop)
+            changedCells += events.changedCells
+            fieldRenderer?.respond(to: events, grid: field)
+            if let harvest = events.harvestResults.first, elapsed - lastHarvestSound > 1.2 {
+                audio.harvest(harvest.crop); lastHarvestSound = elapsed
+            }
         }
         if !changedCells.isEmpty {
-            fieldRenderer?.update(grid: field, changedCells: changedCells)
             dirty = true
 #if DEBUG
             if isUITesting { testPaintedCells += changedCells.count }
@@ -456,6 +484,9 @@ final class FarmController {
         guard isUITesting, force || elapsed - lastTelemetry >= 0.5 else { return }
         testTelemetry = String(format: "x=%.3f,z=%.3f,speed=%.3f,zoom=%.3f", tractorState.x, tractorState.z, tractorState.speed, Double(zoom))
             + ",painted=\(testPaintedCells)"
+            + ",growing=\(field.cells.filter { $0 == Ground.growing.rawValue }.count)"
+            + ",mature=\(field.cells.filter { $0 == Ground.mature.rawValue }.count)"
+            + ",wheatDisplay=\(field.display[0]),sunflowerDisplay=\(field.display[1]),pumpkinDisplay=\(field.display[2])"
             + ",steeringCount=\(testSteeringCount),marker=\(destinationMarker.isEnabled ? 1 : 0)"
             + ",touchCount=\(testTouchCount)"
             + ",rowTurn=\(navigation.turningAtRowEnd ? 1 : 0)"
@@ -476,11 +507,11 @@ final class FarmController {
     private func updateAttachment() {
         tractor.findEntity(named: "attachment")?.isEnabled = tool != .wander
         tractor.findEntity(named: "seed-box")?.isEnabled = tool == .sow
-        for index in 0..<7 { tractor.findEntity(named: "till-tooth-\(index)")?.isEnabled = tool == .till }
+        for index in 0..<7 { tractor.findEntity(named: "till-tooth-\(index)")?.isEnabled = tool == .cultivate }
         if let mower = tractor.findEntity(named: "mower") {
             for case let part as ModelEntity in mower.children {
                 var material = PhysicallyBasedMaterial()
-                material.baseColor = .init(tint: UIColor(farmHex: tool == .till ? "#AE7859" : "#91B399"))
+                material.baseColor = .init(tint: UIColor(farmHex: tool == .cultivate ? "#AE7859" : "#91B399"))
                 material.roughness = 0.65
                 material.specular = 0.22
                 part.model?.materials = [material]
@@ -519,7 +550,7 @@ final class FarmController {
         let saved = MeadowSave(field: field, tractor: TractorState(x: tractorState.x, z: tractorState.z,
                                heading: tractorState.heading, speed: 0), tool: tool, rowAssist: false,
                                pace: pace, goldenLight: goldenLight, volume: volume,
-                               haptics: haptics, introDismissed: introDismissed, cameraMode: cameraMode)
+                               haptics: haptics, introDismissed: introDismissed, cameraMode: cameraMode, selectedCrop: selectedCrop)
         do { try MeadowStore.save(saved, to: saveURL); hasSaveError = false; dirty = false }
         catch { hasSaveError = true; logger.error("Save failed: \(String(describing: error), privacy: .public)") }
     }

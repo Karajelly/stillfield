@@ -4,7 +4,7 @@ import type { Obstacle, Point, TractorState } from "./simulation";
 export const tuning = {
   turnRate: 1.2, tapTurnRate: 1.4, steeringResponse: 12,
   acceleration: 4, braking: 10, deadzone: 10, dragRange: 110,
-  brushRadius: 1.285,
+  brushRadius: 1.25,
   tightTurnSpeed: 1.29,
 };
 

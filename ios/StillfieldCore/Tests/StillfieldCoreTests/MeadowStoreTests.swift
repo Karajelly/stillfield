@@ -11,6 +11,7 @@ private func withSaveURL(_ body: (URL) throws -> Void) throws {
 @Test func saveRoundTripPreservesEverySettingAndPaintedCell() throws {
     try withSaveURL { url in
         var save = MeadowSave()
+        save.field.paint(x: 1, z: -2, tool: .cultivate)
         save.field.paint(x: 1, z: -2, tool: .sow)
         save.tractor = TractorState(x: -10, z: -3, heading: 1.2, speed: 2.4)
         save.tool = .sow
@@ -23,7 +24,7 @@ private func withSaveURL(_ body: (URL) throws -> Void) throws {
         save.cameraMode = .tractor
         try MeadowStore.save(save, to: url)
         #expect(MeadowStore.load(from: url) == save)
-        save.field.paint(x: 2, z: -4, tool: .till)
+        save.field.paint(x: 2, z: -4, tool: .cultivate)
         try MeadowStore.save(save, to: url)
         #expect(MeadowStore.load(from: url) == save)
     }
@@ -52,7 +53,7 @@ private func withSaveURL(_ body: (URL) throws -> Void) throws {
 
 @Test func malformedSaveValuesAreRejectedWithoutRewriting() throws {
     var unsupported = MeadowSave()
-    unsupported.version = 2
+    unsupported.version = 99
     var shortField = MeadowSave()
     shortField.field.cells.removeLast()
     var invalidCell = MeadowSave()
@@ -94,7 +95,7 @@ private func withSaveURL(_ body: (URL) throws -> Void) throws {
 @Test func corruptAndUnsupportedMeadowsSurviveFreshSavesInDistinctBackups() throws {
     try withSaveURL { url in
         var unsupported = MeadowSave()
-        unsupported.version = 2
+        unsupported.version = 99
         let originals = [Data("{\"version\":1,\"field\":".utf8), try JSONEncoder().encode(unsupported)]
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         var backups: [URL] = []
@@ -133,5 +134,30 @@ private func withSaveURL(_ body: (URL) throws -> Void) throws {
         }
         #expect(try Data(contentsOf: retainedFile) == original)
         #expect(FileManager.default.fileExists(atPath: url.path))
+    }
+}
+
+@Test func gridUpgradePreservesOriginalSaveBeforeFirstReplacement() throws {
+    try withSaveURL { url in
+        var original = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(MeadowSave())) as? [String: Any])
+        original["version"] = 2
+        original["field"] = ["version": 2, "cells": Array(repeating: 0, count: 172 * 108),
+            "crops": Array(repeating: 0, count: 172 * 108), "progress": Array(repeating: 0.0, count: 172 * 108),
+            "display": [63, 64, 256], "fieldID": "willowbrook", "displayLocation": ["x": -16.0, "z": -15.5]]
+        let bytes = try JSONSerialization.data(withJSONObject: original)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try bytes.write(to: url)
+        var migrated = try #require(MeadowStore.load(from: url))
+        #expect(try Data(contentsOf: url) == bytes)
+        #expect(migrated.field.cells.count == 4500)
+        #expect(migrated.field.display == [63, 64, 256])
+        migrated.version = 3
+        try MeadowStore.save(migrated, to: url)
+        try MeadowStore.save(migrated, to: url)
+        let backups = try FileManager.default.contentsOfDirectory(at: url.deletingLastPathComponent(), includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.contains("before-grid-v3") }
+        #expect(backups.count == 1)
+        #expect(try Data(contentsOf: #require(backups.first)) == bytes)
+        #expect(MeadowStore.load(from: url) == migrated)
     }
 }

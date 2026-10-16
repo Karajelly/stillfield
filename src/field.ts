@@ -1,86 +1,101 @@
-import { tuning } from "./handling";
 import * as THREE from "three";
-import { FIELD, cellsUnderBrush, cellsUnderSweep, seededRandom } from "./simulation";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { FIELD, FIELD_COLUMNS, FIELD_ROWS, seededRandom } from "./simulation";
 import type { Point, Tool } from "./simulation";
-export const COLUMNS = Math.round((FIELD.maxX - FIELD.minX) / FIELD.cell);
-export const ROWS = Math.round((FIELD.maxZ - FIELD.minZ) / FIELD.cell);
-const SIZE = COLUMNS * ROWS;
-export function createField(scene: THREE.Scene, saved?: number[]) {
-  const grid = new Uint8Array(SIZE);
-  if (
-    saved &&
-    saved.length === SIZE &&
-    saved.every((n) => Number.isInteger(n) && n >= 0 && n <= 3)
-  )
-    grid.set(saved);
-  else {
-    // A few beginnings, with plenty of space to make this place your own.
-    for (let x = -21; x <= 13; x += 0.2)
-      for (const z of [10.8, 7.8])
-        for (const index of cellsUnderBrush(x, z, 1.05)) grid[index] = 1;
-    for (let x = -4; x <= 13; x += 0.2)
-      for (const index of cellsUnderBrush(x, 4.8, 1.05)) grid[index] = 1;
-  }
+import { FarmingEngine, Ground } from "./farming";
+import type { Crop, FarmSnapshot, FarmingEvents } from "./farming";
+import { createHarvestDisplay } from "./harvest-display";
+export const COLUMNS = FIELD_COLUMNS,
+  ROWS = FIELD_ROWS;
+
+export function createField(
+  scene: THREE.Scene,
+  saved?: FarmSnapshot | number[],
+) {
+  const engine = new FarmingEngine(saved);
+  const grid = engine.cells;
   const canvas = document.createElement("canvas");
-  canvas.width = 860;
-  canvas.height = 540;
+  canvas.width = COLUMNS * 5;
+  canvas.height = ROWS * 5;
   const ctx = canvas.getContext("2d")!;
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(43, 27),
+    new THREE.PlaneGeometry(FIELD.maxX - FIELD.minX, FIELD.maxZ - FIELD.minZ),
     new THREE.MeshStandardMaterial({ map: texture, roughness: 1 }),
   );
   ground.rotation.x = -Math.PI / 2;
-  ground.position.set(-2.5, 0.045, 0.5);
+  ground.position.set(
+    (FIELD.minX + FIELD.maxX) / 2,
+    0.045,
+    (FIELD.minZ + FIELD.maxZ) / 2,
+  );
   ground.receiveShadow = true;
   scene.add(ground);
-  const random = seededRandom(22);
-  function drawCell(index: number) {
-    const col = index % COLUMNS,
-      row = Math.floor(index / COLUMNS),
-      state = grid[index];
-    const noise = ((index * 17 + Math.floor(index / COLUMNS) * 31) % 13) / 13;
-    const colors =
-      state === 0
-        ? ["#a4b376", "#a8b67a", "#a6b578"]
-        : state === 1
-          ? ["#b9c48b", "#bdc991", "#c2cc94"]
-          : state === 2
-            ? ["#b89570", "#c29f79", "#bc9873"]
-            : ["#97ab78", "#9cae7b", "#a3b480"];
-    ctx.fillStyle = colors[row % 8 < 4 ? 0 : 1];
+  function drawCell(i: number) {
+    const col = i % COLUMNS,
+      row = Math.floor(i / COLUMNS),
+      state = grid[i],
+      stage = engine.stage(i),
+      crop = engine.cropAt(i),
+      planted = state === Ground.growing || state === Ground.mature;
+    const palette =
+      state === Ground.grass
+        ? ["#a4b376", "#a8b67a"]
+        : state === Ground.mown
+          ? ["#b9c48b", "#bdc991"]
+          : state === Ground.stubble
+            ? ["#bdab7e", "#b8a579"]
+            : planted
+              ? crop === "wheat"
+                ? ["#a08050", "#ac8c5b"]
+                : crop === "sunflowers"
+                  ? ["#82754e", "#8e8056"]
+                  : stage === 0
+                    ? ["#a08050", "#ac8c5b"]
+                    : ["#aa7052", "#b57d5b"]
+              : ["#b89570", "#c29f79"];
+    ctx.fillStyle = palette[row % 8 < 4 ? 0 : 1];
     ctx.fillRect(col * 5, row * 5, 5, 5);
-    if (noise > 0.65) {
+    if (state >= Ground.soil) {
+      ctx.fillStyle = "rgba(104,77,52,.22)";
+      ctx.fillRect(col * 5, row * 5 + 2, 5, 0.7);
+    }
+    if (planted && stage === 0) {
+      // Distinct seedbeds read immediately, even before any shoots appear.
+      const x = col * 5,
+        y = row * 5;
+      if (crop === "wheat" || crop === "pumpkins") {
+        ctx.fillStyle = crop === "wheat" ? "#edcf88" : "#eaa15b";
+        ctx.fillRect(x + 0.5, y + 0.9, 2.1, 0.85);
+        ctx.fillRect(x + 2.4, y + 3.25, 2.1, 0.85);
+      } else if (crop === "sunflowers") {
+        for (const offset of [1.35, 3.65]) {
+          ctx.fillStyle = "#f4e1b0";
+          ctx.beginPath();
+          ctx.ellipse(x + offset, y + 2.5, 0.8, 1.2, -0.3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#6d6145";
+          ctx.fillRect(x + offset - 0.25, y + 1.8, 0.5, 1.4);
+        }
+      }
+    } else if (planted) {
       ctx.fillStyle =
-        state === 2 ? "#ac8968" : state === 1 ? "#a5b77d" : "#8fa368";
-      ctx.globalAlpha = 0.28;
-      ctx.fillRect(col * 5 + 1.5, row * 5 + 1, 0.75, 2);
-      ctx.globalAlpha = 1;
-    }
-    if (state === 2 && row % 3 === 0) {
-      ctx.fillStyle = "rgba(104,77,52,.16)";
-      ctx.fillRect(col * 5, row * 5 + 1.5, 5, 0.75);
+        stage === 3
+          ? crop === "wheat"
+            ? "#d6bb6b"
+            : crop === "pumpkins"
+              ? "#ca8b4a"
+              : "#dcca65"
+          : "#829755";
+      ctx.fillRect(col * 5 + 1, row * 5 + 1, 3, stage < 2 ? 1 : 3);
+    } else if (state === Ground.stubble) {
+      ctx.fillStyle = "#d6c28a";
+      ctx.fillRect(col * 5 + 2, row * 5 + 1, 1, 2);
     }
   }
-  function redraw() {
-    for (let i = 0; i < SIZE; i++) drawCell(i);
-    texture.needsUpdate = true;
-  }
-  redraw();
-  const bladeGeometry = new THREE.BufferGeometry();
-  bladeGeometry.setAttribute(
-    "position",
-    new THREE.Float32BufferAttribute(
-      [
-        -0.12, 0, 0, 0.12, 0, 0, 0.045, 0.7, 0, 0, 0, -0.12, 0, 0, 0.12, 0.02,
-        0.52, 0.04,
-      ],
-      3,
-    ),
-  );
-  bladeGeometry.computeVertexNormals();
+  const random = seededRandom(22);
   const points: {
     x: number;
     z: number;
@@ -89,14 +104,14 @@ export function createField(scene: THREE.Scene, saved?: number[]) {
     cell: number;
   }[] = [];
   const byCell = new Map<number, number[]>();
-  for (let z = FIELD.minZ + 0.24; z < FIELD.maxZ; z += 0.6)
-    for (let x = FIELD.minX + 0.22; x < FIELD.maxX; x += 0.6) {
-      const px = x + (random() - 0.5) * 0.3,
-        pz = z + (random() - 0.5) * 0.3;
+  for (let z = FIELD.minZ + FIELD.cell / 2; z < FIELD.maxZ; z += FIELD.cell)
+    for (let x = FIELD.minX + FIELD.cell / 2; x < FIELD.maxX; x += FIELD.cell) {
+      const px = x + (random() - 0.5) * 0.18,
+        pz = z + (random() - 0.5) * 0.18;
       const cell =
         Math.floor((pz - FIELD.minZ) / FIELD.cell) * COLUMNS +
         Math.floor((px - FIELD.minX) / FIELD.cell);
-      const index = points.length;
+      const i = points.length;
       points.push({
         x: px,
         z: pz,
@@ -104,94 +119,232 @@ export function createField(scene: THREE.Scene, saved?: number[]) {
         angle: random() * 6.28,
         cell,
       });
-      if (!byCell.has(cell)) byCell.set(cell, []);
-      byCell.get(cell)!.push(index);
+      byCell.set(cell, [...(byCell.get(cell) ?? []), i]);
     }
-  const grass = new THREE.InstancedMesh(
-    bladeGeometry,
-    new THREE.MeshStandardMaterial({
-      color: "#ffffff",
-      side: THREE.DoubleSide,
-      roughness: 1,
-    }),
-    points.length,
+  const blade = new THREE.BufferGeometry();
+  blade.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(
+      [
+        -0.1, 0, 0, 0.1, 0, 0, 0.045, 0.7, 0, 0, 0, -0.1, 0, 0, 0.1, 0.02, 0.52,
+        0.04,
+      ],
+      3,
+    ),
   );
-  const flowers = new THREE.InstancedMesh(
-    new THREE.IcosahedronGeometry(0.15, 0),
-    new THREE.MeshStandardMaterial({ roughness: 1 }),
-    points.length,
-  );
-  grass.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  flowers.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  grass.receiveShadow = true;
-  flowers.castShadow = false;
-  grass.frustumCulled = false;
-  flowers.frustumCulled = false;
-  scene.add(grass, flowers);
-  const dummy = new THREE.Object3D();
-  const color = new THREE.Color();
-  const flowerPalette = ["#eee7c3", "#d8bb75", "#d3ab9b", "#b9a9cf", "#f3ebce"];
-  for (let i = 0; i < points.length; i++) {
-    grass.setColorAt(
-      i,
-      color.set(i % 3 === 0 ? "#9aab68" : i % 3 === 1 ? "#7e9557" : "#a8b775"),
+  blade.computeVertexNormals();
+  const petalParts = Array.from({ length: 8 }, (_, i) => {
+    const a = (i * Math.PI) / 4,
+      g = new THREE.SphereGeometry(0.12, 6, 4);
+    g.scale(0.6, 1, 0.3);
+    g.rotateZ(-a);
+    g.translate(Math.sin(a) * 0.17, Math.cos(a) * 0.17, 0);
+    return g;
+  });
+  const petals = mergeGeometries(petalParts);
+  petalParts.forEach((g) => g.dispose());
+  function instances(geometry: THREE.BufferGeometry, color: string) {
+    const mesh = new THREE.InstancedMesh(
+      geometry,
+      new THREE.MeshStandardMaterial({
+        color,
+        roughness: 1,
+        side: THREE.DoubleSide,
+      }),
+      points.length,
     );
-    flowers.setColorAt(i, color.set(flowerPalette[i % flowerPalette.length]));
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.frustumCulled = false;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    return mesh;
+  }
+  const grass = instances(blade, "#ffffff"),
+    heads = instances(new THREE.SphereGeometry(0.1, 6, 5), "#ffffff");
+  const stems = instances(
+    new THREE.CylinderGeometry(0.025, 0.03, 1, 5),
+    "#718b51",
+  );
+  const flowers = instances(petals, "#e4c45e"),
+    centers = instances(new THREE.SphereGeometry(0.095, 8, 6), "#796447");
+  const pumpkins = instances(new THREE.SphereGeometry(0.28, 10, 7), "#ce884a");
+  const seedPairs = instances(new THREE.SphereGeometry(0.1, 6, 4), "#ffffff"),
+    seedCenters = instances(new THREE.SphereGeometry(0.1, 6, 4), "#6d6145");
+  const meshes = [
+      grass,
+      heads,
+      stems,
+      flowers,
+      centers,
+      pumpkins,
+      seedPairs,
+      seedCenters,
+    ],
+    dummy = new THREE.Object3D(),
+    color = new THREE.Color();
+  function put(
+    mesh: THREE.InstancedMesh,
+    i: number,
+    x: number,
+    y: number,
+    z: number,
+    sx: number,
+    sy = sx,
+    sz = sx,
+    angle = 0,
+  ) {
+    dummy.position.set(x, y, z);
+    dummy.rotation.set(0, angle, 0);
+    dummy.scale.set(sx, sy, sz);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(i, dummy.matrix);
   }
   function updatePoint(i: number) {
     const p = points[i],
-      state = grid[p.cell];
-    dummy.position.set(p.x, 0.05, p.z);
-    dummy.rotation.set(0, p.angle, 0);
-    dummy.scale.setScalar(
-      state === 0 ? p.height : state === 3 ? p.height * 0.85 : 0,
+      state = grid[p.cell],
+      crop = engine.cropAt(p.cell),
+      stage = engine.stage(p.cell),
+      growing = state === Ground.growing || state === Ground.mature;
+    for (const mesh of meshes) put(mesh, i, p.x, 0.05, p.z, 0);
+    if (state === Ground.grass) {
+      put(grass, i, p.x, 0.05, p.z, p.height, p.height, p.height, p.angle);
+      grass.setColorAt(i, color.set(i % 2 ? "#7e9557" : "#a8b775"));
+    }
+    if (state === Ground.stubble) {
+      put(grass, i, p.x, 0.05, p.z, 0.25, 0.16, 0.25, p.angle);
+      grass.setColorAt(i, color.set("#cfbb85"));
+    }
+    if (!growing) return;
+    if (stage === 0) {
+      const wheat = crop === "wheat",
+        sunflower = crop === "sunflowers";
+      const y = 0.08;
+      const width = sunflower ? 0.75 : 0.4,
+        length = sunflower ? 1.1 : 1.3;
+      put(heads, i, p.x - 0.09, y, p.z, width, 0.25, length, 0.3);
+      put(
+        seedPairs,
+        i,
+        p.x + 0.09,
+        y,
+        p.z + 0.06,
+        width,
+        0.25,
+        length,
+        -0.3,
+      );
+      heads.setColorAt(i, color.set(wheat ? "#edcf88" : sunflower ? "#f4e1b0" : "#eaa15b"));
+      seedPairs.setColorAt(i, color);
+      if (sunflower) {
+        put(centers, i, p.x - 0.09, y + 0.015, p.z, 0.35, 0.2, 0.85, 0.3);
+        put(
+          seedCenters,
+          i,
+          p.x + 0.09,
+          y + 0.015,
+          p.z + 0.06,
+          0.35,
+          0.2,
+          0.85,
+          -0.3,
+        );
+      }
+      return;
+    }
+    const h =
+      stage === 1
+        ? 0.25
+        : crop === "sunflowers"
+          ? 1.15
+          : crop === "pumpkins"
+            ? 0.22
+            : 0.85;
+    put(
+      grass,
+      i,
+      p.x,
+      0.05,
+      p.z,
+      crop === "pumpkins" ? (stage === 1 ? 0.35 : 1.2) : 0.7,
+      h,
+      crop === "pumpkins" ? (stage === 1 ? 0.35 : 1.2) : 0.8,
+      p.angle,
     );
-    dummy.updateMatrix();
-    grass.setMatrixAt(i, dummy.matrix);
-    dummy.position.y = 0.06 + p.height * 0.54;
-    dummy.scale.setScalar(state === 3 && i % 3 !== 0 ? 1 : 0);
-    dummy.rotation.set(0, p.angle, 0);
-    dummy.updateMatrix();
-    flowers.setMatrixAt(i, dummy.matrix);
+    grass.setColorAt(
+      i,
+      color.set(crop === "wheat" && stage === 3 ? "#cbb36a" : "#78934e"),
+    );
+    if (crop === "wheat" && stage >= 2) {
+      put(heads, i, p.x, 0.05 + h * 0.7, p.z, 0.75, 2.3, 0.75, p.angle);
+      heads.setColorAt(i, color.set(stage === 3 ? "#ddc176" : "#90a65e"));
+    }
+    if (crop === "sunflowers" && stage >= 2) {
+      put(stems, i, p.x, h / 2, p.z, 1, h, 1);
+      if (stage === 3) {
+        put(flowers, i, p.x, h, p.z, 1, 1, 1, p.angle);
+        put(
+          centers,
+          i,
+          p.x + Math.sin(p.angle) * 0.035,
+          h,
+          p.z + Math.cos(p.angle) * 0.035,
+          1,
+          1,
+          0.5,
+          p.angle,
+        );
+      }
+    }
+    if (crop === "pumpkins" && stage === 3) {
+      put(pumpkins, i, p.x, 0.28, p.z, 1, 0.85, 1, p.angle);
+      put(stems, i, p.x, 0.52, p.z, 1, 0.15, 1);
+    }
   }
-  function updateAll() {
+  function dirty() {
+    texture.needsUpdate = true;
+    for (const mesh of meshes) {
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
+  }
+  function redraw() {
+    for (let i = 0; i < grid.length; i++) drawCell(i);
     points.forEach((_, i) => updatePoint(i));
-    grass.instanceMatrix.needsUpdate = true;
-    flowers.instanceMatrix.needsUpdate = true;
+    dirty();
   }
-  updateAll();
-  let dirty = false;
+  redraw();
+  const display = createHarvestDisplay(scene, engine);
+  function respond(events: FarmingEvents) {
+    const cells = [...events.groundChanges, ...events.cropStages];
+    for (const i of cells) {
+      drawCell(i);
+      byCell.get(i)?.forEach(updatePoint);
+    }
+    if (cells.length) dirty();
+    if (events.harvestResults.length) display.harvest(events.harvestResults);
+    return events;
+  }
   return {
+    engine,
     grid,
-    paint(x: number, z: number, tool: Tool, from: Point = { x, z }) {
-      if (tool === "wander") return false;
-      const value = tool === "mow" ? 1 : tool === "till" ? 2 : 3;
-      let changed = false;
-      for (const cell of cellsUnderSweep(from, { x, z }, tuning.brushRadius)) {
-        if (grid[cell] === value) continue;
-        grid[cell] = value;
-        drawCell(cell);
-        byCell.get(cell)?.forEach(updatePoint);
-        changed = true;
-      }
-      if (changed) {
-        texture.needsUpdate = true;
-        grass.instanceMatrix.needsUpdate = true;
-        flowers.instanceMatrix.needsUpdate = true;
-        dirty = true;
-      }
-      return changed;
+    paint(
+      x: number,
+      z: number,
+      tool: Tool,
+      from: Point = { x, z },
+      crop: Crop = "wheat",
+    ) {
+      return respond(engine.apply(from, { x, z }, tool, crop));
+    },
+    advance(seconds: number) {
+      const event = respond(engine.advance(seconds));
+      display.update(seconds);
+      return event;
     },
     reset() {
-      grid.fill(0);
+      engine.reset();
       redraw();
-      updateAll();
-      dirty = true;
-    },
-    consumeDirty() {
-      const result = dirty;
-      dirty = false;
-      return result;
+      display.clear();
     },
   };
 }

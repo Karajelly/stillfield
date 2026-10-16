@@ -3,7 +3,7 @@ import Foundation
 enum TractorHandling {
     static let turnRate = 1.2
     static let tapTurnRate = 1.4
-    static let brushRadius = 1.285
+    static let brushRadius = 1.25
     static let attachmentOffset = 2.1
     static func clamp(_ x: Double, _ low: Double, _ high: Double) -> Double { max(low, min(high, x)) }
     static func angle(_ a: Double, _ b: Double) -> Double { atan2(sin(a - b), cos(a - b)) }

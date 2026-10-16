@@ -179,17 +179,17 @@ private func drive(
 
 @Test func circularBrushClipsAtCornersWithoutWrapping() {
     let size = FieldGrid.columns * FieldGrid.rows
-    #expect(FarmSimulation.cellsUnderBrush(x: -23.875, z: -12.875, radius: 0) == [0])
-    #expect(FarmSimulation.cellsUnderBrush(x: 18.875, z: 13.875, radius: 0) == [size - 1])
-    #expect(FarmSimulation.cellsUnderBrush(x: -24, z: -13, radius: 0.4) == [0, 1, FieldGrid.columns])
-    #expect(FarmSimulation.cellsUnderBrush(x: 19, z: 14, radius: 0.4) == [size - FieldGrid.columns - 1, size - 2, size - 1])
+    #expect(FarmSimulation.cellsUnderBrush(x: FieldGrid.minX + FieldGrid.cellSize / 2, z: FieldGrid.minZ + FieldGrid.cellSize / 2, radius: 0) == [0])
+    #expect(FarmSimulation.cellsUnderBrush(x: FieldGrid.maxX - FieldGrid.cellSize / 2, z: FieldGrid.maxZ - FieldGrid.cellSize / 2, radius: 0) == [size - 1])
+    #expect(FarmSimulation.cellsUnderBrush(x: FieldGrid.minX, z: FieldGrid.minZ, radius: FieldGrid.cellSize * 1.6) == [0, 1, FieldGrid.columns])
+    #expect(FarmSimulation.cellsUnderBrush(x: FieldGrid.maxX, z: FieldGrid.maxZ, radius: FieldGrid.cellSize * 1.6) == [size - FieldGrid.columns - 1, size - 2, size - 1])
     #expect(FarmSimulation.cellsUnderBrush(x: -26, z: 0, radius: 0.5).isEmpty)
-    #expect(FarmSimulation.cellsUnderBrush(x: -24.05, z: -12.875, radius: 0.2) == [0])
+    #expect(FarmSimulation.cellsUnderBrush(x: FieldGrid.minX - 0.05, z: FieldGrid.minZ + FieldGrid.cellSize / 2, radius: FieldGrid.cellSize / 2 + 0.05) == [0])
 }
 
 @Test func brushContainsOnlyUniqueCellsWithinItsCircle() {
     let cells = FarmSimulation.cellsUnderBrush(x: -1.3, z: 2.7, radius: 1.15)
-    #expect(cells.count > 40)
+    #expect(cells.count > 12)
     #expect(Set(cells).count == cells.count)
     for cell in cells {
         #expect(cell >= 0 && cell < FieldGrid.columns * FieldGrid.rows)
@@ -203,12 +203,12 @@ private func drive(
 
 @Test func toolsPaintChangedCellsAndWanderingLeavesMeadowAlone() {
     var field = FieldGrid(starterRows: false)
-    let expected = FarmSimulation.cellsUnderBrush(x: 0, z: 0, radius: 1.285)
+    let expected = FarmSimulation.cellsUnderBrush(x: 0, z: 0, radius: 1.25 + FieldGrid.cellSize / 2)
     #expect(field.paint(x: 0, z: 0, tool: .wander).isEmpty)
     #expect(field.paint(x: 0, z: 0, tool: .mow) == expected)
     #expect(field.paint(x: 0, z: 0, tool: .mow).isEmpty)
     #expect(expected.allSatisfy { field.cells[$0] == 1 })
-    #expect(field.paint(x: 0, z: 0, tool: .till) == expected)
+    #expect(field.paint(x: 0, z: 0, tool: .cultivate) == expected)
     #expect(expected.allSatisfy { field.cells[$0] == 2 })
     #expect(field.paint(x: 0, z: 0, tool: .sow) == expected)
     #expect(expected.allSatisfy { field.cells[$0] == 3 })
@@ -223,7 +223,7 @@ private func drive(
     let field = FieldGrid()
     #expect(field.isValid)
     let mown = field.cells.filter { $0 == 1 }.count
-    #expect(mown > 2_000 && mown < field.cells.count / 2)
+    #expect(Double(mown) * FieldGrid.cellSize * FieldGrid.cellSize > 125 && mown < field.cells.count / 2)
     #expect(FarmSimulation.cellsUnderBrush(x: 0, z: 10.8, radius: 0.3).allSatisfy { field.cells[$0] == 1 })
     #expect(FarmSimulation.cellsUnderBrush(x: 0, z: -8, radius: 0.3).allSatisfy { field.cells[$0] == 0 })
 }

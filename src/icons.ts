@@ -9,8 +9,33 @@ const paths: Record<string, string> = {
   play: '<path d="m8 5 11 7-11 7V5Z"/>',
   leaf: '<path d="M20 4c-1 10-3 15-10 15-4 0-6-3-5-6C6 7 12 6 20 4Z"/><path d="M4 21 15 10"/>',
   mow: '<path d="M3 19h18M6 16l-2-5m7 5V6m5 10 4-9M7 9 5 6m10 5 2-7"/>',
-  till: '<path d="m8 3 5 12M3 19c3-4 5 4 9 0s6 3 9 0M8 14l9-4m-10 4 2 4m3-6 2 4m3-6 2 4"/>',
+  cultivate:
+    '<path d="m8 3 5 12M3 19c3-4 5 4 9 0s6 3 9 0M8 14l9-4m-10 4 2 4m3-6 2 4m3-6 2 4"/>',
+  harvest: '<path d="M4 12h16l-2 8H6l-2-8Zm4 0 4-8 4 8M8 16h8"/>',
+  restore:
+    '<path d="M4 19h16M7 16l-2-5m7 5V8m5 8 2-5M6 5a8 8 0 0 1 13 3M19 3v5h-5"/>',
   sow: '<path d="M12 20v-8M12 15C5 15 4 11 4 8c5 0 8 3 8 7Zm0-3c0-6 3-8 8-8 0 5-3 8-8 8ZM5 21h14"/>',
+  wheat:
+    '<path d="M12 22V3"/>' +
+    [4, 9, 14]
+      .map((y) =>
+        [-1, 1]
+          .map(
+            (side) =>
+              `<path d="M12 ${y + 4}Q${12 + side * 5} ${y + 3} ${12 + side * 5} ${y}Q12 ${y} 12 ${y + 4}Z"/>`,
+          )
+          .join(""),
+      )
+      .join(""),
+  sunflowers:
+    '<path d="M12 16v6M12 20Q8 17 7 17Q7 21 12 20"/><circle cx="12" cy="9" r="2.4"/>' +
+    Array.from(
+      { length: 8 },
+      (_, i) =>
+        `<circle cx="${12 + Math.sin((i * Math.PI) / 4) * 4.4}" cy="${9 + Math.cos((i * Math.PI) / 4) * 4.4}" r="1.6"/>`,
+    ).join(""),
+  pumpkins:
+    '<ellipse cx="12" cy="14.5" rx="8" ry="6.5"/><ellipse cx="12" cy="14.5" rx="4" ry="6.5"/><path d="M12 8Q10 4 14 3M13 6Q18 2 20 5Q17 8 13 6"/>',
   wander:
     '<path d="M5 19c-9-7 12-7 7-14m0 0-3 3m3-3 3 3m3 11h.01"/><circle cx="18" cy="18" r="3"/>',
   arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>',

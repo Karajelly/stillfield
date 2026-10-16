@@ -1,7 +1,16 @@
 import Foundation
 
 public enum FarmTool: String, Codable, CaseIterable, Sendable {
-    case mow, till, sow, wander
+    case cultivate, sow, harvest, mow, restore, wander
+
+    public init(from decoder: Decoder) throws {
+        let data = try decoder.singleValueContainer()
+        let value = try data.decode(String.self)
+        guard let tool = FarmTool(rawValue: value == "till" ? "cultivate" : value) else {
+            throw DecodingError.dataCorruptedError(in: data, debugDescription: "Unknown farm tool")
+        }
+        self = tool
+    }
 }
 
 public struct FarmPoint: Codable, Equatable, Sendable {

@@ -2,6 +2,8 @@ import * as THREE from "three";
 import "./style.css";
 import { createWorld } from "./world";
 import { createField } from "./field";
+import { CROPS, CROP_NAMES } from "./farming";
+import type { Crop, FarmSnapshot } from "./farming";
 import { createTractor } from "./tractor";
 import { FarmAudio } from "./audio";
 import { clamp, FIELD } from "./simulation";
@@ -11,8 +13,10 @@ import { icon, brandMark } from "./icons";
 import { overviewFraming } from "./overview";
 
 interface Save {
-  version: 1;
-  grid: number[];
+  version: 1 | 2 | 3;
+  grid?: number[];
+  farm?: FarmSnapshot;
+  crop?: Crop;
   tractor: TractorState;
   tool: Tool;
   guide: boolean;
@@ -22,15 +26,27 @@ interface Save {
   volume: number;
 }
 let saved: Partial<Save> = {};
+let legacySaveBackup: string | undefined;
 try {
-  const data = JSON.parse(localStorage.getItem("stillfield-v1") || "null");
-  if (data?.version === 1) saved = data;
+  const raw = localStorage.getItem("stillfield-v1");
+  const data = JSON.parse(raw || "null");
+  if (data?.version === 1 || data?.version === 2 || data?.version === 3) {
+    saved = { ...data, tool: data.tool === "till" ? "cultivate" : data.tool };
+    if (data.version < 3 && raw) legacySaveBackup = raw;
+  }
 } catch {
   /* A private meadow works even without browser storage. */
 }
-const tools: Tool[] = ["mow", "till", "sow", "wander"];
-let selectedTool: Tool = tools.includes(saved.tool!) ? saved.tool! : "mow";
-let pace = typeof saved.pace === "number" ? clamp(saved.pace, 0.55, 1.25) : 0.85,
+const tools: Tool[] = ["cultivate", "sow", "harvest", "wander"];
+let selectedTool: Tool = tools.includes(saved.tool!)
+  ? saved.tool!
+  : saved.tool === "mow" || saved.tool === "restore"
+    ? "wander"
+    : "harvest";
+let selectedCrop: Crop = CROPS.includes(saved.crop!) ? saved.crop! : "wheat";
+let windowActive = document.hasFocus();
+let pace =
+    typeof saved.pace === "number" ? clamp(saved.pace, 0.55, 1.25) : 0.85,
   golden = saved.golden ?? false;
 let paused = false,
   soundEnabled = false,
@@ -78,10 +94,11 @@ app.innerHTML = `
     <div class="world-label" id="pond-label"><span></span>The quiet pond</div>
     <div id="destination" aria-hidden="true"><span></span></div>
     <section class="bottom-center menu-panel" id="tool-controls" aria-label="Tractor tools">
+      <div class="crop-choices" id="crop-choice" role="group" aria-label="Crop to sow" hidden>${CROPS.map((crop) => `<button class="crop-button ${crop} ${crop === selectedCrop ? "selected" : ""}" data-crop="${crop}" aria-label="Sow ${CROP_NAMES[crop]}" aria-pressed="${crop === selectedCrop}">${icon(crop)}<span>${CROP_NAMES[crop]}</span></button>`).join("")}</div>
       <nav class="tool-dock" aria-label="Choose your tool">${[
-        ["mow", "Mow", "Trim the meadow"],
-        ["till", "Till", "Turn the earth"],
-        ["sow", "Sow", "Plant wildflowers"],
+        ["cultivate", "Cultivate", "Prepare soil, clearing any crops"],
+        ["sow", "Sow", "Plant the chosen crop in soil"],
+        ["harvest", "Harvest", "Gather mature crops"],
         ["wander", "Wander", "Just enjoy the ride"],
       ]
         .map(
@@ -105,7 +122,8 @@ const ambientCopy = document.querySelectorAll<HTMLElement>(
 );
 ambientCopy.forEach((element) => element.classList.add("ambient-copy"));
 const menuPanels = document.querySelectorAll<HTMLElement>(".menu-panel");
-const controlsToggle = document.querySelector<HTMLButtonElement>("#controls-toggle")!;
+const controlsToggle =
+  document.querySelector<HTMLButtonElement>("#controls-toggle")!;
 let controlsHidden = false;
 let controlsHideTimer: number | undefined;
 
@@ -115,11 +133,15 @@ function cancelControlsHide() {
 }
 function setControlsHidden(hidden: boolean) {
   cancelControlsHide();
-  const moveFocus = hidden && Array.from(menuPanels).some((panel) =>
-    panel.contains(document.activeElement),
-  );
+  const moveFocus =
+    hidden &&
+    Array.from(menuPanels).some((panel) =>
+      panel.contains(document.activeElement),
+    );
   controlsHidden = hidden;
-  document.querySelector(".farm-app")!.classList.toggle("controls-hidden", hidden);
+  document
+    .querySelector(".farm-app")!
+    .classList.toggle("controls-hidden", hidden);
   menuPanels.forEach((panel) => {
     panel.inert = hidden;
     if (hidden) panel.setAttribute("aria-hidden", "true");
@@ -139,7 +161,9 @@ function scheduleControlsHide(delay = 2000) {
     if (!paused && !modalOpen && !document.hidden) setControlsHidden(true);
   }, delay);
 }
-controlsToggle.addEventListener("click", () => setControlsHidden(!controlsHidden));
+controlsToggle.addEventListener("click", () =>
+  setControlsHidden(!controlsHidden),
+);
 menuPanels.forEach((panel) => {
   panel.addEventListener("pointerdown", cancelControlsHide);
   panel.addEventListener("focusin", cancelControlsHide);
@@ -191,7 +215,7 @@ sun.shadow.bias = -0.0003;
 sun.shadow.radius = 3;
 scene.add(sun);
 const world = createWorld(scene);
-const field = createField(scene, saved.grid);
+const field = createField(scene, saved.farm ?? saved.grid);
 const tractor = createTractor(scene);
 tractor.setTool(selectedTool);
 let volume =
@@ -231,6 +255,7 @@ function updateTool(tool: Tool) {
     b.classList.toggle("selected", active);
     b.setAttribute("aria-pressed", String(active));
   });
+  document.querySelector<HTMLElement>("#crop-choice")!.hidden = tool !== "sow";
   persist();
 }
 function dismissIntro() {
@@ -290,8 +315,9 @@ function setLight() {
 function persist() {
   try {
     const data: Save = {
-      version: 1,
-      grid: Array.from(field.grid),
+      version: 3,
+      farm: field.engine.snapshot(),
+      crop: selectedCrop,
       tractor: { ...tractorState, speed: 0 },
       tool: selectedTool,
       guide: false,
@@ -300,6 +326,10 @@ function persist() {
       intro: introDismissed,
       volume,
     };
+    if (legacySaveBackup) {
+      localStorage.setItem("stillfield-before-grid-v3", legacySaveBackup);
+      legacySaveBackup = undefined;
+    }
     localStorage.setItem("stillfield-v1", JSON.stringify(data));
   } catch {
     storageAvailable = false;
@@ -371,7 +401,7 @@ function openDialog(content: string) {
 }
 function showHelp() {
   openDialog(
-    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO WILLOWBROOK</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>Tap where mowing or planting should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop.<br>Arrow keys or WASD work, too.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Mow soft paths, till tidy rows, or sow wildflowers. Switch tools whenever you like.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Your meadow saves on this device. Pause with the space bar. Nothing changes while you’re away.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
+    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO WILLOWBROOK</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>Tap where the work should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop.<br>Arrow keys or WASD work, too.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Cultivate prepares soil and clears any crops. Sow wheat, sunflowers, or pumpkins, then harvest when they’re ready. A golden wheat patch is waiting beside your tractor. Harvests gather in pots and carts by the field.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Crops grow only while you’re here: sunflowers in 3 minutes, wheat in 6, pumpkins in 9. Nothing withers. Your meadow saves on this device.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
   );
   dialog.querySelector("#help-done")!.addEventListener("click", closeDialog);
 }
@@ -400,7 +430,7 @@ function showSettings() {
 }
 function showReset() {
   openDialog(
-    `<div class="dialog-symbol">${icon("sow")}</div><div class="eyebrow">BEGIN AGAIN, GENTLY</div><h2 id="dialog-title">A fresh <em>meadow.</em></h2><p>Let the grass grow back over your paths and flowers. A blank canvas for another quiet afternoon.</p><button class="primary-button" id="confirm-reset">Let it grow ${icon("sow")}</button><button class="text-button" id="cancel-reset">Keep my little corner</button>`,
+    `<div class="dialog-symbol">${icon("sow")}</div><div class="eyebrow">BEGIN AGAIN, GENTLY</div><h2 id="dialog-title">A fresh <em>meadow.</em></h2><p>Return your paths, crops, and harvest displays to an empty meadow. A blank canvas for another quiet afternoon.</p><button class="primary-button" id="confirm-reset">Let it grow ${icon("sow")}</button><button class="text-button" id="cancel-reset">Keep my little corner</button>`,
   );
   dialog.querySelector("#confirm-reset")!.addEventListener("click", () => {
     field.reset();
@@ -433,7 +463,8 @@ function pointerTarget(event: PointerEvent) {
   }
 }
 let pointerId: number | null = null;
-let pointerOrigin = { x: 0, y: 0 }, pointerMoved = false;
+let pointerOrigin = { x: 0, y: 0 },
+  pointerMoved = false;
 sceneContainer.addEventListener("pointerdown", (e) => {
   if (
     paused ||
@@ -444,14 +475,16 @@ sceneContainer.addEventListener("pointerdown", (e) => {
   )
     return;
   pointerId = e.pointerId;
-  pointerOrigin = { x: e.clientX, y: e.clientY }; pointerMoved = false;
+  pointerOrigin = { x: e.clientX, y: e.clientY };
+  pointerMoved = false;
   sceneContainer.setPointerCapture(e.pointerId);
   pointerTarget(e);
   sceneContainer.focus({ preventScroll: true });
 });
 sceneContainer.addEventListener("pointermove", (e) => {
   if (e.pointerId !== pointerId || paused || modalOpen) return;
-  pointerMoved ||= Math.hypot(e.clientX - pointerOrigin.x, e.clientY - pointerOrigin.y) > 8;
+  pointerMoved ||=
+    Math.hypot(e.clientX - pointerOrigin.x, e.clientY - pointerOrigin.y) > 8;
   if (pointerMoved) pointerTarget(e);
 });
 sceneContainer.addEventListener("pointerup", (e) => {
@@ -465,7 +498,9 @@ sceneContainer.addEventListener("pointercancel", () => {
   pointerId = null;
   stop();
 });
-sceneContainer.addEventListener("lostpointercapture", () => { if (pointerId !== null) stop(); });
+sceneContainer.addEventListener("lostpointercapture", () => {
+  if (pointerId !== null) stop();
+});
 sceneContainer.addEventListener("contextmenu", (e) => e.preventDefault());
 const driveKeys = [
   "ArrowUp",
@@ -482,7 +517,12 @@ const driveKeys = [
   "D",
 ];
 window.addEventListener("keydown", (e) => {
-  if (modalOpen || e.target instanceof HTMLInputElement) return;
+  if (
+    modalOpen ||
+    e.target instanceof HTMLInputElement ||
+    e.target instanceof HTMLSelectElement
+  )
+    return;
   if (driveKeys.includes(e.key)) {
     e.preventDefault();
     if (!paused) {
@@ -495,7 +535,9 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     setPaused(!paused);
   } else if (["1", "2", "3", "4"].includes(e.key)) {
-    updateTool(tools[Number(e.key) - 1]);
+    updateTool(
+      (["cultivate", "sow", "harvest", "wander"] as Tool[])[Number(e.key) - 1],
+    );
   } else if (e.key.toLowerCase() === "m" && hasDriven && !paused && !e.repeat) {
     e.preventDefault();
     setControlsHidden(!controlsHidden);
@@ -511,18 +553,25 @@ window.addEventListener("keyup", (e) => {
     cursor.visible = false;
   }
 });
+window.addEventListener("focus", () => {
+  windowActive = true;
+  lastTime = performance.now();
+});
 window.addEventListener("blur", () => {
+  windowActive = false;
   cancelControlsHide();
   stop();
   persist();
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
+    windowActive = false;
     cancelControlsHide();
     stop();
     persist();
     if (soundEnabled) void audio.setEnabled(false);
   } else {
+    windowActive = document.hasFocus();
     lastTime = performance.now();
     if (soundEnabled) void audio.setEnabled(true).catch(() => {});
   }
@@ -534,6 +583,21 @@ document
   .forEach((b) =>
     b.addEventListener("click", () => updateTool(b.dataset.tool as Tool)),
   );
+document
+  .querySelectorAll<HTMLButtonElement>("[data-crop]")
+  .forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedCrop = button.dataset.crop as Crop;
+      document
+        .querySelectorAll<HTMLButtonElement>("[data-crop]")
+        .forEach((choice) => {
+          const selected = choice.dataset.crop === selectedCrop;
+          choice.classList.toggle("selected", selected);
+          choice.setAttribute("aria-pressed", String(selected));
+        });
+      persist();
+    });
+  });
 document.querySelector("#begin")!.addEventListener("click", () => {
   dismissIntro();
   sceneContainer.focus({ preventScroll: true });
@@ -582,11 +646,14 @@ const reducedMotion = window.matchMedia(
 ).matches;
 function animate(now: number) {
   requestAnimationFrame(animate);
-  const dt = Math.min((now - lastTime) / 1000 || 0, 0.05);
+  const activeSeconds = lastTime ? Math.max(0, (now - lastTime) / 1000) : 0;
+  const dt = Math.min(activeSeconds, 0.05);
   lastTime = now;
   if (document.hidden) return;
-  if (!paused && !modalOpen) {
+  if (!paused && !modalOpen && windowActive) {
     time += dt;
+    const growth = field.advance(activeSeconds);
+    changedSinceSave ||= growth.advancedSeconds > 0;
     if (keys.size) {
       let sx = 0,
         sy = 0;
@@ -608,13 +675,28 @@ function animate(now: number) {
         target = null;
       }
     }
-    const movement = navigation.step(tractorState, dt, selectedTool, world.obstacles, pace,
-      keys.size && target ? { target } : null);
+    const movement = navigation.step(
+      tractorState,
+      dt,
+      selectedTool,
+      world.obstacles,
+      pace,
+      keys.size && target ? { target } : null,
+    );
     tractorState = movement.state;
     target = navigation.target;
     cursor.visible = target !== null;
     movement.paint.forEach((point, index, points) => {
-      changedSinceSave = field.paint(point.x, point.z, selectedTool, points[Math.max(0, index - 1)]) || changedSinceSave;
+      const event = field.paint(
+        point.x,
+        point.z,
+        selectedTool,
+        points[Math.max(0, index - 1)],
+        selectedCrop,
+      );
+      changedSinceSave ||= event.groundChanges.length > 0;
+      if (event.harvestResults.length)
+        audio.harvest(event.harvestResults[0].crop);
     });
     if (tractorState.speed > 0.1) {
       if (!hasDriven) {
@@ -634,7 +716,9 @@ function animate(now: number) {
     tractor.group.position.set(tractorState.x, 0, tractorState.z);
     tractor.group.rotation.y = tractorState.heading;
     tractor.update(tractorState.speed, dt, time);
-    attachment.position.y += ((navigation.turn ? 0.4 : 0) - attachment.position.y) * (1 - Math.exp(-8 * dt));
+    attachment.position.y +=
+      ((navigation.turn ? 0.4 : 0) - attachment.position.y) *
+      (1 - Math.exp(-8 * dt));
     world.update(reducedMotion ? 0 : time, reducedMotion ? 0 : dt);
     audio.setDriving(tractorState.speed / 6);
     cursor.scale.setScalar(1 + Math.sin(time * 3) * 0.08);
@@ -660,6 +744,8 @@ if (import.meta.env.DEV)
       hasDriven,
       controlsHidden,
       grid: Array.from(field.grid),
+      farm: field.engine.snapshot(),
+      crop: selectedCrop,
       drawCalls: renderer.info.render.calls,
       camera: {
         left: camera.left,

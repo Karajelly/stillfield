@@ -13,8 +13,8 @@ function meadow(initial: TractorState, follow = false, fps = 60, pace = 0.85) {
     const result = nav.step(state, 1 / fps, tool, obstacles, pace, manual, follow);
     state = result.state;
     result.paint.forEach((p, i, points) => {
-      for (const cell of cellsUnderSweep(points[Math.max(0, i - 1)], p, tuning.brushRadius))
-        cells.set(cell, tool === "mow" ? 1 : tool === "till" ? 2 : 3);
+      for (const cell of cellsUnderSweep(points[Math.max(0, i - 1)], p, tuning.brushRadius + FIELD.cell / 2))
+        cells.set(cell, tool === "mow" ? 1 : tool === "cultivate" ? 2 : 3);
     });
     return result;
   };
@@ -33,12 +33,12 @@ function meadow(initial: TractorState, follow = false, fps = 60, pace = 0.85) {
 it("works through endpoints and settles for every tool, view, frame rate and close approach", () => {
   const points = [{ x: FIELD.maxX, z: 0.125 }, { x: FIELD.minX, z: 0.125 },
     { x: 0.125, z: FIELD.minZ }, { x: 0.125, z: FIELD.maxZ }, { x: FIELD.maxX, z: FIELD.maxZ }];
-  for (const follow of [false, true]) for (const fps of [30, 60, 120]) for (const tool of ["mow", "till", "sow"] as const) {
+  for (const follow of [false, true]) for (const fps of [30, 60, 120]) for (const tool of ["mow", "cultivate", "sow"] as const) {
     for (const point of points) {
       const farm = meadow({ x: 0, z: 0, heading: Math.atan2(point.x, point.z), speed: 0 }, follow, fps);
       farm.tool(tool); farm.choose(point); farm.settle();
       const cell = WorkDestination.create(point, farm.state, tool)!.cell;
-      assert.equal(farm.cells.get(cell), tool === "mow" ? 1 : tool === "till" ? 2 : 3);
+      assert.equal(farm.cells.get(cell), tool === "mow" ? 1 : tool === "cultivate" ? 2 : 3);
     }
   }
   for (const follow of [false, true]) for (const speed of [0, 3, 4.5])
@@ -82,9 +82,13 @@ it("six player-selected rows 2.5 m apart cover the intervening meadow", () => {
       }
       farm.choose({ x, z }); farm.settle();
     }
-    for (let z = -9.875; z <= 2.625; z += 0.25) for (let x = -17.875; x <= 17.625; x += 0.25) {
-      const cell = Math.round((z - FIELD.minZ - 0.125) / 0.25) * 172 + Math.round((x - FIELD.minX - 0.125) / 0.25);
-      assert.equal(farm.cells.get(cell), 1, JSON.stringify({ x, z, follow, pace }));
+    const columns = (FIELD.maxX - FIELD.minX) / FIELD.cell;
+    const rows = (FIELD.maxZ - FIELD.minZ) / FIELD.cell;
+    for (let row = 0; row < rows; row++) for (let col = 0; col < columns; col++) {
+      const x = FIELD.minX + (col + 0.5) * FIELD.cell;
+      const z = FIELD.minZ + (row + 0.5) * FIELD.cell;
+      if (x < -17.875 || x > 17.625 || z < -9.875 || z > 2.625) continue;
+      assert.equal(farm.cells.get(row * columns + col), 1, JSON.stringify({ x, z, follow, pace }));
     }
   }
 });
@@ -93,7 +97,7 @@ it("retargeting, working-tool changes, Wander, and interruptions never continue 
   const farm = meadow({ x: -15, z: 0.125, heading: Math.PI / 2, speed: 0 }, true);
   farm.choose({ x: 0.125, z: 0.125 }); farm.settle();
   const point = { x: 0.125, z: 2.625 };
-  farm.choose(point); farm.tool("till");
+  farm.choose(point); farm.tool("cultivate");
   assert.ok(farm.nav.turn);
   while (farm.nav.turn) farm.step();
   farm.tool("sow"); farm.settle();

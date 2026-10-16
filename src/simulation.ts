@@ -1,4 +1,4 @@
-export type Tool = "mow" | "till" | "sow" | "wander";
+export type Tool = "cultivate" | "sow" | "harvest" | "mow" | "restore" | "wander";
 export interface Point {
   x: number;
   z: number;
@@ -10,7 +10,9 @@ export interface TractorState extends Point {
 export interface Obstacle extends Point {
   radius: number;
 }
-export const FIELD = { minX: -24, maxX: 19, minZ: -13, maxZ: 14, cell: 0.25 };
+export const FIELD = { minX: -25, maxX: 20, minZ: -12, maxZ: 13, cell: 0.5 };
+export const FIELD_COLUMNS = Math.round((FIELD.maxX - FIELD.minX) / FIELD.cell);
+export const FIELD_ROWS = Math.round((FIELD.maxZ - FIELD.minZ) / FIELD.cell);
 export const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 export const angleDifference = (a: number, b: number) =>
@@ -97,8 +99,8 @@ export function cellsUnderBrush(
 export function cellsUnderSweep(from: Point, to: Point, radius: number): number[] {
   if (![from.x, from.z, to.x, to.z, radius].every(Number.isFinite) || radius < 0) return [];
   const dx = to.x - from.x, dz = to.z - from.z, lengthSquared = dx * dx + dz * dz;
-  const columns = Math.round((FIELD.maxX - FIELD.minX) / FIELD.cell);
-  const rows = Math.round((FIELD.maxZ - FIELD.minZ) / FIELD.cell);
+  const columns = FIELD_COLUMNS;
+  const rows = FIELD_ROWS;
   const result: number[] = [];
   const minCol = clamp(
     Math.floor((Math.min(from.x, to.x) - radius - FIELD.minX) / FIELD.cell),

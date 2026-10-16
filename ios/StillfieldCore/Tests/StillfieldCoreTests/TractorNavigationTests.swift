@@ -37,11 +37,12 @@ private final class TestMeadow {
     let points = [FarmPoint(x: FieldGrid.maxX, z: 0.125), FarmPoint(x: FieldGrid.minX, z: 0.125),
                   FarmPoint(x: 0.125, z: FieldGrid.minZ), FarmPoint(x: 0.125, z: FieldGrid.maxZ),
                   FarmPoint(x: FieldGrid.maxX, z: FieldGrid.maxZ)]
-    for follow in [false, true] { for fps in [30.0, 60, 120] { for tool in [FarmTool.mow, .till, .sow] {
+    for follow in [false, true] { for fps in [30.0, 60, 120] { for tool in [FarmTool.mow, .cultivate, .sow] {
         for point in points {
             let farm = TestMeadow(TractorState(x: 0, z: 0, heading: atan2(point.x, point.z)), follow: follow, fps: fps)
+            if tool == .sow { farm.field.cells = Array(repeating: Ground.soil.rawValue, count: FieldGrid.cellCount) }
             farm.setTool(tool); farm.choose(point); try farm.settle()
-            try #require(farm.value(at: point) == (tool == .mow ? 1 : tool == .till ? 2 : 3))
+            try #require(farm.value(at: point) == (tool == .mow ? 1 : tool == .cultivate ? 2 : 3))
         }
     } } }
     for follow in [false, true] { for speed in [0.0, 3, 4.5] { for distance in [0.01, 0.3, 1, 2, 3, 5, 10] {
@@ -85,8 +86,8 @@ private final class TestMeadow {
             }
             farm.choose(FarmPoint(x: x, z: z)); try farm.settle()
         }
-        for z in stride(from: -9.875, through: 2.625, by: 0.25) {
-            for x in stride(from: -17.875, through: 17.625, by: 0.25) {
+        for z in stride(from: -9.75, through: 2.25, by: FieldGrid.cellSize) {
+            for x in stride(from: -17.75, through: 17.25, by: FieldGrid.cellSize) {
                 try #require(farm.value(at: FarmPoint(x: x, z: z)) == 1)
             }
         }
@@ -97,11 +98,13 @@ private final class TestMeadow {
     let farm = TestMeadow(TractorState(x: -15, z: 0.125, heading: .pi / 2), follow: true)
     farm.choose(FarmPoint(x: 0.125, z: 0.125)); try farm.settle()
     let point = FarmPoint(x: 0.125, z: 2.625)
-    farm.choose(point); farm.setTool(.till)
+    farm.choose(point); farm.setTool(.cultivate)
     try #require(farm.navigation.turningAtRowEnd)
     for _ in 0..<1200 { if !farm.navigation.turningAtRowEnd { break }; farm.step() }
     farm.setTool(.sow); try farm.settle()
-    #expect(farm.value(at: point) == 3)
+    // Switching before the lowered cultivator reaches this square leaves grass.
+    // Sowing must not silently prepare it. The work endpoint still completes.
+    #expect(farm.value(at: point) == 0)
     #expect(abs(TractorHandling.angle(farm.state.heading, -.pi / 2)) < 0.025)
     let beforeWandering = farm.field
     farm.setTool(.wander); farm.choose(FarmPoint(x: -8, z: 5)); try farm.settle()

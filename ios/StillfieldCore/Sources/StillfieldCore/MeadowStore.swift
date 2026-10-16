@@ -13,19 +13,21 @@ public struct MeadowSave: Codable, Equatable, Sendable {
     public var introDismissed: Bool
     // Optional on disk so meadows saved before camera switching still decode.
     public var cameraMode: FarmCameraMode?
+    public var selectedCrop: Crop?
 
     public init(
-        version: Int = 1,
+        version: Int = 3,
         field: FieldGrid = FieldGrid(),
         tractor: TractorState = TractorState(),
-        tool: FarmTool = .mow,
+        tool: FarmTool = .harvest,
         rowAssist: Bool = true,
         pace: Double = 0.85,
         goldenLight: Bool = false,
         volume: Double = 0.45,
         haptics: Bool = true,
         introDismissed: Bool = false,
-        cameraMode: FarmCameraMode? = nil
+        cameraMode: FarmCameraMode? = nil,
+        selectedCrop: Crop? = .wheat
     ) {
         self.version = version
         self.field = field
@@ -38,10 +40,11 @@ public struct MeadowSave: Codable, Equatable, Sendable {
         self.haptics = haptics
         self.introDismissed = introDismissed
         self.cameraMode = cameraMode
+        self.selectedCrop = selectedCrop
     }
 
     public var isValid: Bool {
-        version == 1 && field.isValid &&
+        (1...3).contains(version) && field.isValid &&
         tractor.x.isFinite && (-39...39).contains(tractor.x) &&
         tractor.z.isFinite && (-30...28).contains(tractor.z) &&
         tractor.heading.isFinite && tractor.speed.isFinite && (0...6.875).contains(tractor.speed) &&
@@ -93,6 +96,17 @@ public enum MeadowStore {
         guard save.isValid else { throw MeadowStoreError.invalidSave }
         let data = try JSONEncoder().encode(save)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        // Keep the exact fine-grid save before its first coarse-grid replacement.
+        if let previous = try? Data(contentsOf: url),
+           let json = try? JSONSerialization.jsonObject(with: previous) as? [String: Any],
+           let field = json["field"] as? [String: Any],
+           (field["version"] as? Int ?? 1) < 3,
+           let cells = field["cells"] as? [Any], cells.count == 172 * 108 {
+            let backup = url.deletingLastPathComponent().appendingPathComponent(
+                "\(url.deletingPathExtension().lastPathComponent)-before-grid-v3-\(UUID().uuidString).json"
+            )
+            try previous.write(to: backup, options: .atomic)
+        }
         try data.write(to: url, options: .atomic)
     }
 }

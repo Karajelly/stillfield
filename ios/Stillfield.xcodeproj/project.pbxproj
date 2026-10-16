@@ -15,6 +15,7 @@
 		7C8753FDFECE6FF4090B8E9C /* StillfieldApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C196C075E0CE17BAEE432E73 /* StillfieldApp.swift */; };
 		838671660274EF1F9D8E2457 /* StillfieldUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11FEB246D6EF1C6F2FC56AF7 /* StillfieldUITests.swift */; };
 		981F1510515134659672C5E8 /* FarmScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8F2E1F0B1ACD7F2209A5087 /* FarmScreen.swift */; };
+		9A8D73347764BD17B6EE7269 /* HarvestDisplayRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E614C2D0425D1A8A5C9CF19 /* HarvestDisplayRenderer.swift */; };
 		AF246900C3F39786246C4053 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E03E5FB2FBF35854D6C9407D /* PrivacyInfo.xcprivacy */; };
 		AFFCF064E6C16CFB529C6EBE /* NativeArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 361694CE96158ABDD1A1DBA1 /* NativeArtwork.swift */; };
 		D05B7F4BA42A3D08DEC88B09 /* FarmScene.json in Resources */ = {isa = PBXBuildFile; fileRef = 561D543CE55DBB61DF37BF6F /* FarmScene.json */; };
@@ -36,6 +37,7 @@
 		23B0101E891852596BA8EB67 /* FieldRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldRenderer.swift; sourceTree = "<group>"; };
 		2756F70899724DF42E65E832 /* FarmViewport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmViewport.swift; sourceTree = "<group>"; };
 		361694CE96158ABDD1A1DBA1 /* NativeArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeArtwork.swift; sourceTree = "<group>"; };
+		3E614C2D0425D1A8A5C9CF19 /* HarvestDisplayRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarvestDisplayRenderer.swift; sourceTree = "<group>"; };
 		41632DB2771CDCDB6D3B2875 /* FarmAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmAudio.swift; sourceTree = "<group>"; };
 		55BF890D38EA62A229201D5D /* Stillfield.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Stillfield.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		561D543CE55DBB61DF37BF6F /* FarmScene.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FarmScene.json; sourceTree = "<group>"; };
@@ -135,6 +137,7 @@
 				84D4459AF8D8A41901FD95AE /* FarmController.swift */,
 				2756F70899724DF42E65E832 /* FarmViewport.swift */,
 				23B0101E891852596BA8EB67 /* FieldRenderer.swift */,
+				3E614C2D0425D1A8A5C9CF19 /* HarvestDisplayRenderer.swift */,
 				361694CE96158ABDD1A1DBA1 /* NativeArtwork.swift */,
 			);
 			path = Rendering;
@@ -265,6 +268,7 @@
 				981F1510515134659672C5E8 /* FarmScreen.swift in Sources */,
 				38275791EC71A6A83554539D /* FarmViewport.swift in Sources */,
 				EA404C084D565C0660442D98 /* FieldRenderer.swift in Sources */,
+				9A8D73347764BD17B6EE7269 /* HarvestDisplayRenderer.swift in Sources */,
 				AFFCF064E6C16CFB529C6EBE /* NativeArtwork.swift in Sources */,
 				7C8753FDFECE6FF4090B8E9C /* StillfieldApp.swift in Sources */,
 			);

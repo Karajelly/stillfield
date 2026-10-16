@@ -39,8 +39,12 @@ private enum MeadowPalette {
     static let selectedToolSurface = color(0xe2e8d5)
     static let selectedToolBorder = color(0xbecbaa, opacity: 0x40 / 255.0)
     static let selectedToolIndicator = color(0x60805b)
+    static let selectedCropBorder = color(0xbecbaa, opacity: 0.5)
+    static let wheat = color(0xa18245)
+    static let sunflowers = color(0x8c874c)
+    static let pumpkins = color(0xad7859)
     static let mow = color(0x728c59)
-    static let till = color(0xa68a69)
+    static let cultivate = color(0xa68a69)
     static let sow = color(0x839a64)
     static let wander = color(0x87998a)
     static let driveHint = color(0x899479)
@@ -433,40 +437,78 @@ struct FarmScreen: View {
     }
 
     private func toolDock(compact: Bool) -> some View {
-        HStack(spacing: 3) {
-            ForEach(FarmTool.allCases, id: \.self) { tool in
-                let selected = game.tool == tool
-                Button { game.selectTool(tool) } label: {
-                    VStack(spacing: compact ? 5 : 8) {
-                        Image(systemName: tool.symbol)
-                            .font(.system(size: compact ? 20 : 24, weight: .light))
-                            .frame(height: compact ? 24 : 30)
-                            .foregroundStyle(tool.color)
-                        Text(tool.title)
-                            .font(.system(size: compact ? 10 : 11, weight: selected ? .semibold : .regular))
+        VStack(spacing: 6) {
+            if game.tool == .sow { cropChoices(compact: compact) }
+            HStack(spacing: 3) {
+                ForEach([FarmTool.cultivate, .sow, .harvest, .wander], id: \.self) { tool in
+                    let selected = game.tool == tool
+                    Button { game.selectTool(tool) } label: {
+                        VStack(spacing: compact ? 5 : 8) {
+                            Image(systemName: tool.symbol)
+                                .font(.system(size: compact ? 20 : 24, weight: .light))
+                                .frame(height: compact ? 24 : 30)
+                                .foregroundStyle(tool.color)
+                            Text(tool.title)
+                                .font(.system(size: compact ? 10 : 11, weight: selected ? .semibold : .regular))
+                        }
+                        .foregroundStyle(selected ? MeadowPalette.selectedToolLabel : MeadowPalette.toolLabel)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: compact ? 58 : 74)
+                        .background(selected ? MeadowPalette.selectedToolSurface : .clear, in: RoundedRectangle(cornerRadius: 16))
+                        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(selected ? MeadowPalette.selectedToolBorder : .clear, lineWidth: 1))
+                        .overlay(alignment: .bottom) {
+                            if selected { Capsule().fill(MeadowPalette.selectedToolIndicator).frame(width: 14, height: 2).padding(.bottom, 5) }
+                        }
+                        .contentShape(RoundedRectangle(cornerRadius: 16))
                     }
-                    .foregroundStyle(selected ? MeadowPalette.selectedToolLabel : MeadowPalette.toolLabel)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(tool.accessibilityDescription)
+                    .accessibilityAddTraits(selected ? [.isSelected] : [])
+                    .accessibilityIdentifier("tool.\(tool.rawValue)")
+                }
+            }
+            .padding(7)
+            .background(MeadowPalette.dockSurface, in: RoundedRectangle(cornerRadius: 23))
+            .overlay(RoundedRectangle(cornerRadius: 23).strokeBorder(MeadowPalette.dockBorder, lineWidth: 1))
+            .shadow(color: MeadowPalette.dockShadow, radius: 18, y: 6)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Tractor tools")
+        }
+    }
+
+    private func cropChoices(compact: Bool) -> some View {
+        HStack(spacing: 4) {
+            ForEach(Crop.allCases, id: \.self) { crop in
+                let selected = game.selectedCrop == crop
+                Button { game.selectCrop(crop) } label: {
+                    HStack(spacing: compact ? 5 : 7) {
+                        CropGlyph(crop: crop)
+                            .stroke(crop.tint, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                            .frame(width: compact ? 22 : 24, height: compact ? 22 : 24)
+                        Text(crop.title)
+                            .font(.system(size: compact ? 10 : 11, weight: selected ? .semibold : .medium))
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                    }
+                    .foregroundStyle(selected ? MeadowPalette.selectedToolLabel : MeadowPalette.roundButton)
+                    .padding(.horizontal, compact ? 7 : 10)
                     .frame(maxWidth: .infinity)
-                    .frame(height: compact ? 58 : 74)
-                    .background(selected ? MeadowPalette.selectedToolSurface : .clear, in: RoundedRectangle(cornerRadius: 16))
-                    .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(selected ? MeadowPalette.selectedToolBorder : .clear, lineWidth: 1))
-                    .overlay(alignment: .bottom) {
-                        if selected { Capsule().fill(MeadowPalette.selectedToolIndicator).frame(width: 14, height: 2).padding(.bottom, 5) }
-                    }
-                    .contentShape(RoundedRectangle(cornerRadius: 16))
+                    .frame(height: compact ? 48 : 54)
+                    .background(selected ? MeadowPalette.selectedToolSurface : .clear, in: RoundedRectangle(cornerRadius: 15))
+                    .overlay(RoundedRectangle(cornerRadius: 15).strokeBorder(selected ? MeadowPalette.selectedCropBorder : .clear, lineWidth: 1))
+                    .contentShape(RoundedRectangle(cornerRadius: 15))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(tool.accessibilityDescription)
+                .accessibilityLabel("Sow \(crop.title)")
                 .accessibilityAddTraits(selected ? [.isSelected] : [])
-                .accessibilityIdentifier("tool.\(tool.rawValue)")
+                .accessibilityIdentifier("crop.\(crop.identifier)")
             }
         }
-        .padding(7)
-        .background(MeadowPalette.dockSurface, in: RoundedRectangle(cornerRadius: 23))
-        .overlay(RoundedRectangle(cornerRadius: 23).strokeBorder(MeadowPalette.dockBorder, lineWidth: 1))
-        .shadow(color: MeadowPalette.dockShadow, radius: 18, y: 6)
+        .padding(5)
+        .background(MeadowPalette.dockSurface, in: RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(MeadowPalette.dockBorder, lineWidth: 1))
+        .shadow(color: MeadowPalette.dockShadow, radius: 12, y: 4)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Tractor tools")
+        .accessibilityLabel("Crop to sow")
     }
 
     private var zoomControls: some View {
@@ -660,7 +702,7 @@ private struct FarmSettingsSheet: View {
                     .accessibilityIdentifier("reset.confirm")
                 Button("Keep my meadow", role: .cancel) { }
             } message: {
-                Text("Your paths, tilled rows, and wildflowers will return to untouched grass. This can’t be undone.")
+                Text("Your paths, crops, and harvest displays will return to an empty meadow. This can’t be undone.")
             }
         }
         .tint(MeadowPalette.green)
@@ -709,7 +751,8 @@ private struct FarmHelpSheet: View {
                     }
                     helpRow("hand.draw", title: "Find your way", text: "Tap where mowing or planting should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop. Pinch to look a little closer.")
                     helpRow("car.rear", title: "Come along for the ride", text: "Tap the vehicle button beside the zoom controls to follow behind your tractor. Hold to roll, move your finger left or right to steer, and lift to settle. A quick tap chooses where work should finish. Pinch to move closer or farther away. Tap the vehicle button again to see the whole farm.")
-                    helpRow("leaf", title: "Make your mark", text: "Mow soft paths, till tidy rows, or sow wildflowers. Choose Wander to enjoy the ride without changing the meadow.")
+                    helpRow("leaf", title: "Make your mark", text: "Cultivate prepares soil and clears any crops. Sow a crop, then harvest when it’s ready. A golden wheat patch beside your tractor is ready to gather. Harvests fill the pots and carts by the field.")
+                    helpRow("sun.max", title: "Let it grow", text: "Sunflowers take 3 minutes, wheat 6, and pumpkins 9, only while you play. Seeds are unlimited. Nothing withers, and full displays never stop a harvest.")
                     helpRow("wind", title: "Stay for a while", text: "Set your own pace, turn on the birdsong, and take a breath. Your meadow saves on this device. Nothing changes while you’re away.")
                     Button(action: { dismiss() }) {
                         HStack {
@@ -788,26 +831,80 @@ private struct StillfieldMark: View {
     }
 }
 
+// The same 24-point botanical drawings as src/icons.ts.
+private struct CropGlyph: Shape {
+    let crop: Crop
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        switch crop {
+        case .wheat:
+            path.move(to: CGPoint(x: 12, y: 22)); path.addLine(to: CGPoint(x: 12, y: 3))
+            for y in [4.0, 9.0, 14.0] {
+                for side in [-1.0, 1.0] {
+                    path.move(to: CGPoint(x: 12, y: y + 4))
+                    path.addQuadCurve(to: CGPoint(x: 12 + side * 5, y: y), control: CGPoint(x: 12 + side * 5, y: y + 3))
+                    path.addQuadCurve(to: CGPoint(x: 12, y: y + 4), control: CGPoint(x: 12, y: y))
+                    path.closeSubpath()
+                }
+            }
+        case .sunflowers:
+            path.move(to: CGPoint(x: 12, y: 16)); path.addLine(to: CGPoint(x: 12, y: 22))
+            path.move(to: CGPoint(x: 12, y: 20))
+            path.addQuadCurve(to: CGPoint(x: 7, y: 17), control: CGPoint(x: 8, y: 17))
+            path.addQuadCurve(to: CGPoint(x: 12, y: 20), control: CGPoint(x: 7, y: 21))
+            path.addEllipse(in: CGRect(x: 9.6, y: 6.6, width: 4.8, height: 4.8))
+            for i in 0..<8 {
+                let angle = Double(i) * .pi / 4
+                path.addEllipse(in: CGRect(x: 10.4 + sin(angle) * 4.4, y: 7.4 + cos(angle) * 4.4, width: 3.2, height: 3.2))
+            }
+        case .pumpkins:
+            path.addEllipse(in: CGRect(x: 4, y: 8, width: 16, height: 13))
+            path.addEllipse(in: CGRect(x: 8, y: 8, width: 8, height: 13))
+            path.move(to: CGPoint(x: 12, y: 8))
+            path.addQuadCurve(to: CGPoint(x: 14, y: 3), control: CGPoint(x: 10, y: 4))
+            path.move(to: CGPoint(x: 13, y: 6))
+            path.addQuadCurve(to: CGPoint(x: 20, y: 5), control: CGPoint(x: 18, y: 2))
+            path.addQuadCurve(to: CGPoint(x: 13, y: 6), control: CGPoint(x: 17, y: 8))
+        }
+        return path.applying(CGAffineTransform(scaleX: rect.width / 24, y: rect.height / 24)
+            .concatenating(CGAffineTransform(translationX: rect.minX, y: rect.minY)))
+    }
+}
+
+private extension Crop {
+    var identifier: String {
+        switch self { case .wheat: "wheat"; case .sunflowers: "sunflowers"; case .pumpkins: "pumpkins" }
+    }
+    var tint: Color {
+        switch self { case .wheat: MeadowPalette.wheat; case .sunflowers: MeadowPalette.sunflowers; case .pumpkins: MeadowPalette.pumpkins }
+    }
+}
+
 private extension FarmTool {
     var title: String {
-        switch self { case .mow: "Mow"; case .till: "Till"; case .sow: "Sow"; case .wander: "Wander" }
+        switch self { case .mow: "Mow"; case .cultivate: "Cultivate"; case .sow: "Sow"; case .harvest: "Harvest"; case .restore: "Restore grass"; case .wander: "Wander" }
     }
     var symbol: String {
-        switch self { case .mow: "leaf"; case .till: "line.3.horizontal"; case .sow: "camera.macro"; case .wander: "wind" }
+        switch self { case .mow: "leaf"; case .cultivate: "line.3.horizontal"; case .sow: "camera.macro"; case .harvest: "basket"; case .restore: "arrow.uturn.backward"; case .wander: "wind" }
     }
     var color: Color {
         switch self {
         case .mow: MeadowPalette.mow
-        case .till: MeadowPalette.till
+        case .cultivate: MeadowPalette.cultivate
         case .sow: MeadowPalette.sow
+        case .harvest: MeadowPalette.gold
+        case .restore: MeadowPalette.mow
         case .wander: MeadowPalette.wander
         }
     }
     var accessibilityDescription: String {
         switch self {
         case .mow: "Mow. Trim the meadow."
-        case .till: "Till. Turn the earth."
-        case .sow: "Sow. Plant wildflowers."
+        case .cultivate: "Cultivate. Prepare soil for planting, clearing any crops."
+        case .sow: "Sow. Plant your chosen crop in prepared soil."
+        case .harvest: "Harvest. Gather mature crops into the field display."
+        case .restore: "Restore grass. Remove crops and return the ground to grass."
         case .wander: "Wander. Just enjoy the ride."
         }
     }

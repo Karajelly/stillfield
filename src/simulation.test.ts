@@ -206,29 +206,29 @@ describe("cellsUnderBrush", () => {
 
   it("finds the exact first and last cell centers with a zero-radius brush", () => {
     assert.deepEqual(
-      cellsUnderBrush(FIELD.minX + 0.125, FIELD.minZ + 0.125, 0),
+      cellsUnderBrush(FIELD.minX + FIELD.cell / 2, FIELD.minZ + FIELD.cell / 2, 0),
       [0],
     );
     assert.deepEqual(
-      cellsUnderBrush(FIELD.maxX - 0.125, FIELD.maxZ - 0.125, 0),
+      cellsUnderBrush(FIELD.maxX - FIELD.cell / 2, FIELD.maxZ - FIELD.cell / 2, 0),
       [size - 1],
     );
   });
 
   it("includes cell centers on the circular brush boundary", () => {
     assert.deepEqual(
-      cellsUnderBrush(FIELD.minX + 0.125, FIELD.minZ + 0.125, 0.25),
+      cellsUnderBrush(FIELD.minX + FIELD.cell / 2, FIELD.minZ + FIELD.cell / 2, FIELD.cell),
       [0, 1, columns],
     );
   });
 
   it("clips correctly at both field corners without wrapping into other rows", () => {
-    assert.deepEqual(cellsUnderBrush(FIELD.minX, FIELD.minZ, 0.4), [
+    assert.deepEqual(cellsUnderBrush(FIELD.minX, FIELD.minZ, FIELD.cell * 1.6), [
       0,
       1,
       columns,
     ]);
-    assert.deepEqual(cellsUnderBrush(FIELD.maxX, FIELD.maxZ, 0.4), [
+    assert.deepEqual(cellsUnderBrush(FIELD.maxX, FIELD.maxZ, FIELD.cell * 1.6), [
       size - columns - 1,
       size - 2,
       size - 1,
@@ -247,11 +247,11 @@ describe("cellsUnderBrush", () => {
 
   it("still paints overlapping cells when the brush center is outside the field", () => {
     assert.deepEqual(
-      cellsUnderBrush(FIELD.minX - 0.05, FIELD.minZ + 0.125, 0.2),
+      cellsUnderBrush(FIELD.minX - 0.05, FIELD.minZ + FIELD.cell / 2, FIELD.cell / 2 + 0.05),
       [0],
     );
     assert.deepEqual(
-      cellsUnderBrush(FIELD.maxX + 0.05, FIELD.maxZ - 0.125, 0.2),
+      cellsUnderBrush(FIELD.maxX + 0.05, FIELD.maxZ - FIELD.cell / 2, FIELD.cell / 2 + 0.05),
       [size - 1],
     );
   });
@@ -261,7 +261,7 @@ describe("cellsUnderBrush", () => {
       z = 2.7,
       radius = 1.15;
     const cells = cellsUnderBrush(x, z, radius);
-    assert.ok(cells.length > 40);
+    assert.ok(cells.length > 12);
     assert.equal(new Set(cells).size, cells.length);
     for (const index of cells) {
       assert.ok(index >= 0 && index < size);

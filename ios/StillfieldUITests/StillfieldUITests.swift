@@ -3,11 +3,99 @@ import XCTest
 @MainActor
 final class StillfieldUITests: XCTestCase {
     private let meadowControlIdentifiers = [
-        "tool.mow", "tool.till", "tool.sow", "tool.wander",
+        "tool.harvest", "tool.cultivate", "tool.sow", "tool.wander",
         "action.pause", "action.sound", "action.settings",
         "action.camera",
         "Zoom out", "Center the farm", "Zoom in"
     ]
+
+    func testHarvestSowGrowthAndDisplayPersistenceThroughRealTouches() throws {
+        let app = launchFreshMeadow(fastCrops: true)
+        defer { app.terminate() }
+        let surface = meadowSurface(in: app)
+        func drive(_ x: CGFloat, _ y: CGFloat) throws {
+            let before = try XCTUnwrap(telemetry(in: app))
+            surface.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y)).tap()
+            _ = try waitForSteering(after: before.steeringCount, in: app)
+            XCTAssertTrue(waitUntil(timeout: 25) {
+                guard let now = self.telemetry(in: app) else { return false }
+                return now.speed == 0 && now.destination == nil
+            })
+            revealControls(in: app)
+        }
+        try drive(0.35, 0.45)
+        XCTAssertGreaterThan(farmingValue("wheatDisplay", in: app), 0, "The starter patch must reward harvesting immediately.")
+        attachScreenshot("First wheat harvest and wheelbarrow", app: app)
+
+        app.buttons["tool.cultivate"].tap()
+        try drive(0.48, 0.52)
+        try drive(0.41, 0.43)
+        app.buttons["tool.sow"].tap()
+        assertCropChoicesReachable(in: app)
+        app.buttons["crop.sunflowers"].tap()
+        XCTAssertTrue(app.buttons["crop.sunflowers"].isSelected)
+        try drive(0.48, 0.52)
+        XCTAssertGreaterThan(farmingValue("growing", in: app), 0)
+        attachScreenshot("Freshly sown sunflowers and crop buttons", app: app)
+        XCTAssertTrue(waitUntil(timeout: 60) { self.farmingValue("growing", in: app) == 0 })
+        revealControls(in: app)
+        attachScreenshot("Sunflowers after active play", app: app)
+        app.buttons["tool.harvest"].tap()
+        try drive(0.41, 0.43)
+        XCTAssertGreaterThan(farmingValue("sunflowerDisplay", in: app), 0)
+        attachScreenshot("Sunflower pots beside the wheat harvest", app: app)
+        let wheat = farmingValue("wheatDisplay", in: app), flowers = farmingValue("sunflowerDisplay", in: app)
+        app.buttons["action.pause"].tap()
+        app.terminate()
+        app.launchArguments = ["--ui-testing"]
+        app.launch()
+        XCTAssertTrue(app.buttons["tool.harvest"].waitForExistence(timeout: 40))
+        XCTAssertEqual(farmingValue("wheatDisplay", in: app), wheat)
+        XCTAssertEqual(farmingValue("sunflowerDisplay", in: app), flowers)
+        app.buttons["tool.sow"].tap()
+        XCTAssertTrue(app.buttons["crop.sunflowers"].isSelected)
+        XCTAssertFalse(app.buttons["farming.rest"].exists)
+        XCTAssertFalse(app.buttons["farming.meadow"].exists)
+    }
+
+    func testPumpkinsGrowAndFillTheirCart() throws {
+        let app = launchFreshMeadow(fastCrops: true)
+        defer { app.terminate() }
+        let surface = meadowSurface(in: app)
+        func drive(_ x: CGFloat, _ y: CGFloat) throws {
+            let before = try XCTUnwrap(telemetry(in: app))
+            surface.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y)).tap()
+            _ = try waitForSteering(after: before.steeringCount, in: app)
+            XCTAssertTrue(waitUntil(timeout: 25) {
+                guard let now = self.telemetry(in: app) else { return false }
+                return now.speed == 0 && now.destination == nil
+            })
+            revealControls(in: app)
+        }
+        app.buttons["tool.cultivate"].tap()
+        try drive(0.48, 0.52)
+        try drive(0.41, 0.43)
+        app.buttons["tool.sow"].tap()
+        app.buttons["crop.pumpkins"].tap()
+        XCTAssertTrue(app.buttons["crop.pumpkins"].isSelected)
+        try drive(0.48, 0.52)
+        XCTAssertGreaterThan(farmingValue("growing", in: app), 0)
+        attachScreenshot("Freshly sown pumpkins and crop buttons", app: app)
+        XCTAssertTrue(waitUntil(timeout: 60) { self.farmingValue("growing", in: app) == 0 })
+        revealControls(in: app)
+        app.buttons["tool.harvest"].tap()
+        try drive(0.41, 0.43)
+        XCTAssertGreaterThan(farmingValue("pumpkinDisplay", in: app), 0)
+        XCTAssertEqual(farmingValue("wheatDisplay", in: app), 0)
+        XCTAssertEqual(farmingValue("sunflowerDisplay", in: app), 0)
+        attachScreenshot("Pumpkins and their wooden cart", app: app)
+    }
+
+    private func farmingValue(_ key: String, in app: XCUIApplication) -> Int {
+        let text = meadowSurface(in: app).value as? String ?? ""
+        let pair = text.split(separator: ",").first { $0.hasPrefix(key + "=") }
+        return pair.flatMap { Int($0.split(separator: "=").last ?? "") } ?? -1
+    }
 
     func testTractorDragReleaseStopsTurningAndPinchAllowsANewTap() throws {
         let app = launchFreshMeadow()
@@ -50,11 +138,11 @@ final class StillfieldUITests: XCTestCase {
         let initial = try XCTUnwrap(telemetry(in: app))
         surface.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.47)).tap()
         _ = try waitForSteering(after: initial.steeringCount, in: app)
-        XCTAssertTrue(app.buttons["tool.mow"].exists, "Menus should remain during the copy fade.")
+        XCTAssertTrue(app.buttons["tool.harvest"].exists, "Menus should remain during the copy fade.")
         let recall = app.buttons["action.controls"]
         XCTAssertTrue(waitUntil(timeout: 6) { recall.label == "Show controls" })
         XCTAssertTrue(waitUntil(timeout: 3) {
-            !app.buttons["tool.mow"].exists && !app.buttons["action.settings"].exists
+            !app.buttons["tool.harvest"].exists && !app.buttons["action.settings"].exists
         }, "Dismissing menus must leave the accessibility tree.")
         let automaticExitEnd = Date().addingTimeInterval(0.9)
         XCTAssertTrue(waitUntil(timeout: 3) { Date() >= automaticExitEnd })
@@ -117,6 +205,7 @@ final class StillfieldUITests: XCTestCase {
         let overviewZoom = try XCTUnwrap(telemetry(in: app)).zoom
         let surface = meadowSurface(in: app)
         let initial = try XCTUnwrap(telemetry(in: app))
+        app.buttons["tool.cultivate"].tap()
         // Leave enough open meadow ahead to switch views during the drive,
         // including the time accessibility needs to locate the camera button.
         surface.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.40)).tap()
@@ -218,7 +307,7 @@ final class StillfieldUITests: XCTestCase {
         let app = launchFreshMeadow()
         defer { app.terminate() }
         let surface = meadowSurface(in: app)
-        app.buttons["tool.sow"].tap()
+        app.buttons["tool.cultivate"].tap()
         let initial = try XCTUnwrap(telemetry(in: app))
 
         // A real touch lands in the central meadow. No test hook steers the tractor.
@@ -227,7 +316,7 @@ final class StillfieldUITests: XCTestCase {
             guard let current = self.telemetry(in: app) else { return false }
             return current.distance(from: initial) > 0.6 && current.painted > initial.painted
         }, "Touch steering must move the tractor and change field cells.")
-        attachScreenshot("Wildflowers after touch steering", app: app)
+        attachScreenshot("Prepared soil after touch steering", app: app)
 
         let beforeDrag = try XCTUnwrap(telemetry(in: app))
         let start = surface.coordinate(withNormalizedOffset: CGVector(dx: 0.43, dy: 0.49))
@@ -245,8 +334,8 @@ final class StillfieldUITests: XCTestCase {
         app.activate()
         XCTAssertTrue(meadowSurface(in: app).waitForExistence(timeout: 10))
         revealControls(in: app)
-        XCTAssertTrue(app.buttons["tool.sow"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["tool.sow"].isSelected)
+        XCTAssertTrue(app.buttons["tool.cultivate"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["tool.cultivate"].isSelected)
         XCTAssertTrue(waitUntil(timeout: 5) { self.telemetry(in: app)?.speed == 0 },
                       "Leaving the app must stop the tractor.")
         let resumed = try XCTUnwrap(telemetry(in: app))
@@ -278,7 +367,13 @@ final class StillfieldUITests: XCTestCase {
         }
         waitForMeadowLayout(in: app, portrait: true)
         assertControlsReachable(in: app)
-        attachScreenshot("Portrait meadow", app: app)
+        XCTAssertFalse(app.buttons["crop.wheat"].exists)
+        app.buttons["tool.sow"].tap()
+        assertCropChoicesReachable(in: app)
+        app.buttons["crop.pumpkins"].tap()
+        XCTAssertTrue(app.buttons["crop.pumpkins"].isSelected)
+        XCTAssertFalse(app.buttons["crop.wheat"].isSelected)
+        attachScreenshot("Portrait crop choices", app: app)
 
         app.buttons["Zoom in"].tap()
         XCTAssertTrue(waitUntil(timeout: 5) { (self.telemetry(in: app)?.zoom ?? 0) > 1.1 })
@@ -298,7 +393,9 @@ final class StillfieldUITests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         waitForMeadowLayout(in: app, portrait: false)
         assertControlsReachable(in: app)
-        attachScreenshot("Landscape meadow", app: app)
+        assertCropChoicesReachable(in: app)
+        XCTAssertTrue(app.buttons["crop.pumpkins"].isSelected)
+        attachScreenshot("Landscape crop choices", app: app)
 
         app.buttons["action.settings"].tap()
         XCTAssertTrue(app.buttons["sheet.close"].waitForExistence(timeout: 3))
@@ -308,7 +405,10 @@ final class StillfieldUITests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         waitForMeadowLayout(in: app, portrait: true)
         assertControlsReachable(in: app)
-        XCTAssertTrue(app.buttons["tool.mow"].isSelected)
+        assertCropChoicesReachable(in: app)
+        XCTAssertTrue(app.buttons["crop.pumpkins"].isSelected)
+        app.buttons["tool.harvest"].tap()
+        XCTAssertFalse(app.buttons["crop.pumpkins"].exists)
         attachScreenshot("Portrait restored after rotation", app: app)
     }
 
@@ -360,13 +460,12 @@ final class StillfieldUITests: XCTestCase {
         let recall = app.buttons["action.controls"]
         if recall.exists && recall.label == "Show controls" {
             recall.tap()
-            // Mow enters first during the slide; the controls on its right may
-            // still be outside the screen even though Mow is already hittable.
+            // Wait for the whole tool dock to settle after its slide.
             waitForMeadowLayout(in: app, portrait: app.frame.height > app.frame.width,
                                 tractorView: telemetry(in: app)?.tractorView == true,
                                 file: file, line: line)
         } else {
-            XCTAssertTrue(waitUntil(timeout: 3) { app.buttons["tool.mow"].isHittable }, file: file, line: line)
+            XCTAssertTrue(waitUntil(timeout: 3) { app.buttons["tool.harvest"].isHittable }, file: file, line: line)
         }
     }
 
@@ -394,13 +493,13 @@ final class StillfieldUITests: XCTestCase {
         return try XCTUnwrap(accepted, file: file, line: line)
     }
 
-    private func launchFreshMeadow() -> XCUIApplication {
+    private func launchFreshMeadow(fastCrops: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing", "--fresh-meadow"]
+        app.launchArguments = ["--ui-testing", "--fresh-meadow"] + (fastCrops ? ["--fast-crops"] : [])
         app.launch()
-        XCTAssertTrue(app.buttons["tool.mow"].waitForExistence(timeout: 40))
+        XCTAssertTrue(app.buttons["tool.harvest"].waitForExistence(timeout: 40))
         if app.buttons["action.begin"].exists {
             attachScreenshot("Welcome to Willowbrook", app: app)
             app.buttons["action.begin"].tap()
@@ -408,6 +507,18 @@ final class StillfieldUITests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: 5) { self.telemetry(in: app) != nil },
                       "Debug UI-test telemetry must be available on the native meadow surface.")
         return app
+    }
+
+    private func assertCropChoicesReachable(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        for crop in ["wheat", "sunflowers", "pumpkins"] {
+            let button = app.buttons["crop.\(crop)"]
+            XCTAssertTrue(button.isHittable, file: file, line: line)
+            XCTAssertGreaterThanOrEqual(button.frame.width, 44, file: file, line: line)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44, file: file, line: line)
+            XCTAssertTrue(app.frame.contains(button.frame), file: file, line: line)
+        }
+        XCTAssertFalse(app.buttons["farming.rest"].exists, file: file, line: line)
+        XCTAssertFalse(app.buttons["farming.meadow"].exists, file: file, line: line)
     }
 
     private func assertControlsReachable(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
@@ -423,7 +534,7 @@ final class StillfieldUITests: XCTestCase {
     private func dismissSheetAndWait(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
         app.buttons["sheet.close"].tap()
         XCTAssertTrue(waitUntil(timeout: 8) {
-            !app.buttons["sheet.close"].exists && app.buttons["tool.mow"].isHittable
+            !app.buttons["sheet.close"].exists && app.buttons["tool.harvest"].isHittable
         }, "The sheet must finish dismissing before another layout transition begins.", file: file, line: line)
     }
 

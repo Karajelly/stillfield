@@ -1,4 +1,5 @@
 import Foundation
+import StillfieldCore
 @preconcurrency import AVFoundation
 
 /// A quiet, entirely synthesized soundscape. Call `setEnabled` from the sound
@@ -45,6 +46,14 @@ final class FarmAudio {
         guard !disposed else { return }
         self.active = active
         reconcilePlayback()
+    }
+
+    func harvest(_ crop: Crop) {
+        guard shouldPlay, let graph, graph.engine.isRunning,
+              let buffer = graph.harvestBuffers[crop] else { return }
+        graph.harvest.stop()
+        graph.harvest.scheduleBuffer(buffer, at: nil, options: [])
+        graph.harvest.play()
     }
 
     func dispose() {
@@ -103,6 +112,7 @@ final class FarmAudio {
             graph.wind.stop()
             graph.tractor.stop()
             graph.bird.stop()
+            graph.harvest.stop()
             graph.engine.stop()
         }
         if sessionIsActive {
@@ -202,6 +212,8 @@ final class FarmAudio {
         let tractor = AVAudioPlayerNode()
         let tractorRate = AVAudioUnitVarispeed()
         let bird = AVAudioPlayerNode()
+        let harvest = AVAudioPlayerNode()
+        var harvestBuffers: [Crop: AVAudioPCMBuffer] = [:]
         let windBuffer: AVAudioPCMBuffer
         let tractorBuffer: AVAudioPCMBuffer
         let birdBuffers: [AVAudioPCMBuffer]
@@ -216,15 +228,28 @@ final class FarmAudio {
                 FarmAudio.makeBird(format: format, variant: variant)
             }
             guard !birdBuffers.isEmpty else { return nil }
+            for crop in Crop.allCases {
+                guard let note = FarmAudio.buffer(format: format, seconds: 0.6), let samples = note.floatChannelData?[0] else { continue }
+                let pitch: Double = crop == .sunflowers ? 620 : crop == .wheat ? 420 : 220
+                for i in 0..<Int(note.frameLength) {
+                    let t = Double(i) / format.sampleRate
+                    let envelope = min(1, t / 0.04) * pow(max(0, 1 - t / 0.6), 3)
+                    samples[i] = Float(sin(2 * .pi * pitch * t) * envelope)
+                }
+                harvestBuffers[crop] = note
+            }
 
             engine.attach(wind)
             engine.attach(tractor)
             engine.attach(tractorRate)
             engine.attach(bird)
+            engine.attach(harvest)
             engine.connect(wind, to: engine.mainMixerNode, format: format)
             engine.connect(tractor, to: tractorRate, format: format)
             engine.connect(tractorRate, to: engine.mainMixerNode, format: format)
             engine.connect(bird, to: engine.mainMixerNode, format: format)
+            engine.connect(harvest, to: engine.mainMixerNode, format: format)
+            harvest.volume = 0.025
             wind.volume = 0.12
             bird.volume = 0.018
         }

@@ -19,6 +19,25 @@ const plant = (f: FarmingEngine, cells: number[], crop: Crop = "wheat") => {
   f.applyCells(cells, "sow", crop);
 };
 describe("tranquil farming loop", () => {
+  it("starts with a harvest-ready plot of every crop without reseeding saved farms", () => {
+    const f = new FarmingEngine();
+    assert.ok(validFarm(f.snapshot()));
+    assert.equal(f.isGrowing, false);
+    for (const crop of CROPS) {
+      const cells = Array.from(f.cells.keys()).filter((i) => f.cropAt(i) === crop);
+      assert.ok(cells.length > 0, `${crop} has a starter plot`);
+      assert.ok(cells.every((i) => f.cells[i] === Ground.mature && f.progress[i] === 1));
+      const result = f.applyCells(cells, "harvest");
+      assert.equal(result.harvestResults[0].crop, crop);
+      assert.deepEqual(result.harvestResults[0].cells, cells);
+      assert.ok(f.display[crop] > 0);
+    }
+    const harvested = f.snapshot();
+    assert.deepEqual(new FarmingEngine(harvested).snapshot(), harvested);
+    f.reset();
+    const empty = f.snapshot();
+    assert.deepEqual(new FarmingEngine(empty).snapshot(), empty);
+  });
   it("completes wheat first, then repeats the same loop with every crop", () => {
     const f = fresh();
     for (const crop of CROPS) {
@@ -279,9 +298,6 @@ describe("tranquil farming loop", () => {
     assert.equal(f.cropAt(2), "sunflowers");
     assert.equal(f.stage(2), 3);
     assert.ok(validFarm(f.snapshot()));
-    const starter = new FarmingEngine();
-    assert.ok(starter.cells.includes(Ground.mature));
-    assert.equal(starter.isGrowing, false);
   });
   it("fits the whole old field, merges mixed crops deterministically, and preserves displays", () => {
     const old = {

@@ -52,7 +52,7 @@ let pace =
 let paused = false,
   soundEnabled = false,
   modalOpen = false,
-  introDismissed = !!saved.intro,
+  introDismissed = false,
   storageAvailable = true;
 const defaultTractor: TractorState = {
   x: -4,
@@ -73,26 +73,29 @@ let target: Point | null = null;
 let navigation = new TractorNavigation();
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
-  <main class="farm-app">
+  <main class="farm-app welcoming">
     <div id="scene" aria-label="Your pastoral farm. Tap or drag the meadow to drive. WASD or arrow keys follow the field rows, turning in place." role="application" tabindex="0"></div>
     <div class="vignette" aria-hidden="true"></div>
     <header class="topbar menu-panel" id="top-controls">
-      <a class="brand" href="#" aria-label="Stillfield home">${brandMark}<span>stillfield<span class="brand-tagline">a little farm. a little peace.</span></span></a>
-      <button class="place-pill" id="place" aria-label="About Willowbrook farm"><span class="live-dot"></span>Willowbrook farm ${icon("down")}</button>
+      <a class="brand" href="#" aria-label="Stillfield home">stillfield</a>
+      <button class="place-pill" id="place" aria-label="About Stillfield"><span class="live-dot"></span>Your farm ${icon("down")}</button>
       <div class="top-actions">
-        <div class="weather">${icon("sun")}<span id="weather-copy">A slow spring afternoon<span>18° · a gentle breeze</span></span></div>
+        <div class="weather">${icon("sun")}<span id="weather-copy">A slow summer morning<span>76° · a gentle breeze</span></span></div>
         <div class="action-group"><button class="round-button" id="sound" aria-label="Turn on nature sounds" aria-pressed="false" title="Nature sounds">${icon("muted")}</button><button class="round-button" id="pause" aria-label="Pause" aria-pressed="false" title="Pause (space)">${icon("pause")}</button><button class="round-button" id="settings" aria-label="Open settings" title="Make yourself at home">${icon("settings")}</button></div>
       </div>
     </header>
-    <section class="welcome ${introDismissed ? "dismissed" : ""}" id="welcome">
-      <div class="eyebrow"><span></span> THERE’S NO HURRY HERE</div>
-      <h1><span class="welcome-title">A good day<br>to take it <em>slow.</em></span><span class="welcome-title-short">Take it <em>slow.</em></span></h1>
-      <p>A little fresh air. A few tidy rows.<br>Nothing you need to finish.</p>
-      <button class="welcome-button" id="begin">Let’s wander ${icon("arrow")}</button>
+    <section class="welcome" id="welcome" aria-labelledby="welcome-title">
+      <div class="welcome-content">
+        <div class="eyebrow"><span></span> THERE’S NO HURRY HERE <span></span></div>
+        <h1 id="welcome-title">A good day<br>to take it <em>slow.</em></h1>
+        <p>A little fresh air. A few tidy rows.<br>Nothing you need to finish.</p>
+        <button class="welcome-button" id="begin">Let’s wander ${icon("arrow")}</button>
+      </div>
     </section>
-    <div class="field-note" id="field-note"><span class="note-line"></span><span>THE MEADOW<small>Room to do your own thing.</small></span></div>
     <div class="world-label" id="windmill-label"><span></span>Windmill hill</div>
-    <div class="world-label" id="pond-label"><span></span>The quiet pond</div>
+    <div class="world-label" id="barn-label"><span></span>The barn</div>
+    <div class="world-label" id="pond-label"><span></span>The pond</div>
+    <div class="world-label" id="field-label"><span></span>The field</div>
     <div id="destination" aria-hidden="true"><span></span></div>
     <section class="bottom-center menu-panel" id="tool-controls" aria-label="Tractor tools">
       <div class="crop-choices" id="crop-choice" role="group" aria-label="Crop to sow" hidden>${CROPS.map((crop) => `<button class="crop-button ${crop} ${crop === selectedCrop ? "selected" : ""}" data-crop="${crop}" aria-label="Sow ${CROP_NAMES[crop]}" aria-pressed="${crop === selectedCrop}">${icon(crop)}<span>${CROP_NAMES[crop]}</span></button>`).join("")}</div>
@@ -107,7 +110,7 @@ app.innerHTML = `
             `<button class="tool-button ${id === selectedTool ? "selected" : ""}" data-tool="${id}" aria-pressed="${id === selectedTool}" title="${desc} (${i + 1})"><span class="tool-illustration ${id}">${icon(id)}</span><span>${name}</span><kbd>${i + 1}</kbd></button>`,
         )
         .join("")}</nav>
-      <div class="drive-hint" id="drive-hint"><span class="hint-desktop"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> along the rows <span class="hint-dot">·</span></span> tap where the work should finish</div>
+      <div class="drive-hint" id="drive-hint"><span class="hint-desktop"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to drive <span class="hint-dot">·</span></span> tap or click to roam around</div>
     </section>
     <footer class="bottom-bar menu-panel" id="view-controls">
       <div class="zoom-controls"><button id="zoom-out" aria-label="Zoom out">−</button><button id="recenter" aria-label="Center the farm" title="Center the farm">${icon("expand")}</button><button id="zoom-in" aria-label="Zoom in">+</button></div>
@@ -118,14 +121,22 @@ app.innerHTML = `
     <dialog id="dialog" aria-labelledby="dialog-title"><div id="dialog-content"></div></dialog>
   </main>`;
 const sceneContainer = document.querySelector<HTMLDivElement>("#scene")!;
+const welcome = document.querySelector<HTMLElement>("#welcome")!;
+let introSeconds = 0;
+sceneContainer.inert = true;
 const ambientCopy = document.querySelectorAll<HTMLElement>(
-  ".brand, .place-pill, .weather, .field-note, .world-label, .drive-hint",
+  ".brand, .place-pill, .weather, .world-label, .drive-hint",
 );
-ambientCopy.forEach((element) => element.classList.add("ambient-copy"));
+ambientCopy.forEach((element) => {
+  element.classList.add("ambient-copy");
+  element.inert = true;
+});
 const menuPanels = document.querySelectorAll<HTMLElement>(".menu-panel");
+menuPanels.forEach((panel) => { panel.inert = true; });
 const controlsToggle =
   document.querySelector<HTMLButtonElement>("#controls-toggle")!;
 let controlsHidden = false;
+let controlsAutoHideDone = false;
 let controlsHideTimer: number | undefined;
 
 function cancelControlsHide() {
@@ -134,6 +145,8 @@ function cancelControlsHide() {
 }
 function setControlsHidden(hidden: boolean) {
   cancelControlsHide();
+  // After the first dismissal, the user decides when to tuck the menus away.
+  controlsAutoHideDone ||= hidden;
   const moveFocus =
     hidden &&
     Array.from(menuPanels).some((panel) =>
@@ -144,7 +157,7 @@ function setControlsHidden(hidden: boolean) {
     .querySelector(".farm-app")!
     .classList.toggle("controls-hidden", hidden);
   menuPanels.forEach((panel) => {
-    panel.inert = hidden;
+    panel.inert = hidden || !introDismissed;
     if (hidden) panel.setAttribute("aria-hidden", "true");
     else panel.removeAttribute("aria-hidden");
   });
@@ -156,7 +169,7 @@ function setControlsHidden(hidden: boolean) {
   if (moveFocus) controlsToggle.focus({ preventScroll: true });
 }
 function scheduleControlsHide(delay = 2000) {
-  if (!hasDriven || controlsHidden || controlsHideTimer !== undefined) return;
+  if (!hasDriven || controlsAutoHideDone || controlsHidden || controlsHideTimer !== undefined) return;
   controlsHideTimer = window.setTimeout(() => {
     controlsHideTimer = undefined;
     if (!paused && !modalOpen && !document.hidden) setControlsHidden(true);
@@ -178,6 +191,8 @@ try {
     powerPreference: "high-performance",
   });
 } catch {
+  welcome.remove();
+  sceneContainer.inert = false;
   sceneContainer.innerHTML =
     '<div class="fallback"><h1>Your meadow needs WebGL.</h1><p>Please open Stillfield in a current Safari or Chrome browser with graphics acceleration enabled.</p></div>';
   throw new Error("WebGL unavailable");
@@ -256,13 +271,21 @@ function updateTool(tool: Tool) {
     b.setAttribute("aria-pressed", String(active));
   });
   document.querySelector<HTMLElement>("#crop-choice")!.hidden = tool !== "sow";
+  positionLabels();
   persist();
 }
 function dismissIntro() {
   if (introDismissed) return;
   introDismissed = true;
-  document.querySelector("#welcome")!.classList.add("dismissed");
-  document.querySelector<HTMLElement>("#welcome")!.inert = true;
+  const moveFocus = welcome.contains(document.activeElement);
+  welcome.classList.add("dismissed");
+  welcome.inert = true;
+  welcome.setAttribute("aria-hidden", "true");
+  document.querySelector(".farm-app")!.classList.remove("welcoming");
+  sceneContainer.inert = false;
+  menuPanels.forEach((panel) => { panel.inert = controlsHidden; });
+  ambientCopy.forEach((element) => { element.inert = false; });
+  if (moveFocus) sceneContainer.focus({ preventScroll: true });
   persist();
 }
 function resize() {
@@ -285,21 +308,42 @@ function resize() {
 }
 function positionLabels() {
   camera.updateMatrixWorld();
-  for (const [id, p] of [
-    ["windmill-label", new THREE.Vector3(25, 0, -10)],
-    ["pond-label", new THREE.Vector3(28, 0, 23)],
+  const controlBounds = Array.from(
+    document.querySelectorAll<HTMLElement>(
+      ".topbar, .bottom-center, .zoom-controls",
+    ),
+    (element) => element.getBoundingClientRect(),
+  );
+  for (const [id, p, offsetY] of [
+    ["windmill-label", new THREE.Vector3(25, 0, -10), 28],
+    ["barn-label", new THREE.Vector3(-18, 8, -29), 0],
+    ["pond-label", new THREE.Vector3(30.5, 0, 20), -8],
+    ["field-label", new THREE.Vector3(-12, 0, FIELD.maxZ + 1.5), -6],
   ] as const) {
     const v = p.clone().project(camera);
     const el = document.getElementById(id)!;
     el.style.left = `${(v.x * 0.5 + 0.5) * innerWidth}px`;
-    const labelY = (-v.y * 0.5 + 0.5) * innerHeight + 28;
+    const labelY = (-v.y * 0.5 + 0.5) * innerHeight + offsetY;
     el.style.top = `${labelY}px`;
+    const bounds = el.getBoundingClientRect();
+    const overlapsControls = controlBounds.some(
+      (control) =>
+        bounds.left < control.right + 12 &&
+        bounds.right > control.left - 12 &&
+        bounds.top < control.bottom + 12 &&
+        bounds.bottom > control.top - 12,
+    );
     el.style.visibility =
-      labelY > innerHeight - 190 || labelY < 120 || v.x > 0.85 || v.x < -0.85
+      overlapsControls ||
+      bounds.left < 20 ||
+      bounds.right > innerWidth - 20 ||
+      bounds.top < 20 ||
+      bounds.bottom > innerHeight - 20
         ? "hidden"
         : "visible";
   }
 }
+void document.fonts.ready.then(positionLabels);
 function setLight() {
   sun.color.set(golden ? "#ffd299" : "#fff1ce");
   sun.intensity = golden ? 3.3 : 3.1;
@@ -308,7 +352,7 @@ function setLight() {
   scene.background = new THREE.Color(golden ? "#eee5ce" : "#e8ecda");
   scene.fog!.color.set(golden ? "#eee5ce" : "#e8ecda");
   document.querySelector("#weather-copy")!.innerHTML =
-    `${golden ? "A little golden hour" : "A slow spring afternoon"}<span>18° · a gentle breeze</span>`;
+    `${golden ? "A little golden hour" : "A slow summer morning"}<span>76° · a gentle breeze</span>`;
   document.body.classList.toggle("golden", golden);
 }
 function persist() {
@@ -400,7 +444,7 @@ function openDialog(content: string) {
 }
 function showHelp() {
   openDialog(
-    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO WILLOWBROOK</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>Tap where the work should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop.<br>WASD or arrow keys follow the field rows. Tap a new direction to turn in place; hold to drive. Up follows the view, even when the window is narrow.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Cultivate prepares soil and clears any crops. Sow wheat, sunflowers, or pumpkins, then harvest when they’re ready. A golden wheat patch is waiting beside your tractor. Harvests gather in pots and carts by the field.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Crops grow only while you’re here: sunflowers in 3 minutes, wheat in 6, pumpkins in 9. Nothing withers. Your meadow saves on this device.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
+    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO STILLFIELD</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>Tap where the work should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop.<br>WASD or arrow keys follow the field rows. Tap a new direction to turn in place; hold to drive. Up follows the view, even when the window is narrow.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Cultivate prepares soil and clears any crops. Sow wheat, sunflowers, or pumpkins, then harvest when they’re ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests gather in pots and carts by the field.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Crops grow only while you’re here: sunflowers in 3 minutes, wheat in 6, pumpkins in 9. Nothing withers. Your meadow saves on this device.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
   );
   dialog.querySelector("#help-done")!.addEventListener("click", closeDialog);
 }
@@ -512,6 +556,13 @@ window.addEventListener("keydown", (e) => {
     e.metaKey || e.ctrlKey || e.altKey
   )
     return;
+  if (!introDismissed) {
+    if (isDriveKey(e.code) || ["Enter", "Space", "Escape"].includes(e.code)) {
+      e.preventDefault();
+      if (!e.repeat) dismissIntro();
+    }
+    return;
+  }
   if (isDriveKey(e.code)) {
     e.preventDefault();
     if (!paused && !e.repeat) {
@@ -582,11 +633,7 @@ document
       persist();
     });
   });
-document.querySelector("#begin")!.addEventListener("click", () => {
-  dismissIntro();
-  sceneContainer.focus({ preventScroll: true });
-  toast("Tap anywhere on the meadow. We’ll take the slow road.");
-});
+welcome.addEventListener("click", dismissIntro);
 document.querySelector(".brand")!.addEventListener("click", (e) => {
   e.preventDefault();
   zoom = 1;
@@ -622,7 +669,6 @@ dialog.addEventListener("cancel", () => {
 setLight();
 resize();
 updateTool(selectedTool);
-document.querySelector<HTMLElement>("#welcome")!.inert = introDismissed;
 let changedSinceSave = false;
 const attachment = tractor.group.getObjectByName("attachment")!;
 const reducedMotion = window.matchMedia(
@@ -634,6 +680,11 @@ function animate(now: number) {
   const dt = Math.min(activeSeconds, 0.05);
   lastTime = now;
   if (document.hidden) return;
+  // Count visible time, allowing keyboard users to linger on the welcome button.
+  if (!introDismissed && windowActive && !welcome.contains(document.activeElement)) {
+    introSeconds += Math.min(activeSeconds, 0.25);
+    if (introSeconds >= 5) dismissIntro();
+  }
   if (!paused && !modalOpen && windowActive) {
     time += dt;
     const growth = field.advance(activeSeconds);
@@ -709,6 +760,7 @@ if (import.meta.env.DEV)
       golden,
       hasDriven,
       controlsHidden,
+      introDismissed,
       grid: Array.from(field.grid),
       farm: field.engine.snapshot(),
       crop: selectedCrop,

@@ -142,9 +142,7 @@ button:disabled {
   pointer-events: auto;
 }
 .brand {
-  display: flex;
-  gap: 12px;
-  align-items: center;
+  margin-left: -4px;
   text-decoration: none;
   color: var(--ink);
   font-family: var(--serif);
@@ -152,20 +150,6 @@ button:disabled {
   font-size: 37px;
   letter-spacing: -1.9px;
   line-height: 1;
-}
-.brand > svg {
-  width: 44px;
-  height: 44px;
-  margin-top: -7px;
-}
-.brand-tagline {
-  font-family: "DM Sans Variable", sans-serif;
-  display: block;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 1.13px;
-  margin: 9px 0 0 3px;
-  color: #78836f;
 }
 .place-pill {
   position: absolute;
@@ -252,22 +236,30 @@ button:disabled {
 }
 .welcome {
   position: absolute;
-  top: 164px;
-  left: 53px;
-  pointer-events: none;
-  transition: opacity 1.2s ease-out;
-  max-width: 290px;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  overflow: auto;
+  text-align: center;
+  background: radial-gradient(ellipse at center, #f7f5e9ed, #e8ecdaad);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  transition: opacity 1.6s ease, visibility 0s 1.6s;
+}
+.welcome-content {
+  width: min(100%, 580px);
 }
 .welcome .eyebrow {
   font-size: 9px;
-  letter-spacing: 1.8px;
+  letter-spacing: 2px;
   display: flex;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
+  justify-content: center;
   color: #7b8a6b;
-}
-.welcome-title-short {
-  display: none;
 }
 .welcome .eyebrow span {
   display: block;
@@ -293,23 +285,31 @@ h1 em {
   font-weight: 400;
   color: #72855b;
 }
+.welcome h1 {
+  font-size: clamp(42px, 5.2vw, 72px);
+  line-height: 1.15;
+  letter-spacing: -2px;
+  margin: 25px 0 22px;
+}
 p {
   line-height: 1.8;
 }
 .welcome p {
-  font-size: 12px;
-  color: #79856c;
+  font-size: 14px;
+  color: #718064;
   line-height: 1.9;
   margin: 0;
 }
 .welcome-button {
   display: flex;
   align-items: center;
-  gap: 19px;
-  pointer-events: auto;
-  margin-top: 21px;
-  padding: 11px 0;
-  background: transparent;
+  gap: 20px;
+  margin: 30px auto 0;
+  min-height: 44px;
+  padding: 12px 21px;
+  border: 1px solid #78906530;
+  border-radius: 24px;
+  background: #faf9ed80;
   font-size: 12px;
   font-weight: 600;
 }
@@ -323,42 +323,24 @@ p {
 }
 .welcome.dismissed {
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
 }
-.welcome.dismissed button {
-  pointer-events: none;
-}
-.field-note {
-  position: absolute;
-  top: 155px;
-  left: 43px;
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  pointer-events: none;
-  font-size: 9px;
-  letter-spacing: 2px;
-  line-height: 1.4;
-  color: #78876a;
+.welcoming .menu-panel,
+.welcoming .world-label {
   opacity: 0;
-  transition: opacity 1s;
 }
-.welcome.dismissed ~ .field-note {
-  opacity: 1;
-}
-.note-line {
-  width: 1px;
-  height: 37px;
-  background: #80956566;
-}
-.field-note small {
-  display: block;
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 12px;
-  letter-spacing: 0;
-  color: #7f8a74;
-  margin-top: 7px;
+@media (max-height: 500px) {
+  .welcome h1 {
+    font-size: 36px;
+    margin: 16px 0 12px;
+  }
+  .welcome p {
+    font-size: 12px;
+  }
+  .welcome-button {
+    margin-top: 18px;
+  }
 }
 .world-label {
   position: absolute;
@@ -830,10 +812,6 @@ dialog .ipad-tip {
   font-size: 30px;
 }
 @media (min-width: 1600px) {
-  .welcome {
-    top: 20%;
-    left: 4.4%;
-  }
   h1 {
     font-size: 48px;
   }
@@ -859,14 +837,6 @@ dialog .ipad-tip {
   }
   .brand {
     font-size: 32px;
-  }
-  .brand > svg {
-    width: 37px;
-    height: 37px;
-  }
-  .brand-tagline {
-    font-size: 8px;
-    letter-spacing: 1px;
   }
   .place-pill {
     font-size: 10px;
@@ -894,18 +864,8 @@ dialog .ipad-tip {
     width: 36px;
     height: 36px;
   }
-  .welcome {
-    top: 140px;
-    left: 34px;
-  }
   h1 {
     font-size: 35px;
-  }
-  .welcome p {
-    font-size: 11px;
-  }
-  .welcome .eyebrow {
-    font-size: 8px;
   }
   .bottom-bar {
     left: 24px;
@@ -932,13 +892,6 @@ dialog .ipad-tip {
   }
   .topbar {
     padding: 25px;
-  }
-  .welcome {
-    top: 141px;
-    left: 31px;
-  }
-  .field-note {
-    left: 29px;
   }
   .bottom-bar {
     bottom: 29px;
@@ -990,16 +943,6 @@ dialog .ipad-tip {
   }
   .brand {
     font-size: 29px;
-    gap: 7px;
-  }
-  .brand > svg {
-    width: 32px;
-    height: 32px;
-  }
-  .brand-tagline {
-    font-size: 7px;
-    letter-spacing: 0.7px;
-    margin-top: 7px;
   }
   .place-pill {
     display: none;
@@ -1010,28 +953,6 @@ dialog .ipad-tip {
   }
   .action-group {
     gap: 0;
-  }
-  .welcome {
-    top: calc(126px + env(safe-area-inset-top));
-    left: 25px;
-  }
-  .welcome h1 {
-    font-size: 31px;
-    margin: 15px 0 12px;
-  }
-  .welcome p {
-    font-size: 10px;
-  }
-  .welcome .eyebrow {
-    font-size: 7px;
-    letter-spacing: 1.3px;
-  }
-  .welcome-button {
-    font-size: 10px;
-    margin-top: 12px;
-  }
-  .welcome-button .icon {
-    width: 15px;
   }
   .bottom-center {
     bottom: calc(72px + env(safe-area-inset-bottom));
@@ -1060,14 +981,6 @@ dialog .ipad-tip {
   }
   .world-label {
     display: none;
-  }
-  .field-note {
-    top: 124px;
-    left: 24px;
-    font-size: 8px;
-  }
-  .field-note small {
-    font-size: 11px;
   }
   .toast {
     top: 104px;
@@ -1104,28 +1017,6 @@ dialog .ipad-tip {
   .brand {
     font-size: 28px;
   }
-  .brand > svg {
-    width: 32px;
-  }
-  .brand-tagline {
-    font-size: 7px;
-  }
-  .welcome {
-    top: 108px;
-    left: 30px;
-  }
-  .welcome h1 {
-    font-size: 29px;
-  }
-  .welcome p {
-    font-size: 10px;
-  }
-  .welcome-button {
-    margin-top: 10px;
-  }
-  .welcome .eyebrow {
-    font-size: 7px;
-  }
   .bottom-center {
     bottom: 16px;
   }
@@ -1145,43 +1036,16 @@ dialog .ipad-tip {
   .bottom-bar {
     bottom: 18px;
   }
-  .field-note {
-    top: 110px;
-  }
   .pause-veil {
     top: 85px;
   }
 }
 /* A quiet vertical composition, including portrait iPad and narrow split views. */
 @media (max-aspect-ratio: 1/1) {
-  .welcome {
-    top: calc(clamp(105px, 12vh, 145px) + env(safe-area-inset-top));
-    left: 20px;
-    right: 20px;
-    max-width: none;
-    text-align: center;
-  }
-  .welcome .eyebrow {
-    justify-content: center;
-    font-size: 8px;
-    letter-spacing: 1.5px;
-  }
-  .welcome h1 {
-    font-size: clamp(27px, 4.2vw, 35px);
-    letter-spacing: -0.9px;
-    margin: 12px 0 4px;
-  }
-  .welcome p,
-  .field-note,
   .world-label,
   .place-pill,
   .weather {
     display: none;
-  }
-  .welcome-button {
-    margin: 0 auto;
-    min-height: 44px;
-    font-size: 12px;
   }
   .round-button,
   .zoom-controls button {
@@ -1204,33 +1068,12 @@ dialog .ipad-tip {
   .brand {
     font-size: 25px;
   }
-  .brand > svg {
-    width: 28px;
-  }
-  .brand-tagline {
-    display: none;
-  }
-}
-@media (max-aspect-ratio: 1/1) and (max-height: 740px) {
-  .welcome {
-    top: calc(82px + env(safe-area-inset-top));
-  }
-  .welcome .eyebrow,
-  .welcome-title {
-    display: none;
-  }
-  .welcome-title-short {
-    display: inline;
-  }
-  .welcome h1 {
-    margin: 0;
-  }
 }
 .ambient-copy {
   transition: opacity 1.2s ease-out;
 }
 .menu-panel {
-  transition: translate 0.8s ease-in-out;
+  transition: translate 0.8s ease-in-out, opacity 1.6s ease;
 }
 .controls-hidden .menu-panel {
   translate: 100vw 0;

@@ -23,7 +23,7 @@ final class StillfieldUITests: XCTestCase {
             })
             revealControls(in: app)
         }
-        try drive(0.35, 0.45)
+        try drive(0.48, 0.45)
         XCTAssertGreaterThan(farmingValue("wheatDisplay", in: app), 0, "The starter patch must reward harvesting immediately.")
         attachScreenshot("First wheat harvest and wheelbarrow", app: app)
 

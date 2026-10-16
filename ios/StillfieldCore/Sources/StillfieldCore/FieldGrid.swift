@@ -79,8 +79,15 @@ public struct FieldGrid: Codable, Equatable, Sendable {
                 for i in FarmSimulation.cellsUnderBrush(x: x, z: 4.8, radius: 1.05) { cells[i] = Ground.mown.rawValue }
                 x += 0.2
             }
-            for i in FarmSimulation.cellsUnderSweep(from: .init(x: -12, z: 1.5), to: .init(x: -6, z: 1.5), radius: 1) {
-                cells[i] = Ground.mature.rawValue; crops[i] = Crop.wheat.rawValue; progress[i] = 1
+            // Square crop plots leave a broad grass gap above the mown rows.
+            let plots: [(Crop, Double)] = [(.sunflowers, -20.5), (.wheat, -11.5), (.pumpkins, -2.5)]
+            for (crop, minX) in plots {
+                for z in stride(from: -7.0, to: -2.0, by: Self.cellSize) {
+                    for x in stride(from: minX, to: minX + 5, by: Self.cellSize) {
+                        let i = Int((z - Self.minZ) / Self.cellSize) * Self.columns + Int((x - Self.minX) / Self.cellSize)
+                        cells[i] = Ground.mature.rawValue; crops[i] = crop.rawValue; progress[i] = 1
+                    }
+                }
             }
         }
     }

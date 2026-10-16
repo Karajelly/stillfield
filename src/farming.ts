@@ -241,15 +241,21 @@ export class FarmingEngine {
       for (let x = -4; x <= 13; x += 0.2)
         for (const i of cellsUnderBrush(x, 4.8, 1.05))
           this.cells[i] = Ground.mown;
-      // Beside the starting tractor, a short golden row invites the first harvest.
-      for (const i of cellsUnderSweep(
-        { x: -12, z: 1.5 },
-        { x: -6, z: 1.5 },
-        1,
-      )) {
-        this.cells[i] = Ground.mature;
-        this.crops[i] = 1;
-        this.progress[i] = 1;
+      // Square crop plots leave a broad grass gap above the mown rows.
+      for (const [crop, minX] of [
+        ["sunflowers", -20.5],
+        ["wheat", -11.5],
+        ["pumpkins", -2.5],
+      ] as const) {
+        for (let z = -7; z < -2; z += FIELD.cell)
+          for (let x = minX; x < minX + 5; x += FIELD.cell) {
+            const i =
+              Math.floor((z - FIELD.minZ) / FIELD.cell) * FIELD_COLUMNS +
+              Math.floor((x - FIELD.minX) / FIELD.cell);
+            this.cells[i] = Ground.mature;
+            this.crops[i] = CROPS.indexOf(crop) + 1;
+            this.progress[i] = 1;
+          }
       }
     }
   }

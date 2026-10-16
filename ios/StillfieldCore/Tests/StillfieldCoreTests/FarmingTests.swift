@@ -7,6 +7,25 @@ private func plant(_ field: inout FieldGrid, _ cells: [Int], _ crop: Crop = .whe
     field.apply(cells: cells, tool: .sow, crop: crop)
 }
 
+@Test func starterPlotsAreReadyToHarvestAndNeverReseedSavedFarms() throws {
+    var field = FieldGrid()
+    #expect(field.isValid && !field.isGrowing)
+    for crop in Crop.allCases {
+        let cells = field.cells.indices.filter { field.crop(at: $0) == crop }
+        #expect(!cells.isEmpty)
+        #expect(cells.allSatisfy { field.cells[$0] == Ground.mature.rawValue && field.progress[$0] == 1 })
+        let result = field.apply(cells: cells, tool: .harvest)
+        #expect(result.harvestResults.first?.crop == crop)
+        #expect(result.harvestResults.first?.cells == cells)
+        #expect(field.display[Int(crop.rawValue) - 1] > 0)
+    }
+    let harvested = try JSONDecoder().decode(FieldGrid.self, from: JSONEncoder().encode(field))
+    #expect(harvested == field)
+    field.reset()
+    let empty = try JSONDecoder().decode(FieldGrid.self, from: JSONEncoder().encode(field))
+    #expect(empty == field)
+}
+
 @Test func wheatThenAllCropsCompleteAndRepeatTheSameFourStageLoop() {
     var field = FieldGrid(starterRows: false)
     let config = FarmingConfiguration()

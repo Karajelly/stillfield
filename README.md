@@ -75,7 +75,7 @@ Commit regenerated resources and project changes alongside their source changes.
 - Crops move through planted soil, shoots, leafy growth, and maturity. Sunflowers take **3 minutes**, wheat **6**, and pumpkins **9** of active play. Mature crops wait indefinitely. Pausing, opening a sheet, or leaving the game pauses growth; no time passes offline.
 - Harvest mature crops to leave stubble and fill the field’s display by the barn path: sunflower pots, golden wheat sheaves in a wheelbarrow, and pumpkins in a wooden cart. The first harvested cell is visible immediately. Displays fill through three stages and never prevent further harvesting.
 - Sowing immediately changes the soil: golden seed rows for wheat, striped seed pairs on olive-brown beds for sunflowers, and simple orange seed rows for pumpkins. Small seeds make fresh planting visible in tractor view as well as from above.
-- A small mature wheat patch beside the starting tractor is ready to harvest. Repeated sowing and invalid passes leave crops and progress untouched. There is no selling, hauling, upkeep, or penalty for stopping.
+- A new farm starts with three small, mature plots of wheat, sunflowers, and pumpkins, ready to harvest. Two full mown strips and a half-length strip sit along the bottom of the field, with the tractor at the end of the half strip. Repeated sowing and invalid passes leave crops and progress untouched. There is no selling, hauling, upkeep, or penalty for stopping.
 - The pause button gives you a moment to breathe.
 - Settings control pace, golden light, haptics, and nature-sound volume. The tractor cruises at 3 m/s by default; the pace slider reaches 4.5 m/s.
 - Enable sound with the speaker button for wind, birds, and a soft tractor hum.
@@ -84,17 +84,19 @@ Commit regenerated resources and project changes alongside their source changes.
 
 ## Farming engine
 
-`src/farming.ts` and `ios/StillfieldCore/Sources/StillfieldCore/FieldGrid.swift` own the same deterministic loop. The 45 × 25 m field contains a 90 × 50 grid: 4,500 cells, each 50 cm square. Each cell has a visible plant location, with gentle jitter kept inside its square. Navigation supplies swept implement positions, action, and crop. Each field owns its cells and one display location; the MVP has one field, Willowbrook. Rendering and audio consume batched ground-change, visual-stage, crop-maturity, and harvest-result events. Display effects are brief, crop-specific, and respect reduced motion.
+`src/farming.ts` and `ios/StillfieldCore/Sources/StillfieldCore/FieldGrid.swift` own the same deterministic loop. The 45 × 25 m field contains a 90 × 50 grid: 4,500 cells, each 50 cm square. Each cell has a visible plant location, with gentle jitter kept inside its square. Navigation supplies swept implement positions, action, and crop. Each field owns its cells and one display location; the MVP has one field, stored under the legacy `willowbrook` ID. Rendering and audio consume batched ground-change, visual-stage, crop-maturity, and harvest-result events. Display effects are brief, crop-specific, and respect reduced motion.
 
 Tune `FARMING_CONFIG` on the web and `FarmingConfiguration` in Swift. Defaults are 180/360/540 seconds for sunflowers/wheat/pumpkins, a 1.25 m implement radius plus 0.25 m edge coverage, and display thresholds of 1, 64, and 256 area units. Each harvested 50 cm cell contributes four units, preserving the original harvest area and display pacing; a new display reaches its three stages after 1, 16, and 64 cells. Counts saturate at the final threshold; later harvest events still fire. All growth uses normalized progress saved at full precision; the game supplies active elapsed time independently of movement’s frame cap.
 
-Version 3 saves use the 50 cm grid. Version 1 and 2 meadows migrate by fitting the entire old field into the new bounds. Crops take precedence over bare ground; mixed cells keep their most common crop (ties use wheat, sunflowers, then pumpkins) and its furthest growth. Other mixed ground favors prepared soil, then stubble, then mown grass. Display contents remain exact. The original save is backed up before its first replacement: `stillfield-before-grid-v3` in browser storage, or a `meadow-before-grid-v3-*.json` sibling on iOS. Old wildflowers become mature sunflowers. Native invalid saves remain protected by recovery copies. A fresh meadow clears crops and displays; the starter wheat appears only on a new farm.
+Version 3 saves use the 50 cm grid. Version 1 and 2 meadows migrate by fitting the entire old field into the new bounds. Crops take precedence over bare ground; mixed cells keep their most common crop (ties use wheat, sunflowers, then pumpkins) and its furthest growth. Other mixed ground favors prepared soil, then stubble, then mown grass. Display contents remain exact. The original save is backed up before its first replacement: `stillfield-before-grid-v3` in browser storage, or a `meadow-before-grid-v3-*.json` sibling on iOS. Old wildflowers become mature sunflowers. Native invalid saves remain protected by recovery copies. A fresh meadow clears crops and displays; the starter plots appear only on a new farm.
 
 Engine tests exercise all state/action combinations, cultivating through growing and mature crops without harvest rewards, repeated passes, every crop’s four stages and duration, mixed-crop rest, inactive time, continuous coverage including adjacent diagonal passes, full/cleared displays, save round trips, and legacy grid migration with backups.
 
 ## Original web prototype
 
 The browser proof of concept remains in `src/` and `public/`. It uses Vite, TypeScript, Three.js, and Web Audio, with generated geometry and ground textures, a compact field grid, and instanced vegetation.
+
+Stillfield is the browser’s farm identity. Landscape labels mark Windmill hill, the barn, the pond, and the field; they stay anchored when zooming, clear the controls, and fade when driving begins. Compact and portrait layouts keep the landscape free of labels.
 
 ```sh
 npm install

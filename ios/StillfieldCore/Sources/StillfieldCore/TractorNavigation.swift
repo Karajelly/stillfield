@@ -72,7 +72,7 @@ public final class TractorNavigation {
             let destination: FarmPoint?
             if case .target(let point) = manual { destination = point } else { destination = movementTarget }
             state = FarmSimulation.advance(state, toward: destination, deltaTime: dt, obstacles: obstacles,
-                                           rowAssist: false, pace: pace * (plan?.paceScale ?? 1))
+                                           rowAssist: false, pace: pace, paceScale: plan?.paceScale ?? 1)
         }
         rows.sample(state, working: painting && tool != .wander && state.speed > 0.1)
         if turn == nil, work?.covered(state) == true { finish() }

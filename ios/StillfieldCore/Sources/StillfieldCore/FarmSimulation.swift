@@ -41,6 +41,11 @@ public struct Obstacle: Codable, Equatable, Sendable {
 }
 
 public enum FarmSimulation {
+    /// Keep saved slider positions: the default cruises at 3 m/s, the maximum at 4.5 m/s.
+    public static func cruiseSpeed(pace: Double = 0.85) -> Double {
+        3 + (clamp(pace, 0.55, 1.25) - 0.85) / (1.25 - 0.85) * (4.5 - 3)
+    }
+
     /// Advances the tractor in world coordinates. A delayed frame never moves it
     /// farther than 50 ms, so resuming the app cannot jump across the meadow.
     public static func advance(
@@ -49,7 +54,8 @@ public enum FarmSimulation {
         deltaTime: Double,
         obstacles: [Obstacle],
         rowAssist: Bool,
-        pace: Double = 1
+        pace: Double = 0.85,
+        paceScale: Double = 1
     ) -> TractorState {
         let dt = deltaTime.isFinite ? clamp(deltaTime, 0, 0.05) : 0
         var x = state.x
@@ -72,7 +78,7 @@ public enum FarmSimulation {
             // unhurried cruising speed. Slow down for a tight turn instead of
             // pushing forward away from a nearby destination.
             let alignment = max(0, cos(angleDifference(desiredHeading, heading)))
-            desiredSpeed = min(5.5 * pace, distance * 2.6) * (0.06 + 0.94 * alignment)
+            desiredSpeed = min(cruiseSpeed(pace: pace) * clamp(paceScale, 0, 1), distance * 2.6) * (0.06 + 0.94 * alignment)
         }
 
         // Braking also applies when a new target calls for a lower speed.

@@ -60,7 +60,7 @@ public struct GentleDrive: Sendable {
             let requested = Self.dragAmount(dx)
             steering = requested == 0 ? 0 : steering + (requested - steering) * (1 - exp(-12 * dt))
             result.heading -= steering * TractorHandling.turnRate * dt
-            let cruise = 5.5 * pace
+            let cruise = FarmSimulation.cruiseSpeed(pace: pace)
             desiredSpeed = cruise - (cruise - 1.29) * pow(abs(steering), 1.3)
         case .target(let target):
             steering = 0
@@ -70,7 +70,7 @@ public struct GentleDrive: Sendable {
                 result.heading += TractorHandling.clamp(turn * (1 - exp(-4 * dt)),
                     -TractorHandling.tapTurnRate * dt, TractorHandling.tapTurnRate * dt)
                 let alignment = max(0, cos(turn))
-                desiredSpeed = min(5.5 * pace * paceScale, distance * 2.4) * (0.04 + 0.96 * alignment * alignment)
+                desiredSpeed = min(FarmSimulation.cruiseSpeed(pace: pace) * TractorHandling.clamp(paceScale, 0, 1), distance * 2.4) * (0.04 + 0.96 * alignment * alignment)
             }
         case nil: steering = 0
         }

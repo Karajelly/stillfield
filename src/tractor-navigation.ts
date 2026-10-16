@@ -70,7 +70,7 @@ export class TractorNavigation {
       state = this.drive.step(state, dt, manual ?? (target ? { target } : null), obstacles, plan?.paceScale ?? 1, pace);
     } else {
       const destination = manual && "target" in manual ? manual.target : target;
-      state = advanceTractor(state, destination, dt, obstacles, false, pace * (plan?.paceScale ?? 1));
+      state = advanceTractor(state, destination, dt, obstacles, false, pace, plan?.paceScale ?? 1);
     }
     this.rows.sample(state, this.painting && tool !== "wander" && state.speed > 0.1);
     if (!this.turn && this.work?.covered(state)) finish();

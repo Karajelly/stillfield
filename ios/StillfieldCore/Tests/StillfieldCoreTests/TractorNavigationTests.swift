@@ -44,7 +44,7 @@ private final class TestMeadow {
             try #require(farm.value(at: point) == (tool == .mow ? 1 : tool == .till ? 2 : 3))
         }
     } } }
-    for follow in [false, true] { for speed in [0.0, 4.675] { for distance in [0.01, 0.3, 1, 2, 3, 5, 10] {
+    for follow in [false, true] { for speed in [0.0, 3, 4.5] { for distance in [0.01, 0.3, 1, 2, 3, 5, 10] {
         for degrees in [-180.0, -135, -90, -45, 0, 45, 90, 135, 180] {
             let angle = degrees * .pi / 180, point = FarmPoint(x: sin(angle) * distance, z: cos(angle) * distance)
             let farm = TestMeadow(TractorState(x: 0, z: 0, heading: 0, speed: speed), follow: follow)
@@ -124,7 +124,7 @@ private final class TestMeadow {
         farm.choose(point); try farm.settle(); #expect(farm.value(at: point) == 0)
     }
     for fps in [30.0, 60, 120] {
-        var drive = GentleDrive(), state = TractorState(x: 0, z: 0, heading: 0, speed: 4.675)
+        var drive = GentleDrive(), state = TractorState(x: 0, z: 0, heading: 0, speed: 3)
         for _ in 0..<Int(fps * 6) {
             if abs(state.heading) >= .pi { break }
             state = drive.step(state, deltaTime: 1 / fps, input: .drag(110))
@@ -164,7 +164,7 @@ private final class TestMeadow {
 
 @Test func repeatedDragDestinationsPreserveTheAttachmentSweep() throws {
     let nav = TractorNavigation()
-    let state = TractorState(x: 0, z: 0, heading: .pi / 2, speed: 4.675)
+    let state = TractorState(x: 0, z: 0, heading: .pi / 2, speed: 4.5)
     nav.choose(FarmPoint(x: 15, z: 0), state: state, tool: .mow, obstacles: [])
     let first = nav.step(state, deltaTime: 1 / 30, tool: .mow, obstacles: [])
     nav.choose(FarmPoint(x: 15.1, z: 0), state: first.state, tool: .mow, obstacles: [])

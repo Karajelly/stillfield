@@ -10,7 +10,7 @@ private func drive(
     toward target: FarmPoint?,
     frames: Int,
     obstacles: [Obstacle] = [],
-    pace: Double = 1
+    pace: Double = 0.85
 ) -> TractorState {
     var state = initial
     for _ in 0..<frames {
@@ -26,7 +26,7 @@ private func drive(
     #expect(cruising.z > 5 && cruising.z < 20)
     #expect(cruising.x == 0)
     #expect(cruising.heading == 0)
-    #expect(cruising.speed > first.speed && cruising.speed <= 5.5)
+    #expect(cruising.speed > first.speed && cruising.speed <= 3)
     let stopped = drive(cruising, toward: nil, frames: 120)
     #expect(stopped.speed == 0)
     #expect(stopped.z > cruising.z && stopped.z < cruising.z + 1)
@@ -42,18 +42,18 @@ private func drive(
 
 @Test func tapsProduceVisibleMovementWithinAQuarterSecond() {
     let forward = drive(toward: FarmPoint(x: 0, z: 15), frames: 6, pace: 0.85)
-    #expect(forward.speed > 2.5)
-    #expect(forward.z > 0.18)
+    #expect(forward.speed > 1.8)
+    #expect(forward.z > 0.1)
 
     let sideways = drive(toward: FarmPoint(x: 15, z: 0), frames: 15, pace: 0.85)
     #expect(sideways.heading > 1.1)
-    #expect(sideways.x > 0.2)
-    #expect(sideways.speed > 2.5)
+    #expect(sideways.x > 0.15)
+    #expect(sideways.speed > 1.8)
 }
 
 @Test func nearbyReverseTapBrakesAndTurnsWithoutALargeLoop() {
     let destination = FarmPoint(x: 0, z: -0.7)
-    var state = TractorState(x: 0, z: 0, heading: 0, speed: 5.5 * 0.85)
+    var state = TractorState(x: 0, z: 0, heading: 0, speed: 3)
     var farthestForward = state.z
     var arrivalFrame: Int?
     for index in 1...120 {
@@ -81,7 +81,7 @@ private func drive(
     let destinations = [FarmPoint(x: 0.7, z: 0), FarmPoint(x: 0, z: -0.7),
                         FarmPoint(x: -0.4, z: -0.4), FarmPoint(x: 0.4, z: 0.4)]
     for destination in destinations {
-        for initialSpeed in [0.0, 5.5 * 0.85] {
+        for initialSpeed in [0.0, 3, 4.5] {
             let initial = TractorState(x: 0, z: 0, heading: 0, speed: initialSpeed)
             let settled = drive(initial, toward: destination, frames: 240, pace: 0.85)
             #expect(hypot(settled.x - destination.x, settled.z - destination.z) < 0.38)
@@ -160,12 +160,21 @@ private func drive(
     #expect(free.heading > 0)
 }
 
-@Test func paceChangesDistanceWithoutChangingBounds() {
+@Test func defaultCruisesAtThreeAndSliderReachesFourPointFiveInEveryDriveMode() {
     let slow = drive(toward: FarmPoint(x: 0, z: 25), frames: 120, pace: 0.55)
+    let normal = drive(toward: FarmPoint(x: 0, z: 25), frames: 120)
     let quick = drive(toward: FarmPoint(x: 0, z: 25), frames: 120, pace: 1.25)
-    #expect(slow.z > 0 && quick.z > slow.z)
-    #expect(slow.speed <= 5.5 * 0.55)
-    #expect(quick.speed <= 5.5 * 1.25)
+    #expect(slow.z > 0 && normal.z > slow.z && quick.z > normal.z)
+    #expect(normal.speed > 2.99 && normal.speed <= 3)
+    for (pace, limit) in [(0.55, 1.875), (MeadowSave().pace, 3.0), (1.25, 4.5)] {
+        let iso = drive(toward: FarmPoint(x: 0, z: 25), frames: 120, pace: pace)
+        #expect(iso.speed > limit - 0.01 && iso.speed <= limit)
+        for input in [DriveInput.drag(0), .target(FarmPoint(x: 0, z: 25))] {
+            var driver = GentleDrive(), state = stationary
+            for _ in 0..<120 { state = driver.step(state, deltaTime: frame, input: input, pace: pace) }
+            #expect(state.speed > limit - 0.01 && state.speed <= limit)
+        }
+    }
 }
 
 @Test func circularBrushClipsAtCornersWithoutWrapping() {

@@ -73,7 +73,7 @@ Commit regenerated resources and project changes alongside their source changes.
 - A cream ring stays on the spot you chose. Tap again to redirect the tractor; its cruising pace stays gentle. The 2.57 m working swath matches the visible deck and covers its continuous movement between frames.
 - Choose **Mow**, **Till**, **Sow**, or **Wander**. Wandering leaves the field as it is.
 - The pause button gives you a moment to breathe.
-- Settings control pace, golden light, haptics, and nature-sound volume.
+- Settings control pace, golden light, haptics, and nature-sound volume. The tractor cruises at 3 m/s by default; the pace slider reaches 4.5 m/s.
 - Enable sound with the speaker button for wind, birds, and a soft tractor hum.
 - Your field, tractor position, tool, and settings save on this device. There is no account or cloud sync.
 - **Settings → A fresh meadow** asks before clearing the field. The rest of your preferences stay in place.

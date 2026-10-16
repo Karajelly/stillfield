@@ -41,7 +41,7 @@ it("works through endpoints and settles for every tool, view, frame rate and clo
       assert.equal(farm.cells.get(cell), tool === "mow" ? 1 : tool === "till" ? 2 : 3);
     }
   }
-  for (const follow of [false, true]) for (const speed of [0, 4.675])
+  for (const follow of [false, true]) for (const speed of [0, 3, 4.5])
     for (const distance of [0.01, 0.3, 1, 2, 3, 5, 10]) for (const degrees of [-180, -135, -90, -45, 0, 45, 90, 135, 180]) {
       const angle = degrees * Math.PI / 180, point = { x: Math.sin(angle) * distance, z: Math.cos(angle) * distance };
       const farm = meadow({ x: 0, z: 0, heading: 0, speed }, follow);
@@ -119,7 +119,7 @@ it("blocked work cannot remotely paint its target and neutral steering has no an
     assert.equal(farm.cells.has(WorkDestination.create({ x: 12, z: 0.125 }, farm.state, "mow")!.cell), false);
   }
   for (const fps of [30, 60, 120]) {
-    const drive = new GentleDrive(); let state = { x: 0, z: 0, heading: 0, speed: 4.675 };
+    const drive = new GentleDrive(); let state = { x: 0, z: 0, heading: 0, speed: 3 };
     for (let i = 0; i < fps * 6 && Math.abs(state.heading) < Math.PI; i++) state = drive.step(state, 1 / fps, { drag: 110 });
     assert.ok(Math.abs(state.x) > 2 && Math.abs(state.x) < 2.5);
     const heading = state.heading;
@@ -131,7 +131,7 @@ it("blocked work cannot remotely paint its target and neutral steering has no an
 
 it("repeated drag destinations preserve the attachment sweep between frames", () => {
   const nav = new TractorNavigation();
-  let state = { x: 0, z: 0, heading: Math.PI / 2, speed: 4.675 };
+  let state = { x: 0, z: 0, heading: Math.PI / 2, speed: 4.5 };
   nav.choose({ x: 15, z: 0 }, state, "mow", []);
   const first = nav.step(state, 1 / 30, "mow", []);
   state = first.state;

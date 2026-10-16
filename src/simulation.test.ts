@@ -7,6 +7,7 @@ import {
   FIELD,
 } from "./simulation";
 import type { Obstacle, Point, TractorState } from "./simulation";
+import { GentleDrive } from "./handling";
 
 const stationary: TractorState = { x: 0, z: 0, heading: 0, speed: 0 };
 const frame = 1 / 60;
@@ -15,7 +16,7 @@ function drive(
   initial: TractorState,
   target: Point | null,
   frames: number,
-  pace = 1,
+  pace = 0.85,
 ) {
   let state = initial;
   for (let index = 0; index < frames; index++) {
@@ -32,7 +33,7 @@ describe("advanceTractor", () => {
     assert.ok(cruising.z > 5 && cruising.z < 20);
     assert.equal(cruising.x, 0);
     assert.equal(cruising.heading, 0);
-    assert.ok(cruising.speed > first.speed && cruising.speed <= 5.5);
+    assert.ok(cruising.speed > first.speed && cruising.speed <= 3);
     assert.deepEqual(stationary, { x: 0, z: 0, heading: 0, speed: 0 });
   });
 
@@ -53,7 +54,7 @@ describe("advanceTractor", () => {
   });
 
   it("coasts to a complete stop after steering is released", () => {
-    const initial = { ...stationary, speed: 5.5 };
+    const initial = { ...stationary, speed: 4.5 };
     const first = advanceTractor(initial, null, frame, [], false);
     const stopped = drive(initial, null, 120);
     assert.ok(first.speed > 0 && first.speed < initial.speed);
@@ -179,12 +180,22 @@ describe("advanceTractor", () => {
     assert.ok(free.heading > 0);
   });
 
-  it("makes the slower pace cover less ground over the same interval", () => {
+  it("cruises at 3 m/s by default and lets the pace slider reach 4.5 m/s in every drive mode", () => {
     const slow = drive(stationary, { x: 0, z: 25 }, 120, 0.55);
+    const normal = drive(stationary, { x: 0, z: 25 }, 120);
     const quick = drive(stationary, { x: 0, z: 25 }, 120, 1.25);
-    assert.ok(slow.z > 0 && quick.z > slow.z);
-    assert.ok(slow.speed <= 5.5 * 0.55);
-    assert.ok(quick.speed <= 5.5 * 1.25);
+    assert.ok(slow.z > 0 && normal.z > slow.z && quick.z > normal.z);
+    assert.ok(normal.speed > 2.99 && normal.speed <= 3);
+    for (const [pace, limit] of [[0.55, 1.875], [0.85, 3], [1.25, 4.5]]) {
+      const iso = drive(stationary, { x: 0, z: 25 }, 120, pace);
+      assert.ok(iso.speed > limit - 0.01 && iso.speed <= limit);
+      for (const input of [{ drag: 0 }, { target: { x: 0, z: 25 } }]) {
+        const driver = new GentleDrive();
+        let state = stationary;
+        for (let i = 0; i < 120; i++) state = driver.step(state, frame, input, [], 1, pace);
+        assert.ok(state.speed > limit - 0.01 && state.speed <= limit);
+      }
+    }
   });
 });
 

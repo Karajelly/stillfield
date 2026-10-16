@@ -1,4 +1,4 @@
-import { angleDifference, clamp } from "./simulation";
+import { angleDifference, clamp, cruiseSpeed } from "./simulation";
 import type { Obstacle, Point, TractorState } from "./simulation";
 
 export const tuning = {
@@ -49,7 +49,7 @@ export class GentleDrive {
       // Heading-positive is screen-left for the +Z forward tractor.
       heading -= this.steering * tuning.turnRate * dt;
       // A small radius comes from slowing travel, without increasing camera yaw.
-      const cruise = 5.5 * pace;
+      const cruise = cruiseSpeed(pace);
       desiredSpeed = cruise - (cruise - tuning.tightTurnSpeed) * Math.abs(this.steering) ** 1.3;
     } else if (input && "target" in input) {
       this.steering = 0;
@@ -58,7 +58,7 @@ export class GentleDrive {
         const turn = angleDifference(Math.atan2(input.target.x - x, input.target.z - z), heading);
         heading += clamp(turn * (1 - Math.exp(-4 * dt)), -tuning.tapTurnRate * dt, tuning.tapTurnRate * dt);
         const alignment = Math.max(0, Math.cos(turn));
-        desiredSpeed = Math.min(5.5 * pace * paceScale, distance * 2.4) * (0.04 + 0.96 * alignment ** 2);
+        desiredSpeed = Math.min(cruiseSpeed(pace) * clamp(paceScale, 0, 1), distance * 2.4) * (0.04 + 0.96 * alignment ** 2);
       }
     } else this.steering = 0;
     speed += (desiredSpeed - speed) * (1 - Math.exp(-(desiredSpeed > speed ? tuning.acceleration : tuning.braking) * dt));

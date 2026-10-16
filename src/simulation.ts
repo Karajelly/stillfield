@@ -15,6 +15,10 @@ export const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 export const angleDifference = (a: number, b: number) =>
   Math.atan2(Math.sin(a - b), Math.cos(a - b));
+/** Keep saved slider positions: the default cruises at 3 m/s, the maximum at 4.5 m/s. */
+export function cruiseSpeed(pace = 0.85) {
+  return 3 + (clamp(pace, 0.55, 1.25) - 0.85) / (1.25 - 0.85) * (4.5 - 3);
+}
 export function seededRandom(seed: number) {
   return () => {
     seed = (seed * 1664525 + 1013904223) >>> 0;
@@ -27,7 +31,8 @@ export function advanceTractor(
   dt: number,
   obstacles: Obstacle[],
   rowAssist: boolean,
-  pace = 1,
+  pace = 0.85,
+  paceScale = 1,
 ): TractorState {
   dt = clamp(dt, 0, 0.05);
   let { x, z, heading, speed } = state;
@@ -45,7 +50,7 @@ export function advanceTractor(
     const turn = angleDifference(desiredHeading, heading);
     heading += clamp(turn, -dt * 2.4, dt * 2.4);
     desiredSpeed =
-      Math.min(5.5 * pace, distance * 1.8) *
+      Math.min(cruiseSpeed(pace) * clamp(paceScale, 0, 1), distance * 1.8) *
       (0.18 + 0.82 * Math.max(0, Math.cos(turn)));
   }
   speed += (desiredSpeed - speed) * Math.min(1, dt * (desiredSpeed ? 3.8 : 7));

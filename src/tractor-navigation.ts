@@ -3,6 +3,8 @@ import type { Obstacle, Point, Tool, TractorState } from "./simulation";
 import { GentleDrive } from "./handling";
 import { attachmentPoint, WorkDestination } from "./work-destination";
 import { alignmentForTap, EndTurn, WorkedRows } from "./row-end";
+import { advanceGridTractor } from "./keyboard-navigation";
+import type { GridInput } from "./keyboard-navigation";
 
 /** Destination work and row-end arrivals, independent of rendering and input events. */
 export class TractorNavigation {
@@ -10,6 +12,7 @@ export class TractorNavigation {
   work: WorkDestination | null = null;
   rows = new WorkedRows();
   turn: EndTurn | null = null;
+  gridTurning = false;
   private aligning = false;
   private painting = true;
   private lastBrush: Point | null = null;
@@ -20,6 +23,7 @@ export class TractorNavigation {
     this.target = null; this.work = null; this.turn = null;
     this.aligning = false; this.painting = false; this.lastBrush = null;
     this.blockedTime = 0; this.drive.reset();
+    this.gridTurning = false;
   }
   choose(point: Point, state: TractorState, tool: Tool, obstacles: Obstacle[]) {
     const previousBrush = this.painting ? this.lastBrush : null;
@@ -38,7 +42,7 @@ export class TractorNavigation {
     if (this.target && (!this.aligning || tool === "wander")) this.choose(this.target, state, tool, obstacles);
   }
   step(state: TractorState, dt: number, tool: Tool, obstacles: Obstacle[], pace = 0.85,
-    manual: { target: Point } | { drag: number } | null = null, follow = false) {
+    manual: { target: Point } | { drag: number } | { grid: GridInput } | null = null, follow = false) {
     dt = Number.isFinite(dt) ? clamp(dt, 0, 0.05) : 0;
     const paint: Point[] = [];
     let completed = false, blocked = false;
@@ -59,6 +63,7 @@ export class TractorNavigation {
     if (!this.turn && this.work?.covered(state)) finish();
     const previous = state, plan = this.turn ? null : this.work?.plan(state);
     const target = plan?.target ?? this.target;
+    this.gridTurning = false;
     if (this.turn) {
       state = this.turn.step(state, dt, obstacles);
       if (this.turn.blocked) { this.cancel(); blocked = true; }
@@ -66,6 +71,12 @@ export class TractorNavigation {
         this.work?.setArrivalHeading(this.turn.alignment.heading);
         this.turn = null; this.painting = true; this.lastBrush = null;
       }
+    } else if (manual && "grid" in manual) {
+      this.gridTurning = Math.abs(angleDifference(manual.grid.heading, state.heading)) > 1e-8;
+      this.painting = !this.gridTurning && manual.grid.driving;
+      if (!this.painting) this.lastBrush = null;
+      else this.lastBrush ??= attachmentPoint(state);
+      state = advanceGridTractor(state, manual.grid, dt, obstacles, pace);
     } else if (follow) {
       state = this.drive.step(state, dt, manual ?? (target ? { target } : null), obstacles, plan?.paceScale ?? 1, pace);
     } else {

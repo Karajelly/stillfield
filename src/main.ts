@@ -11,6 +11,7 @@ import { TractorNavigation } from "./tractor-navigation";
 import type { Point, Tool, TractorState } from "./simulation";
 import { icon, brandMark } from "./icons";
 import { overviewFraming } from "./overview";
+import { GridKeyboard, isDriveKey } from "./keyboard-navigation";
 
 interface Save {
   version: 1 | 2 | 3;
@@ -73,7 +74,7 @@ let navigation = new TractorNavigation();
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
   <main class="farm-app">
-    <div id="scene" aria-label="Your pastoral farm. Tap or drag the meadow to drive, or use arrow keys." role="application" tabindex="0"></div>
+    <div id="scene" aria-label="Your pastoral farm. Tap or drag the meadow to drive. WASD or arrow keys follow the field rows, turning in place." role="application" tabindex="0"></div>
     <div class="vignette" aria-hidden="true"></div>
     <header class="topbar menu-panel" id="top-controls">
       <a class="brand" href="#" aria-label="Stillfield home">${brandMark}<span>stillfield<span class="brand-tagline">a little farm. a little peace.</span></span></a>
@@ -106,7 +107,7 @@ app.innerHTML = `
             `<button class="tool-button ${id === selectedTool ? "selected" : ""}" data-tool="${id}" aria-pressed="${id === selectedTool}" title="${desc} (${i + 1})"><span class="tool-illustration ${id}">${icon(id)}</span><span>${name}</span><kbd>${i + 1}</kbd></button>`,
         )
         .join("")}</nav>
-      <div class="drive-hint" id="drive-hint"><span class="hint-desktop"><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> to drive <span class="hint-dot">·</span></span> tap where the work should finish</div>
+      <div class="drive-hint" id="drive-hint"><span class="hint-desktop"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> along the rows <span class="hint-dot">·</span></span> tap where the work should finish</div>
     </section>
     <footer class="bottom-bar menu-panel" id="view-controls">
       <div class="zoom-controls"><button id="zoom-out" aria-label="Zoom out">−</button><button id="recenter" aria-label="Center the farm" title="Center the farm">${icon("expand")}</button><button id="zoom-in" aria-label="Zoom in">+</button></div>
@@ -196,7 +197,6 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color("#e8ecda");
 scene.fog = new THREE.Fog("#e8ecda", 125, 230);
 const camera = new THREE.OrthographicCamera(-55, 55, 35, -35, 0.1, 300);
-const keyboardRight = new THREE.Vector3();
 const keyboardDown = new THREE.Vector3();
 const hemi = new THREE.HemisphereLight("#fff8df", "#7c9060", 2.5);
 scene.add(hemi);
@@ -244,7 +244,7 @@ let zoom = 1,
   time = 0,
   lastSave = 0,
   hasDriven = false;
-const keys = new Set<string>();
+const keyboard = new GridKeyboard();
 function updateTool(tool: Tool) {
   selectedTool = tool;
   navigation.changeTool(tractorState, tool, world.obstacles);
@@ -274,7 +274,6 @@ function resize() {
   camera.position.copy(position);
   camera.lookAt(focus);
   camera.updateMatrixWorld();
-  keyboardRight.setFromMatrixColumn(camera.matrixWorld, 0);
   keyboardDown.copy(position).sub(focus).setY(0).normalize();
   camera.left = (-vertical * aspect) / 2;
   camera.right = (vertical * aspect) / 2;
@@ -347,7 +346,7 @@ function stop() {
   navigation.cancel();
   pointerId = null;
   target = null;
-  keys.clear();
+  keyboard.reset();
   cursor.visible = false;
   tractorState.speed = 0;
   audio.setDriving(0);
@@ -401,7 +400,7 @@ function openDialog(content: string) {
 }
 function showHelp() {
   openDialog(
-    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO WILLOWBROOK</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>Tap where the work should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop.<br>Arrow keys or WASD work, too.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Cultivate prepares soil and clears any crops. Sow wheat, sunflowers, or pumpkins, then harvest when they’re ready. A golden wheat patch is waiting beside your tractor. Harvests gather in pots and carts by the field.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Crops grow only while you’re here: sunflowers in 3 minutes, wheat in 6, pumpkins in 9. Nothing withers. Your meadow saves on this device.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
+    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO WILLOWBROOK</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>Tap where the work should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop.<br>WASD or arrow keys follow the field rows. Tap a new direction to turn in place; hold to drive. Up follows the view, even when the window is narrow.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Cultivate prepares soil and clears any crops. Sow wheat, sunflowers, or pumpkins, then harvest when they’re ready. A golden wheat patch is waiting beside your tractor. Harvests gather in pots and carts by the field.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Crops grow only while you’re here: sunflowers in 3 minutes, wheat in 6, pumpkins in 9. Nothing withers. Your meadow saves on this device.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
   );
   dialog.querySelector("#help-done")!.addEventListener("click", closeDialog);
 }
@@ -451,6 +450,7 @@ function pointerTarget(event: PointerEvent) {
   );
   raycaster.setFromCamera(pointer, camera);
   if (raycaster.ray.intersectPlane(groundPlane, intersection)) {
+    keyboard.reset();
     target = {
       x: clamp(intersection.x, -39, 39),
       z: clamp(intersection.z, -30, 28),
@@ -502,32 +502,20 @@ sceneContainer.addEventListener("lostpointercapture", () => {
   if (pointerId !== null) stop();
 });
 sceneContainer.addEventListener("contextmenu", (e) => e.preventDefault());
-const driveKeys = [
-  "ArrowUp",
-  "ArrowDown",
-  "ArrowLeft",
-  "ArrowRight",
-  "w",
-  "a",
-  "s",
-  "d",
-  "W",
-  "A",
-  "S",
-  "D",
-];
 window.addEventListener("keydown", (e) => {
   if (
     modalOpen ||
     e.target instanceof HTMLInputElement ||
-    e.target instanceof HTMLSelectElement
+    e.target instanceof HTMLSelectElement ||
+    e.target instanceof HTMLTextAreaElement ||
+    (e.target instanceof HTMLElement && e.target.isContentEditable) ||
+    e.metaKey || e.ctrlKey || e.altKey
   )
     return;
-  if (driveKeys.includes(e.key)) {
+  if (isDriveKey(e.code)) {
     e.preventDefault();
-    if (!paused) {
-      navigation.cancel();
-      keys.add(e.key.toLowerCase());
+    if (!paused && !e.repeat) {
+      keyboard.press(e.code, keyboardDown);
       dismissIntro();
       scheduleControlsHide();
     }
@@ -547,11 +535,7 @@ window.addEventListener("keydown", (e) => {
   }
 });
 window.addEventListener("keyup", (e) => {
-  keys.delete(e.key.toLowerCase());
-  if (driveKeys.includes(e.key) && keys.size === 0) {
-    target = null;
-    cursor.visible = false;
-  }
+  keyboard.release(e.code);
 });
 window.addEventListener("focus", () => {
   windowActive = true;
@@ -654,36 +638,18 @@ function animate(now: number) {
     time += dt;
     const growth = field.advance(activeSeconds);
     changedSinceSave ||= growth.advancedSeconds > 0;
-    if (keys.size) {
-      let sx = 0,
-        sy = 0;
-      if (keys.has("arrowup") || keys.has("w")) sy -= 1;
-      if (keys.has("arrowdown") || keys.has("s")) sy += 1;
-      if (keys.has("arrowleft") || keys.has("a")) sx -= 1;
-      if (keys.has("arrowright") || keys.has("d")) sx += 1;
-      if (sx || sy) {
-        const angle = Math.atan2(
-          sx * keyboardRight.x + sy * keyboardDown.x,
-          sx * keyboardRight.z + sy * keyboardDown.z,
-        );
-        target = {
-          x: tractorState.x + Math.sin(angle) * 12,
-          z: tractorState.z + Math.cos(angle) * 12,
-        };
-        cursor.visible = false;
-      } else {
-        target = null;
-      }
-    }
+    const gridInput = keyboard.input;
+    const previousHeading = tractorState.heading;
     const movement = navigation.step(
       tractorState,
       dt,
       selectedTool,
       world.obstacles,
       pace,
-      keys.size && target ? { target } : null,
+      gridInput ? { grid: gridInput } : null,
     );
     tractorState = movement.state;
+    changedSinceSave ||= tractorState.heading !== previousHeading;
     target = navigation.target;
     cursor.visible = target !== null;
     movement.paint.forEach((point, index, points) => {
@@ -717,7 +683,7 @@ function animate(now: number) {
     tractor.group.rotation.y = tractorState.heading;
     tractor.update(tractorState.speed, dt, time);
     attachment.position.y +=
-      ((navigation.turn ? 0.4 : 0) - attachment.position.y) *
+      ((navigation.turn || navigation.gridTurning ? 0.4 : 0) - attachment.position.y) *
       (1 - Math.exp(-8 * dt));
     world.update(reducedMotion ? 0 : time, reducedMotion ? 0 : dt);
     audio.setDriving(tractorState.speed / 6);
@@ -755,6 +721,7 @@ if (import.meta.env.DEV)
       },
       target,
       turningAtRowEnd: !!navigation.turn,
+      turningInPlace: navigation.gridTurning,
       workedRow: navigation.rows.last,
     }),
   });

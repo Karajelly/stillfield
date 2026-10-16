@@ -109,7 +109,9 @@ npm run build
 npm run preview
 ```
 
-The browser version also supports arrow keys/WASD to steer, number keys 1–4 to switch tools, and Space or Escape to pause.
+The browser version supports arrow keys/WASD along the field's rows and columns. Directions follow the view: W/↑ chooses the grid axis pointing most upward, and the mapping rotates with the farm in a narrow window. A held key keeps its direction through resizing; the next press uses the new view. The most recently pressed direction wins when keys overlap, so movement stays on one grid axis.
+
+Changing direction pivots in place through 90° turns before driving, with the implement lifted. A quick tap toward another direction finishes the turn without advancing; hold to drive, and release to stop. Reversals use two quarter turns in the same cell. Number keys 1–4 switch tools; Space or Escape pauses.
 
 Deploy `dist/` at the root of an HTTPS static host for browser installation and offline caching. Safari → Share → Add to Home Screen opens the prototype as a standalone web app. The HTTP LAN preview cannot register a service worker; browser offline play requires an HTTPS production deployment and one successful initial visit. Fonts, icons, and production assets are bundled locally and precached.
 

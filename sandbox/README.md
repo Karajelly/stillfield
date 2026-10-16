@@ -17,7 +17,7 @@ The next-row menu, suggested lanes, automatic adjacent spacing, heading snap in 
 To restart:
 
 ```sh
-cd ~/Projects/farmist-handling-sandbox
+cd ~/Projects/stillfield-handling-sandbox
 npm run dev -- --host 127.0.0.1 --port 5187 --strictPort
 ```
 

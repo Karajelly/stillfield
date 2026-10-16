@@ -52,6 +52,8 @@ npm run ios:project
 
 Native geometry is exported from `src/tractor.ts` and `src/world.ts` into `ios/Stillfield/Resources/FarmScene.json`. The shared artwork uses rounded enamel bodywork, curved fenders, cushioned tires, and soft tree crowns; the native field renderer adds curved grass and petaled wildflowers. RealityKit loads the bundled meshes directly, with locally generated diffuse daylight. Native play uses no browser, web view, JavaScript engine, or development server.
 
+The web palette is the visual reference: `FarmScreen.swift` mirrors the sRGB colors and vignette in `src/style.css`, `FieldRenderer.swift` mirrors the ground and vegetation swatches in `src/field.ts`, and native daylight uses the light colors in `src/main.ts`. Keep those pairs in sync when changing colors. `FarmViewport.swift` softens RealityKit's scene output to approximate the web's ACES filmic finish on iOS 18 and later; UI colors stay outside that treatment. Check both normal and golden light when adjusting the palette.
+
 To rebuild the bundled artwork and icon after changing their sources:
 
 ```sh

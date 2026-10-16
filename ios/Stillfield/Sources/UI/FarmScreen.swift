@@ -7,12 +7,96 @@ enum FarmSheet: String, Identifiable {
 }
 
 private enum MeadowPalette {
-    static let ink = Color(red: 0.23, green: 0.30, blue: 0.21)
-    static let muted = Color(red: 0.39, green: 0.44, blue: 0.34)
-    static let cream = Color(red: 0.97, green: 0.96, blue: 0.90)
-    static let sage = Color(red: 0.85, green: 0.88, blue: 0.77)
-    static let green = Color(red: 0.40, green: 0.49, blue: 0.32)
-    static let gold = Color(red: 0.70, green: 0.57, blue: 0.29)
+    // Canonical UI colors live in src/style.css. Keep exact sRGB values here
+    // so SwiftUI uses the same palette as the web app.
+    static let ink = color(0x344c40)
+    static let muted = color(0x7d8874)
+    static let cream = color(0xf7f5e9)
+    static let green = color(0x52745a)
+    static let background = color(0xe8ecda)
+    static let goldenBackground = color(0xeee5ce) // src/main.ts golden scene background
+
+    static let tagline = color(0x78836f)
+    static let placeSurface = color(0xf9f8ec, opacity: 0.58)
+    static let placeBorder = color(0x697e57, opacity: 0.17)
+    static let gold = color(0x9b8952)
+    static let weatherDetail = color(0x89917d)
+    static let roundButton = color(0x596f55)
+    static let roundButtonSelected = color(0xe0e7ce)
+    static let welcomeEyebrow = color(0x7b8a6b)
+    static let welcomeRule = color(0x8c9a77)
+    static let welcomeEmphasis = color(0x72855b)
+    static let welcomeCopy = color(0x79856c)
+    static let fieldNote = color(0x78876a)
+    static let fieldNoteDetail = color(0x7f8a74)
+    static let fieldNoteRule = color(0x809565, opacity: 0x66 / 255.0)
+
+    static let dockSurface = color(0xf9f9ee, opacity: 0.94)
+    static let dockBorder = color(0xffffff, opacity: 0.85)
+    static let dockShadow = color(0x405034, opacity: 0x17 / 255.0)
+    static let toolLabel = color(0x8b947e)
+    static let selectedToolLabel = color(0x3f5b40)
+    static let selectedToolSurface = color(0xe2e8d5)
+    static let selectedToolBorder = color(0xbecbaa, opacity: 0x40 / 255.0)
+    static let selectedToolIndicator = color(0x60805b)
+    static let mow = color(0x728c59)
+    static let till = color(0xa68a69)
+    static let sow = color(0x839a64)
+    static let wander = color(0x87998a)
+    static let driveHint = color(0x899479)
+    static let zoom = color(0x7b8c6c)
+    static let zoomSurface = color(0xf6f7e9, opacity: 0x9c / 255.0)
+    static let zoomBorder = color(0x8b9973, opacity: 0x33 / 255.0)
+
+    static let toast = color(0x657b55)
+    static let toastSurface = color(0xf8f7eb, opacity: 0xed / 255.0)
+    static let toastShadow = color(0x4d6342, opacity: 0x0d / 255.0)
+    static let pauseVeil = color(0xe9ecdb, opacity: 0x44 / 255.0)
+    static let pauseSymbol = color(0x859573)
+    static let pauseTitle = color(0x516a46)
+    static let pauseButtonSurface = color(0xf7f7ec, opacity: 0xcc / 255.0)
+    static let dialogSurface = color(0xf7f7ed)
+    static let dialogBorder = color(0xffffff, opacity: 0x99 / 255.0)
+    static let dialogSymbol = color(0x789166)
+    static let dialogEyebrow = color(0x869273)
+    static let dialogCopy = color(0x7e8b70)
+    static let helpSymbol = color(0x7a9365)
+    static let helpTitle = color(0x576f4d)
+    static let helpCopy = color(0x839075)
+    static let primaryButton = color(0x59734c)
+    static let primaryButtonLabel = color(0xf7f7e9)
+    static let settingDetail = color(0x8a967c)
+    static let settingRangeLabel = color(0x8a967d)
+    static let settingSwitch = color(0x80996a)
+    static let settingRange = color(0x7e9569)
+    static let settingBorder = color(0x899676, opacity: 0x40 / 255.0)
+    static let settingFootnote = color(0xa1aa95)
+
+    // Match every stop in .vignette and .golden .vignette, including opacity.
+    static func vignette(golden: Bool) -> [Gradient.Stop] {
+        if golden {
+            return [
+                .init(color: color(0xf8efda, opacity: 0.9), location: 0),
+                .init(color: .clear, location: 0.28),
+                .init(color: .clear, location: 0.72),
+                .init(color: color(0xf3e8ce, opacity: 0.85), location: 1),
+            ]
+        }
+        return [
+            .init(color: color(0xf4f5e3, opacity: 0.88), location: 0),
+            .init(color: color(0xf4f5e3, opacity: 0.36), location: 0.12),
+            .init(color: .clear, location: 0.27),
+            .init(color: .clear, location: 0.68),
+            .init(color: color(0xedf0d9, opacity: 0.27), location: 0.83),
+            .init(color: color(0xedf0d9, opacity: 0.88), location: 1),
+        ]
+    }
+
+    private static func color(_ hex: UInt32, opacity: Double = 1) -> Color {
+        Color(.sRGB, red: Double((hex >> 16) & 0xff) / 255,
+              green: Double((hex >> 8) & 0xff) / 255,
+              blue: Double(hex & 0xff) / 255, opacity: opacity)
+    }
 }
 
 private struct AmbientCopy: ViewModifier {
@@ -43,10 +127,7 @@ struct FarmScreen: View {
                     .zIndex(-2)
 
                 LinearGradient(
-                    stops: [.init(color: MeadowPalette.cream.opacity(0.72), location: 0),
-                            .init(color: .clear, location: 0.30),
-                            .init(color: .clear, location: 0.72),
-                            .init(color: MeadowPalette.cream.opacity(0.68), location: 1)],
+                    stops: MeadowPalette.vignette(golden: game.goldenLight),
                     startPoint: .top, endPoint: .bottom
                 )
                 .ignoresSafeArea()
@@ -80,7 +161,8 @@ struct FarmScreen: View {
                             Image(systemName: game.controlsHidden ? "line.3.horizontal" : "chevron.right")
                                 .font(.system(size: 17, weight: .regular))
                                 .frame(width: 44, height: 44)
-                                .background(MeadowPalette.cream.opacity(0.65), in: Circle())
+                                .foregroundStyle(MeadowPalette.roundButton)
+                                .background(MeadowPalette.zoomSurface, in: Circle())
                                 .contentShape(Circle())
                         }
                         .buttonStyle(.plain)
@@ -117,11 +199,12 @@ struct FarmScreen: View {
                     if let toast = game.toast {
                         Text(toast)
                             .font(.subheadline)
-                            .foregroundStyle(MeadowPalette.ink)
+                            .foregroundStyle(MeadowPalette.toast)
                             .padding(.horizontal, 20)
                             .padding(.vertical, 12)
-                            .background(MeadowPalette.cream, in: Capsule())
-                            .shadow(color: MeadowPalette.ink.opacity(0.08), radius: 14, y: 4)
+                            .background(MeadowPalette.toastSurface, in: Capsule())
+                            .overlay(Capsule().strokeBorder(MeadowPalette.dialogBorder, lineWidth: 1))
+                            .shadow(color: MeadowPalette.toastShadow, radius: 14, y: 4)
                             .padding(.top, compactHeight ? 62 : 80)
                             .frame(maxHeight: .infinity, alignment: .top)
                             .accessibilityAddTraits(.updatesFrequently)
@@ -143,7 +226,7 @@ struct FarmScreen: View {
                 value: game.controlsHidden
             )
         }
-        .background(MeadowPalette.sage)
+        .background(game.goldenLight ? MeadowPalette.goldenBackground : MeadowPalette.background)
         .preferredColorScheme(.light)
         .sheet(item: $game.activeSheet) { sheet in
             switch sheet {
@@ -167,7 +250,7 @@ struct FarmScreen: View {
                     if width >= 600 && !compact {
                         Text("a little farm. a little peace.")
                             .font(.system(size: 10))
-                            .foregroundStyle(MeadowPalette.muted)
+                            .foregroundStyle(MeadowPalette.tagline)
                             .tracking(0.8)
                     }
                 }
@@ -183,7 +266,8 @@ struct FarmScreen: View {
                     .font(.system(size: 12, weight: .medium))
                     .padding(.horizontal, 17)
                     .padding(.vertical, 12)
-                    .background(MeadowPalette.cream.opacity(0.65), in: Capsule())
+                    .background(MeadowPalette.placeSurface, in: Capsule())
+                    .overlay(Capsule().strokeBorder(MeadowPalette.placeBorder, lineWidth: 1))
                     .modifier(AmbientCopy(hidden: game.hasDriven))
                 Spacer(minLength: 4)
             }
@@ -198,7 +282,7 @@ struct FarmScreen: View {
                             .font(.system(size: 12, weight: .medium))
                         Text("A gentle breeze. Nowhere to be.")
                             .font(.system(size: 10))
-                            .foregroundStyle(MeadowPalette.muted)
+                            .foregroundStyle(MeadowPalette.weatherDetail)
                     }
                 }
                 .padding(.trailing, 14)
@@ -219,21 +303,21 @@ struct FarmScreen: View {
         VStack(alignment: .leading, spacing: compact ? 9 : 15) {
             if !compact {
                 HStack(spacing: 8) {
-                    Capsule().fill(MeadowPalette.gold).frame(width: 20, height: 1)
+                    Capsule().fill(MeadowPalette.welcomeRule).frame(width: 20, height: 1)
                     Text("THERE’S NO HURRY HERE")
                         .font(.system(size: 9, weight: .medium))
                         .tracking(1.5)
                 }
-                .foregroundStyle(MeadowPalette.muted)
+                .foregroundStyle(MeadowPalette.welcomeEyebrow)
             }
-            (Text("A good day\nto take it ") + Text("slow.").italic())
+            (Text("A good day\nto take it ") + Text("slow.").italic().foregroundColor(MeadowPalette.welcomeEmphasis))
                 .font(.system(size: compact ? 27 : wide ? 45 : 35, weight: .regular, design: .serif))
                 .lineSpacing(-1)
             if !compact {
                 Text("A little fresh air. A few tidy rows.\nNothing you need to finish.")
                     .font(.system(size: wide ? 14 : 12))
                     .lineSpacing(5)
-                    .foregroundStyle(MeadowPalette.muted)
+                    .foregroundStyle(MeadowPalette.welcomeCopy)
             }
             Button(action: game.dismissIntro) {
                 HStack(spacing: 17) {
@@ -243,8 +327,8 @@ struct FarmScreen: View {
                 }
                 .padding(.horizontal, 19)
                 .frame(minHeight: 46)
-                .background(MeadowPalette.cream.opacity(0.94), in: Capsule())
-                .overlay(Capsule().strokeBorder(MeadowPalette.ink.opacity(0.14), lineWidth: 1))
+                .foregroundStyle(MeadowPalette.ink)
+                .contentShape(Capsule())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("action.begin")
@@ -256,14 +340,15 @@ struct FarmScreen: View {
 
     private var fieldNote: some View {
         HStack(alignment: .top, spacing: 12) {
-            Rectangle().fill(MeadowPalette.gold.opacity(0.7)).frame(width: 1, height: 44)
+            Rectangle().fill(MeadowPalette.fieldNoteRule).frame(width: 1, height: 44)
             VStack(alignment: .leading, spacing: 8) {
                 Text("THE MEADOW").font(.system(size: 9, weight: .medium)).tracking(2)
                 Text("Room to do your own thing.")
                     .font(.system(size: 13, design: .serif)).italic()
+                    .foregroundStyle(MeadowPalette.fieldNoteDetail)
             }
         }
-        .foregroundStyle(MeadowPalette.muted)
+        .foregroundStyle(MeadowPalette.fieldNote)
     }
 
     private func portraitFooter(wide: Bool) -> some View {
@@ -284,6 +369,7 @@ struct FarmScreen: View {
                             .frame(minHeight: 44)
                     }
                     .buttonStyle(.plain)
+                    .foregroundStyle(MeadowPalette.driveHint)
                     .accessibilityLabel("Learn to drive. Tap or drag to find your way.")
                     .modifier(AmbientCopy(hidden: game.hasDriven))
                 }
@@ -322,15 +408,17 @@ struct FarmScreen: View {
                         Image(systemName: tool.symbol)
                             .font(.system(size: compact ? 20 : 24, weight: .light))
                             .frame(height: compact ? 24 : 30)
+                            .foregroundStyle(tool.color)
                         Text(tool.title)
                             .font(.system(size: compact ? 10 : 11, weight: selected ? .semibold : .regular))
                     }
-                    .foregroundStyle(selected ? MeadowPalette.ink : MeadowPalette.muted)
+                    .foregroundStyle(selected ? MeadowPalette.selectedToolLabel : MeadowPalette.toolLabel)
                     .frame(maxWidth: .infinity)
                     .frame(height: compact ? 58 : 74)
-                    .background(selected ? MeadowPalette.sage.opacity(0.76) : .clear, in: RoundedRectangle(cornerRadius: 16))
+                    .background(selected ? MeadowPalette.selectedToolSurface : .clear, in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(selected ? MeadowPalette.selectedToolBorder : .clear, lineWidth: 1))
                     .overlay(alignment: .bottom) {
-                        if selected { Capsule().fill(MeadowPalette.green).frame(width: 14, height: 2).padding(.bottom, 5) }
+                        if selected { Capsule().fill(MeadowPalette.selectedToolIndicator).frame(width: 14, height: 2).padding(.bottom, 5) }
                     }
                     .contentShape(RoundedRectangle(cornerRadius: 16))
                 }
@@ -341,9 +429,9 @@ struct FarmScreen: View {
             }
         }
         .padding(7)
-        .background(MeadowPalette.cream.opacity(0.97), in: RoundedRectangle(cornerRadius: 23))
-        .overlay(RoundedRectangle(cornerRadius: 23).strokeBorder(.white.opacity(0.75), lineWidth: 1))
-        .shadow(color: MeadowPalette.ink.opacity(0.12), radius: 18, y: 6)
+        .background(MeadowPalette.dockSurface, in: RoundedRectangle(cornerRadius: 23))
+        .overlay(RoundedRectangle(cornerRadius: 23).strokeBorder(MeadowPalette.dockBorder, lineWidth: 1))
+        .shadow(color: MeadowPalette.dockShadow, radius: 18, y: 6)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Tractor tools")
     }
@@ -354,7 +442,7 @@ struct FarmScreen: View {
                 Image(systemName: game.cameraMode == .tractor ? "car.rear.fill" : "car.rear")
                     .font(.system(size: 17))
                     .frame(width: 44, height: 44)
-                    .background(game.cameraMode == .tractor ? MeadowPalette.sage : .clear, in: Circle())
+                    .background(game.cameraMode == .tractor ? MeadowPalette.roundButtonSelected : .clear, in: Circle())
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -367,8 +455,9 @@ struct FarmScreen: View {
             zoomButton("viewfinder", label: game.cameraMode == .tractor ? "Center behind the tractor" : "Center the farm", action: game.recenter)
             zoomButton("plus", label: "Zoom in", action: game.zoomIn)
         }
-        .background(MeadowPalette.cream.opacity(0.88), in: Capsule())
-        .overlay(Capsule().strokeBorder(MeadowPalette.ink.opacity(0.08), lineWidth: 1))
+        .foregroundStyle(MeadowPalette.zoom)
+        .background(MeadowPalette.zoomSurface, in: Capsule())
+        .overlay(Capsule().strokeBorder(MeadowPalette.zoomBorder, lineWidth: 1))
         .padding(.trailing, game.hasDriven ? 52 : 0)
     }
 
@@ -388,7 +477,8 @@ struct FarmScreen: View {
             Image(systemName: symbol)
                 .font(.system(size: 17, weight: .regular))
                 .frame(width: 44, height: 44)
-                .background(selected ? MeadowPalette.sage.opacity(0.85) : MeadowPalette.cream.opacity(0.78), in: Circle())
+                .foregroundStyle(MeadowPalette.roundButton)
+                .background(selected ? MeadowPalette.roundButtonSelected : .clear, in: Circle())
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -398,12 +488,14 @@ struct FarmScreen: View {
 
     private var pauseOverlay: some View {
         ZStack {
-            MeadowPalette.cream.opacity(0.78).ignoresSafeArea()
+            MeadowPalette.pauseVeil.ignoresSafeArea()
             VStack(spacing: 22) {
                 Image(systemName: "leaf")
                     .font(.system(size: 35, weight: .ultraLight))
+                    .foregroundStyle(MeadowPalette.pauseSymbol)
                 Text("A moment to breathe.")
                     .font(.system(.title, design: .serif))
+                    .foregroundStyle(MeadowPalette.pauseTitle)
                 Text("The meadow will wait.")
                     .font(.subheadline)
                     .foregroundStyle(MeadowPalette.muted)
@@ -412,8 +504,8 @@ struct FarmScreen: View {
                         .font(.subheadline.weight(.medium))
                         .padding(.horizontal, 24)
                         .frame(minHeight: 50)
-                        .background(MeadowPalette.ink, in: Capsule())
-                        .foregroundStyle(MeadowPalette.cream)
+                        .background(MeadowPalette.pauseButtonSurface, in: Capsule())
+                        .foregroundStyle(MeadowPalette.ink)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("pause.resume")
@@ -460,29 +552,30 @@ private struct FarmSettingsSheet: View {
                 VStack(alignment: .leading, spacing: 25) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("THE WAY YOU LIKE IT").font(.caption2.weight(.medium)).tracking(2)
-                            .foregroundStyle(MeadowPalette.muted)
+                            .foregroundStyle(MeadowPalette.dialogEyebrow)
                         Text("Settle in.").font(.system(size: 38, design: .serif))
                         Text("A few small comforts for your time outside.")
-                            .font(.subheadline).foregroundStyle(MeadowPalette.muted)
+                            .font(.subheadline).foregroundStyle(MeadowPalette.dialogCopy)
                     }
                     VStack(spacing: 20) {
                         settingToggle("A helping hand", subtitle: "Gently straighten near-perfect rows.", isOn: $game.rowAssist, identifier: "settings.guide")
-                        Divider().overlay(MeadowPalette.sage)
+                        Divider().overlay(MeadowPalette.settingBorder)
                         settingToggle("Golden light", subtitle: "A warmer kind of afternoon.", isOn: $game.goldenLight, identifier: "settings.golden")
-                        Divider().overlay(MeadowPalette.sage)
+                        Divider().overlay(MeadowPalette.settingBorder)
                         settingToggle("A little feeling", subtitle: "Gentle haptics when you change tools.", isOn: $game.haptics, identifier: "settings.haptics")
                     }
                     .padding(20)
-                    .background(.white.opacity(0.5), in: RoundedRectangle(cornerRadius: 22))
+                    .background(MeadowPalette.dialogSurface, in: RoundedRectangle(cornerRadius: 22))
 
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Your pace").font(.headline)
                         Slider(value: $game.pace, in: 0.55...1.25, step: 0.05)
+                            .tint(MeadowPalette.settingRange)
                             .accessibilityLabel("Your pace")
                             .accessibilityValue(game.pace < 0.8 ? "Unhurried" : game.pace > 1.05 ? "A little breezier" : "Easygoing")
                             .accessibilityIdentifier("settings.pace")
                         HStack { Text("Unhurried"); Spacer(); Text("A little breezier") }
-                            .font(.caption).foregroundStyle(MeadowPalette.muted)
+                            .font(.caption).foregroundStyle(MeadowPalette.settingRangeLabel)
                     }
                     .padding(.horizontal, 4)
 
@@ -496,11 +589,12 @@ private struct FarmSettingsSheet: View {
                                 .accessibilityLabel(game.soundEnabled ? "Turn nature sounds off" : "Turn nature sounds on")
                         }
                         Slider(value: $game.volume, in: 0...1, step: 0.05)
+                            .tint(MeadowPalette.settingRange)
                             .accessibilityLabel("Nature sounds volume")
                             .accessibilityValue("\(Int((game.volume * 100).rounded())) percent")
                             .accessibilityIdentifier("settings.volume")
                         HStack { Text("A whisper"); Spacer(); Text("All around you") }
-                            .font(.caption).foregroundStyle(MeadowPalette.muted)
+                            .font(.caption).foregroundStyle(MeadowPalette.settingRangeLabel)
                     }
                     .padding(.horizontal, 4)
 
@@ -508,14 +602,15 @@ private struct FarmSettingsSheet: View {
                         Label("A fresh meadow", systemImage: "arrow.counterclockwise")
                             .font(.subheadline.weight(.medium))
                             .frame(maxWidth: .infinity, minHeight: 50)
-                            .background(MeadowPalette.sage.opacity(0.55), in: RoundedRectangle(cornerRadius: 16))
+                            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(MeadowPalette.settingBorder, lineWidth: 1))
+                            .contentShape(RoundedRectangle(cornerRadius: 16))
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("settings.reset")
 
                     Text(game.hasSaveError ? "Your meadow couldn’t save. Free a little space on this device and try again." : "Your meadow saves automatically on this device. Nothing changes while you’re away.")
                         .font(.footnote)
-                        .foregroundStyle(MeadowPalette.muted)
+                        .foregroundStyle(game.hasSaveError ? MeadowPalette.muted : MeadowPalette.settingFootnote)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                 }
@@ -523,8 +618,10 @@ private struct FarmSettingsSheet: View {
                 .frame(maxWidth: 600)
                 .frame(maxWidth: .infinity)
             }
-            .background(MeadowPalette.cream)
+            .background(MeadowPalette.dialogSurface)
             .foregroundStyle(MeadowPalette.ink)
+            .toolbarBackground(MeadowPalette.dialogSurface, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { closeButton } }
             .confirmationDialog("A fresh meadow?", isPresented: $confirmingReset, titleVisibility: .visible) {
@@ -536,6 +633,7 @@ private struct FarmSettingsSheet: View {
             }
         }
         .tint(MeadowPalette.green)
+        .presentationBackground(MeadowPalette.dialogSurface)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(30)
@@ -545,6 +643,7 @@ private struct FarmSettingsSheet: View {
         Button(action: { dismiss() }) {
             Image(systemName: "xmark").font(.system(size: 13, weight: .medium)).frame(width: 44, height: 44)
         }
+        .foregroundStyle(MeadowPalette.roundButton)
         .accessibilityLabel("Close settings")
         .accessibilityIdentifier("sheet.close")
     }
@@ -553,10 +652,11 @@ private struct FarmSettingsSheet: View {
         Toggle(isOn: isOn) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(.subheadline.weight(.semibold))
-                Text(subtitle).font(.caption).foregroundStyle(MeadowPalette.muted)
+                Text(subtitle).font(.caption).foregroundStyle(MeadowPalette.settingDetail)
             }
             .padding(.vertical, 4)
         }
+        .tint(MeadowPalette.settingSwitch)
         .accessibilityIdentifier(identifier)
     }
 }
@@ -568,13 +668,13 @@ private struct FarmHelpSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
-                    StillfieldMark().frame(width: 46, height: 46)
+                    StillfieldMark(color: MeadowPalette.dialogSymbol).frame(width: 46, height: 46)
                     VStack(alignment: .leading, spacing: 10) {
                         Text("WELCOME TO WILLOWBROOK").font(.caption2.weight(.medium)).tracking(1.7)
-                            .foregroundStyle(MeadowPalette.muted)
+                            .foregroundStyle(MeadowPalette.dialogEyebrow)
                         Text("Make yourself\nat home.").font(.system(size: 38, design: .serif))
                         Text("There’s nothing to win and nowhere to fall behind. Just a little land to make your own.")
-                            .font(.subheadline).foregroundStyle(MeadowPalette.muted).lineSpacing(4)
+                            .font(.subheadline).foregroundStyle(MeadowPalette.dialogCopy).lineSpacing(4)
                     }
                     helpRow("hand.draw", title: "Find your way", text: "Tap a spot in the meadow to drive there. Drag your finger to keep steering. Pinch to look a little closer.")
                     helpRow("car.rear", title: "Come along for the ride", text: "Tap the vehicle button beside the zoom controls to follow behind your tractor. Tap the ground ahead to steer, and pinch to move closer or farther away. Tap the vehicle button again to see the whole farm.")
@@ -589,8 +689,8 @@ private struct FarmHelpSheet: View {
                         .font(.subheadline.weight(.medium))
                         .padding(.horizontal, 22)
                         .frame(minHeight: 52)
-                        .foregroundStyle(MeadowPalette.cream)
-                        .background(MeadowPalette.ink, in: Capsule())
+                        .foregroundStyle(MeadowPalette.primaryButtonLabel)
+                        .background(MeadowPalette.primaryButton, in: Capsule())
                     }
                     .buttonStyle(.plain)
                 }
@@ -598,20 +698,24 @@ private struct FarmHelpSheet: View {
                 .frame(maxWidth: 600)
                 .frame(maxWidth: .infinity)
             }
-            .background(MeadowPalette.cream)
+            .background(MeadowPalette.dialogSurface)
             .foregroundStyle(MeadowPalette.ink)
+            .toolbarBackground(MeadowPalette.dialogSurface, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark").font(.system(size: 13, weight: .medium)).frame(width: 44, height: 44)
                     }
+                    .foregroundStyle(MeadowPalette.roundButton)
                     .accessibilityLabel("Close help")
                     .accessibilityIdentifier("sheet.close")
                 }
             }
         }
         .tint(MeadowPalette.green)
+        .presentationBackground(MeadowPalette.dialogSurface)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(30)
@@ -620,24 +724,26 @@ private struct FarmHelpSheet: View {
     private func helpRow(_ symbol: String, title: String, text: String) -> some View {
         HStack(alignment: .top, spacing: 17) {
             Image(systemName: symbol).font(.system(size: 24, weight: .light)).frame(width: 32, height: 32)
-                .foregroundStyle(MeadowPalette.green)
+                .foregroundStyle(MeadowPalette.helpSymbol)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 6) {
-                Text(title).font(.subheadline.weight(.semibold))
-                Text(text).font(.subheadline).foregroundStyle(MeadowPalette.muted).lineSpacing(4)
+                Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(MeadowPalette.helpTitle)
+                Text(text).font(.subheadline).foregroundStyle(MeadowPalette.helpCopy).lineSpacing(4)
             }
         }
     }
 }
 
 private struct StillfieldMark: View {
+    var color: Color = MeadowPalette.ink
+
     var body: some View {
         Canvas { context, size in
             let scale = size.width / 40
             context.scaleBy(x: scale, y: scale)
             var sun = Path()
             sun.addArc(center: CGPoint(x: 20, y: 18), radius: 9, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
-            context.stroke(sun, with: .color(MeadowPalette.gold), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+            context.stroke(sun, with: .color(color), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
             var field = Path()
             field.move(to: CGPoint(x: 3, y: 21))
             field.addQuadCurve(to: CGPoint(x: 37, y: 21), control: CGPoint(x: 20, y: 16))
@@ -645,7 +751,7 @@ private struct StillfieldMark: View {
             field.addQuadCurve(to: CGPoint(x: 35, y: 27), control: CGPoint(x: 20, y: 21))
             field.move(to: CGPoint(x: 9, y: 33))
             field.addQuadCurve(to: CGPoint(x: 31, y: 33), control: CGPoint(x: 20, y: 27))
-            context.stroke(field, with: .color(MeadowPalette.green), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+            context.stroke(field, with: .color(color), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
         }
         .accessibilityHidden(true)
     }
@@ -657,6 +763,14 @@ private extension FarmTool {
     }
     var symbol: String {
         switch self { case .mow: "leaf"; case .till: "line.3.horizontal"; case .sow: "camera.macro"; case .wander: "wind" }
+    }
+    var color: Color {
+        switch self {
+        case .mow: MeadowPalette.mow
+        case .till: MeadowPalette.till
+        case .sow: MeadowPalette.sow
+        case .wander: MeadowPalette.wander
+        }
     }
     var accessibilityDescription: String {
         switch self {

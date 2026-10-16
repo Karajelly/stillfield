@@ -21,36 +21,25 @@ struct FarmArtwork: Decodable, Sendable {
         }.value
     }
 
-    /// Broad sky light and a warm ground bounce soften the little farm's shading.
+    /// Match the cream sky and olive ground bounce in src/main.ts's hemisphere light.
     /// Generated locally so the native app needs no remote textures or assets.
     @MainActor
-    static func makeDaylight() async throws -> EnvironmentResource {
+    static func makeDaylight(golden: Bool = false) async throws -> EnvironmentResource {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = true
+        format.preferredRange = .standard
         let image = UIGraphicsImageRenderer(size: CGSize(width: 512, height: 256), format: format).image { context in
             let canvas = context.cgContext
-            let colors = ["#BED8DB", "#D6E5DA", "#F1EED5", "#C2CCA2", "#9EAE86"]
+            let colors = [golden ? "#FFE3BB" : "#FFF8DF", "#7C9060"]
                 .map { UIColor(farmHex: $0).cgColor }
-            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors as CFArray,
-                                         locations: [0, 0.30, 0.50, 0.70, 1]) {
+            if let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: colors as CFArray,
+                                         locations: [0, 1]) {
                 canvas.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: 256), options: [])
-            }
-            canvas.setFillColor(UIColor(farmHex: "#FFF8E4").withAlphaComponent(0.27).cgColor)
-            // Low, pillowy cloud banks wrap around the horizon.
-            for (x, y, width) in [(70.0, 94.0, 64.0), (190, 80, 48), (330, 99, 76), (446, 86, 50)] {
-                canvas.saveGState()
-                canvas.setShadow(offset: .zero, blur: 7, color: UIColor.white.withAlphaComponent(0.12).cgColor)
-                for index in 0..<4 {
-                    let offset = Double(index) * width * 0.20
-                    canvas.fillEllipse(in: CGRect(x: x - width / 2 + offset, y: y - Double(index % 2) * 3,
-                                                  width: width * 0.47, height: 9 + Double(index % 3) * 3))
-                }
-                canvas.restoreGState()
             }
         }
         guard let cgImage = image.cgImage else { throw ArtworkError.invalidMesh }
-        return try await EnvironmentResource(equirectangular: cgImage, withName: "A soft spring sky")
+        return try await EnvironmentResource(equirectangular: cgImage, withName: golden ? "A golden spring sky" : "A soft spring sky")
     }
 }
 
@@ -105,7 +94,7 @@ struct ArtworkMesh: Decodable, Sendable {
         descriptor.primitives = .triangles(indices)
         var material = PhysicallyBasedMaterial()
         material.baseColor = .init(tint: UIColor(farmHex: color))
-        material.roughness = .init(floatLiteral: max(0.55, roughness))
+        material.roughness = .init(floatLiteral: roughness)
         material.metallic = 0.0
         material.specular = .init(floatLiteral: roughness < 0.7 ? 0.22 : 0.05)
         return ModelEntity(mesh: try MeshResource.generate(from: [descriptor]), materials: [material])

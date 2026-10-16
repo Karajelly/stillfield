@@ -46,6 +46,8 @@ final class FarmController {
     @ObservationIgnored private let camera = Entity()
     @ObservationIgnored private let sun = Entity()
     @ObservationIgnored private let fillLight = Entity()
+    @ObservationIgnored private var daylight: EnvironmentResource?
+    @ObservationIgnored private var goldenDaylight: EnvironmentResource?
     @ObservationIgnored private var tractor = Entity()
     @ObservationIgnored private var destinationMarker = Entity()
     @ObservationIgnored private var obstacles: [Obstacle] = []
@@ -108,14 +110,12 @@ final class FarmController {
         }
     }
 
-    func load(into content: RealityViewCameraContent, size: CGSize, daylight: EnvironmentResource?) async {
+    func load(into content: RealityViewCameraContent, size: CGSize, daylight: EnvironmentResource?, goldenDaylight: EnvironmentResource?) async {
         guard self.content == nil else { return }
         self.content = content
         viewport = size
-        if let daylight {
-            root.components.set(ImageBasedLightComponent(source: .single(daylight), intensityExponent: 0))
-            root.components.set(ImageBasedLightReceiverComponent(imageBasedLight: root))
-        }
+        self.daylight = daylight
+        self.goldenDaylight = goldenDaylight
         do {
             let artwork = try await FarmArtwork.load()
             let world = try await artwork.world.makeEntity()
@@ -128,13 +128,7 @@ final class FarmController {
             camera.name = "The unhurried camera"
             setViewportSize(size)
             root.addChild(camera)
-            sun.components.set(DirectionalLightComponent(color: UIColor(farmHex: "#FFF0CE"), intensity: 1800))
-            var shadows = DirectionalLightComponent.Shadow()
-            shadows.shadowProjection = .automatic(maximumDistance: 160)
-            shadows.depthBias = 1.0
-            sun.components.set(shadows)
             sun.look(at: .zero, from: [-32, 55, 22], relativeTo: nil)
-            fillLight.components.set(DirectionalLightComponent(color: UIColor(farmHex: "#DBE8D4"), intensity: 650))
             fillLight.look(at: .zero, from: [40, 38, -45], relativeTo: nil)
             root.addChild(sun)
             root.addChild(fillLight)
@@ -458,8 +452,14 @@ final class FarmController {
         }
     }
     private func updateLight() {
-        sun.components.set(DirectionalLightComponent(color: UIColor(farmHex: goldenLight ? "#FFD8A5" : "#FFF2D9"), intensity: goldenLight ? 1700 : 1400))
-        fillLight.components.set(DirectionalLightComponent(color: UIColor(farmHex: goldenLight ? "#F2DFBE" : "#E3EEDF"), intensity: 850))
+        // Use the web light colors; RealityKit lux are calibrated separately from
+        // Three.js intensity to retain the web's bright, softly muted appearance.
+        sun.components.set(DirectionalLightComponent(color: UIColor(farmHex: goldenLight ? "#FFD299" : "#FFF1CE"), intensity: goldenLight ? 2700 : 2500))
+        fillLight.components.set(DirectionalLightComponent(color: UIColor(farmHex: goldenLight ? "#FFE3BB" : "#FFF8DF"), intensity: goldenLight ? 960 : 1200))
+        if let environment = (goldenLight ? goldenDaylight : daylight) ?? daylight ?? goldenDaylight {
+            root.components.set(ImageBasedLightComponent(source: .single(environment), intensityExponent: goldenLight ? 0.68 : 1))
+            root.components.set(ImageBasedLightReceiverComponent(imageBasedLight: root))
+        }
         var shadows = DirectionalLightComponent.Shadow()
         shadows.shadowProjection = .automatic(maximumDistance: cameraMode == .tractor ? 65 : 160)
         shadows.depthBias = 1.0

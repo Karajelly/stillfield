@@ -14,17 +14,20 @@ struct FarmViewport: View {
                 content.renderingEffects.cameraGrain = .disabled
                 content.renderingEffects.dynamicRange = .standard
                 let daylight = try? await FarmArtwork.makeDaylight()
-                await game.load(into: content, size: geometry.size, daylight: daylight)
+                let goldenDaylight = try? await FarmArtwork.makeDaylight(golden: true)
+                await game.load(into: content, size: geometry.size, daylight: daylight, goldenDaylight: goldenDaylight)
             }
             .realityViewCameraControls(.none)
+            // Three.js uses ACES filmic tone mapping. RealityKit's iOS 18 SDR
+            // output is more saturated/contrasty, so soften only the scene to
+            // match that pastel finish; SwiftUI controls retain exact sRGB colors.
+            .saturation(0.60)
+            .contrast(0.90)
+            .brightness(0.06)
             .background {
-                if game.cameraMode == .tractor {
-                    // Keep the illustrated sky's color independent of scene exposure.
-                    LinearGradient(colors: [Color(red: 0.72, green: 0.85, blue: 0.89),
-                                            Color(red: 0.95, green: 0.94, blue: 0.83)],
-                                   startPoint: .top, endPoint: .bottom)
-                        .allowsHitTesting(false)
-                }
+                // The web background/fog colors also carry into tractor view.
+                Color(uiColor: UIColor(farmHex: game.goldenLight ? "#EEE5CE" : "#E8ECDA"))
+                    .allowsHitTesting(false)
             }
             .onChange(of: geometry.size) { _, size in game.setViewportSize(size) }
             .gesture(DragGesture(minimumDistance: 0).onChanged { value in game.steer(at: value.location) })

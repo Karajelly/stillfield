@@ -14,6 +14,11 @@ final class FieldRenderer {
     private static let pixelsPerCell = 5
     private static let tileColumns = 8
     private static let tileRows = 6
+    // sRGB swatches from src/field.ts: three grasses, then five wildflowers.
+    nonisolated private static let vegetationPalette: [UInt32] = [
+        0x9AAB68, 0x7E9557, 0xA8B775,
+        0xEEE7C3, 0xD8BB75, 0xD3AB9B, 0xB9A9CF, 0xF3EBCE
+    ]
     private static let textureOptions = TextureResource.CreateOptions(
         semantic: .color,
         mipmapsMode: .none
@@ -28,6 +33,7 @@ final class FieldRenderer {
         let hasFlower: Bool
         let wildflower: Bool
         let tone: UInt32
+        let flowerTone: UInt32
     }
 
     private enum RenderingError: Error {
@@ -61,9 +67,9 @@ final class FieldRenderer {
         self.cells = grid.cells
         self.plants = Self.makePlants()
         self.tiles = []
-        // A seven-swatch atlas keeps every patch to one draw, even in a field
+        // A shared swatch atlas keeps every patch to one draw, even in a field
         // full of multicolored flowers. All vertices sample a swatch's center.
-        let palette: [UInt32] = [0x98B77F, 0xACC88D, 0x8DAD7C, 0xFFF0D4, 0xDDBB6B, 0xB6A7CB, 0xE3B6A7]
+        let palette = Self.vegetationPalette
         guard let swatches = CGContext(data: nil, width: palette.count, height: 1,
                                        bitsPerComponent: 8, bytesPerRow: palette.count * 4,
                                        space: CGColorSpace(name: CGColorSpace.sRGB)!,
@@ -159,21 +165,21 @@ final class FieldRenderer {
         let y = CGFloat(row) * size
         let palette: [UInt32]
         switch state {
-        case 1: palette = [0xBDCE96, 0xC1D39C]
-        case 2: palette = [0xB89373, 0xBF9D7E]
-        case 3: palette = [0xA0BA88, 0xA4BD8B]
-        default: palette = [0xA7BC87, 0xAABD8A]
+        // Match the web field's grass, mowing stripes, soil, and sown ground.
+        case 1: palette = [0xB9C48B, 0xBDC991]
+        case 2: palette = [0xB89570, 0xC29F79]
+        case 3: palette = [0x97AB78, 0x9CAE7B]
+        default: palette = [0xA4B376, 0xA8B67A]
         }
-        let patch = state == 1 || state == 2 ? row % 8 < 4
-            : sin(Double(column) * 0.19) + cos(Double(row) * 0.27) > 0
+        let patch = row % 8 < 4
         bitmap.setFillColor(color(palette[patch ? 0 : 1]).cgColor)
         bitmap.fill(CGRect(x: x, y: y, width: size, height: size))
 
         let noise = Double((index * 17 + row * 31) % 13) / 13
         if noise > 0.65 {
-            let fleck: UInt32 = state == 2 ? 0xAC8968 : state == 1 ? 0xA5B77D : 0x94AE7A
-            bitmap.setFillColor(color(fleck, alpha: 0.16).cgColor)
-            bitmap.fillEllipse(in: CGRect(x: x + 1.5, y: y + 1, width: 1.25, height: 0.75))
+            let fleck: UInt32 = state == 2 ? 0xAC8968 : state == 1 ? 0xA5B77D : 0x8FA368
+            bitmap.setFillColor(color(fleck, alpha: 0.28).cgColor)
+            bitmap.fill(CGRect(x: x + 1.5, y: y + 1, width: 0.75, height: 2))
         }
         if state == 2 && row % 3 == 0 {
             bitmap.setFillColor(color(0x684D34, alpha: 0.16).cgColor)
@@ -222,7 +228,8 @@ final class FieldRenderer {
                     cell: cell,
                     hasFlower: plantIndex % 3 != 0,
                     wildflower: plantIndex % 19 == 0,
-                    tone: UInt32(plantIndex % 3)
+                    tone: UInt32(plantIndex % 3),
+                    flowerTone: UInt32(3 + plantIndex % 5)
                 )
                 result[tileIndex(forCell: cell)].append(plant)
                 plantIndex += 1
@@ -261,7 +268,7 @@ final class FieldRenderer {
                     center: [plant.x, 0.06 + height * 0.86, plant.z],
                     radius: state == 3 ? 0.14 : 0.105,
                     angle: plant.angle,
-                    material: state == 0 ? 3 : [3, 5, 6][Int(plant.tone)]
+                    material: state == 0 ? 3 : plant.flowerTone
                 )
             }
         }
@@ -304,7 +311,7 @@ final class FieldRenderer {
         var textureCoordinates: [SIMD2<Float>] = []
 
         private func swatch(_ material: UInt32) -> SIMD2<Float> {
-            [(Float(material) + 0.5) / 7, 0.5]
+            [(Float(material) + 0.5) / Float(FieldRenderer.vegetationPalette.count), 0.5]
         }
 
         mutating func triangle(

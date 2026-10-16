@@ -197,7 +197,6 @@
   "coverage": {
     "current": {
       "radius": 1.15,
-      "assisted": false,
       "swept": false,
       "lanes": [
         -8,
@@ -213,7 +212,6 @@
     },
     "widthOnly": {
       "radius": 1.25,
-      "assisted": false,
       "swept": false,
       "lanes": [
         -8,
@@ -229,7 +227,6 @@
     },
     "sweepOnly": {
       "radius": 1.15,
-      "assisted": false,
       "swept": true,
       "lanes": [
         -8,
@@ -243,37 +240,20 @@
       "missedCells": 464,
       "missedPercent": 7.8431372549019605
     },
-    "spacingOnly": {
-      "radius": 1.15,
-      "assisted": true,
-      "swept": false,
-      "lanes": [
-        -8,
-        -5.85,
-        -3.6999999999999997,
-        -1.5499999999999998,
-        0.6000000000000001,
-        2.75
-      ],
-      "measuredCells": 4988,
-      "missedCells": 0,
-      "missedPercent": 0
-    },
     "proposed": {
       "radius": 1.25,
-      "assisted": true,
       "swept": true,
       "lanes": [
         -8,
-        -5.85,
-        -3.6999999999999997,
-        -1.5499999999999998,
-        0.6000000000000001,
-        2.75
+        -5.38,
+        -2.98,
+        -0.3,
+        2.12,
+        4.66
       ],
-      "measuredCells": 4988,
-      "missedCells": 0,
-      "missedPercent": 0
+      "measuredCells": 5916,
+      "missedCells": 232,
+      "missedPercent": 3.9215686274509802
     }
   }
 }

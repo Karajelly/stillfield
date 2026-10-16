@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import * as THREE from "three";
 import { angleDifference, cellsUnderBrush, FIELD } from "../src/simulation";
 import type { Point, TractorState } from "../src/simulation";
-import { advanceNative, baseline, dragAmount, FollowCamera, followFov, GentleDrive, nearbyRow, tuning } from "./handling";
+import { advanceNative, baseline, dragAmount, FollowCamera, followFov, GentleDrive, tuning } from "./handling";
 import { projectGround } from "./handling";
 
 const degrees = (x: number) => x * 180 / Math.PI;
@@ -62,11 +62,11 @@ function tremor(gentle: boolean) {
   return totalTurn;
 }
 
-function coverage(radius: number, assisted: boolean, swept: boolean) {
+function coverage(radius: number, swept: boolean) {
   const lanes: number[] = [], painted = new Set<number>();
   for (let row = 0; row < 6; row++) {
     const request = row === 0 ? -8 : lanes.at(-1)! + 2.5 + [0, 0.12, -0.10, 0.18, -0.08, 0.04][row];
-    const lane = assisted ? nearbyRow(request, lanes) : request;
+    const lane = request;
     lanes.push(lane);
     // 30 Hz rendering: the >= 1/24 paint gate actually samples at 15 Hz.
     const step = swept ? 0.12 : 5.5 * 0.85 / 15;
@@ -82,7 +82,7 @@ function coverage(radius: number, assisted: boolean, swept: boolean) {
     if (x < -18 || x > 11 || z < lanes[0] || z > lanes.at(-1)!) continue;
     measured++; if (!painted.has(r * columns + c)) missed++;
   }
-  return { radius, assisted, swept, lanes, measuredCells: measured, missedCells: missed, missedPercent: missed / measured * 100 };
+  return { radius, swept, lanes, measuredCells: measured, missedCells: missed, missedPercent: missed / measured * 100 };
 }
 
 function quickRetarget(profile: "native" | "web" | "gentle") {
@@ -105,11 +105,10 @@ const report = {
   tremorDegreesOver3Seconds: { current: tremor(false), proposed: tremor(true) },
   retarget: [quickRetarget("native"), quickRetarget("web"), quickRetarget("gentle")],
   coverage: {
-    current: coverage(1.15, false, false),
-    widthOnly: coverage(1.25, false, false),
-    sweepOnly: coverage(1.15, false, true),
-    spacingOnly: coverage(1.15, true, false),
-    proposed: coverage(1.25, true, true),
+    current: coverage(1.15, false),
+    widthOnly: coverage(1.25, false),
+    sweepOnly: coverage(1.15, true),
+    proposed: coverage(1.25, true),
   },
 };
 
@@ -124,9 +123,6 @@ assert.ok(Math.abs(release[0].proposed.travelAfterRelease - release[2].proposed.
 assert.equal(dragAmount(9), 0); assert.equal(dragAmount(-9), 0);
 assert.equal(report.tremorDegreesOver3Seconds.proposed, 0);
 assert.ok(report.coverage.proposed.missedPercent < report.coverage.current.missedPercent);
-// Intentional freeform movement remains outside row capture.
-assert.equal(nearbyRow(4, [0]), 4);
-assert.ok(Math.abs(nearbyRow(2.5, [0]) - 2.15) < 1e-9);
 // Reverse targets settle; the slower turn must not introduce endless orbiting.
 for (const target of [{ x: 0, z: -1 }, { x: 0.3, z: 0.3 }, { x: -1, z: -1 }]) {
   const drive = new GentleDrive(); let state = { x: 0, z: 0, heading: 0, speed: 4.675 };
@@ -151,4 +147,4 @@ for (let i = 0; i < 180; i++) {
 assert.equal(collisionState.speed, 0);
 writeFileSync(new URL("./measurements.json", import.meta.url), JSON.stringify(report, null, 2) + "\n");
 console.log(JSON.stringify(report, null, 2));
-console.log("Sandbox assertions passed: release, frame rates, tremor, lane capture, arrival, clearance, and camera return.");
+console.log("Sandbox assertions passed: release, frame rates, tremor, arrival, clearance, and camera return.");

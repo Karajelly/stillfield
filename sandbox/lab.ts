@@ -6,10 +6,9 @@ import { overviewFraming } from "../src/overview";
 import { angleDifference, clamp, FIELD } from "../src/simulation";
 import type { Point, Tool, TractorState } from "../src/simulation";
 import { createField } from "./field";
-import { baseline, FollowCamera, followFov, GentleDrive, projectGround, RowGuide, tuning } from "./handling";
+import { baseline, FollowCamera, followFov, GentleDrive, projectGround, tuning } from "./handling";
 import { attachmentPoint, WorkDestination } from "./work-destination";
-import { along, across, nextRow, RowReturn, rowPoint, WorkedRows } from "./row-return";
-import type { RowChoice } from "./row-return";
+import { alignmentForTap, EndTurn, WorkedRows } from "./row-end";
 
 document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
   <div id="scene" tabindex="0" aria-label="Handling sandbox. Tap or drag the farm to drive."></div>
@@ -20,8 +19,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
   <aside id="study"><div class="eyebrow">TRY THE DIFFERENCE</div>
     <p id="description"></p>
     <label class="reference">Comparison <select id="reference"><option value="native">Native logic · browser replay</option><option value="web">Web logic · isometric only</option></select></label>
-    <label class="check"><input type="checkbox" id="rows" checked> A helping hand for rows</label>
-    <div class="study-actions"><button id="turn-demo">Replay turn & release</button><button id="row-demo">Try six rows yourself</button><button id="endpoint-demo">Work through the far square</button></div>
+    <div class="study-actions"><button id="turn-demo">Replay turn & release</button><button id="endpoint-demo">Work through the far square</button></div>
     <p class="study-note" id="study-note">Use the same gesture in both versions. Switching starts a fresh sandbox meadow.</p>
     <p id="endpoint-result" role="status" aria-live="polite" hidden></p>
     <div class="telemetry"><span>Travel<strong id="speed">0.0 m/s</strong></span><span>Turning<strong id="turn">0°/s</strong></span><span>After release<strong id="release">—</strong></span></div>
@@ -29,8 +27,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
   </aside>
   <button id="study-toggle" aria-expanded="true" aria-controls="study">Hide comparison notes</button>
   <div id="gesture" hidden><span id="gesture-dot"></span></div>
-  <footer><div id="row-choices" hidden aria-label="Choose the next row"><span>A little room beside this row</span><div><button id="row-left">← Next row on the left</button><button id="row-right">Next row on the right →</button></div></div>
-    <div class="tools" aria-label="Tools"><button data-tool="mow" aria-pressed="true">Mow</button><button data-tool="till" aria-pressed="false">Till</button><button data-tool="sow" aria-pressed="false">Sow</button><button data-tool="wander" aria-pressed="false">Wander</button></div>
+  <footer><div class="tools" aria-label="Tools"><button data-tool="mow" aria-pressed="true">Mow</button><button data-tool="till" aria-pressed="false">Till</button><button data-tool="sow" aria-pressed="false">Sow</button><button data-tool="wander" aria-pressed="false">Wander</button></div>
     <p id="hint"></p><div class="utilities"><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="stop">Stop</button><button id="reset">Start fresh</button></div>
   </footer>`;
 
@@ -60,33 +57,25 @@ const tractor = createTractor(scene);
 const iso = new THREE.OrthographicCamera(-55, 55, 35, -35, 0.1, 300);
 const follow = new THREE.PerspectiveCamera(58, 1, 0.1, 300);
 const boom = new FollowCamera(), drive = new GentleDrive();
-let rowGuide = new RowGuide();
 const cursor = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.7, 40), new THREE.MeshBasicMaterial({ color: "#fff8e6", depthWrite: false, transparent: true, opacity: 0.85 }));
 cursor.rotation.x = -Math.PI / 2; cursor.visible = false; scene.add(cursor);
-const guideLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: "#fff7dd", dashSize: 0.38, gapSize: 0.38, transparent: true, opacity: 0.45, depthWrite: false }));
-guideLine.visible = false; scene.add(guideLine);
 const endpointOutline = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([
   new THREE.Vector3(-0.125, 0.12, -0.125), new THREE.Vector3(0.125, 0.12, -0.125),
   new THREE.Vector3(0.125, 0.12, 0.125), new THREE.Vector3(-0.125, 0.12, 0.125),
 ]), new THREE.LineBasicMaterial({ color: "#fff8e6", depthTest: false }));
 endpointOutline.visible = false; scene.add(endpointOutline);
-const rowHints = [-1, 1].map(() => {
-  const line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({
-    color: "#fff7dd", dashSize: 0.65, gapSize: 0.55, transparent: true, opacity: 0.5, depthWrite: false }));
-  line.visible = false; scene.add(line); return line;
-});
-const attachment = tractor.group.getObjectByName("attachment")!;
 
 let profile: "current" | "gentle" = "gentle";
 let reference: "native" | "web" = "native";
 let view: "iso" | "follow" = "follow";
-let tool: Tool = "mow", rows = true, zoom = 1;
+let tool: Tool = "mow", zoom = 1;
 const start = (): TractorState => ({ x: -15, z: -7, heading: Math.PI / 2, speed: 0 });
 let state = start(), target: Point | null = null, lastBrush: Point | null = null;
 let workDestination: WorkDestination | null = null, endpointStudy: WorkDestination | null = null;
 let paintEnabled = true;
-let workedRows = new WorkedRows(), rowTurn: RowReturn | null = null;
-let rowChoices: (RowChoice | null)[] = [null, null], practice = false, practiceRows = 0;
+let workedRows = new WorkedRows(), endTurn: EndTurn | null = null;
+let aligningAtEnd = false;
+const attachment = tractor.group.getObjectByName("attachment")!;
 let time = 0, lastTime = performance.now(), lastPaint = 0, blockedTime = 0;
 let turnRate = 0, releaseTurn: number | null = null, releaseAnchor: number | null = null;
 let sampleTime = 0, demo: { start: number; released: boolean; nextEvent: number } | null = null;
@@ -119,7 +108,7 @@ function syncUI() {
   el("#description").textContent = view === "follow"
     ? profile === "gentle" ? "A quiet center, gradual turns, and a short coast when you let go. A quick tap still chooses a destination."
       : "Each drag event picks ground through the moving camera. Lifting leaves the last destination active."
-    : profile === "gentle" ? "Point where the work should finish. The attachment covers that square, then the tractor settles a little beyond it."
+    : profile === "gentle" ? "Point where the work should finish. A tap beside a finished row lines you up facing back, then stops."
       : "Familiar destination steering. Row help straightens headings; it does not space adjacent passes.";
   el("#hint").textContent = view === "follow" && profile === "gentle"
     ? "Hold to roll · move left or right to turn · return to center for straight · lift to settle"
@@ -127,46 +116,36 @@ function syncUI() {
       ? "Tap where the work should finish · the marker stays on your chosen square"
       : "Tap a destination or drag across the meadow · lift to continue to that destination";
   if (profile === "gentle" && view === "follow")
-    el("#description").textContent = "Hold and steer gently; lift to coast. A quick ground tap marks where the attachment should finish working.";
+    el("#description").textContent = "Hold and steer gently; lift to coast. Tap beside a finished row to face back down it and stop at your spot.";
   if (profile === "gentle" && tool === "wander")
     el("#description").textContent = "Wander leaves the field as it is. A ground tap marks where the tractor should stop.";
 }
 function stop() {
-  gesture = null; target = null; workDestination = null; rowTurn = null; keys.clear(); demo = null; cursor.visible = false;
-  el("#gesture").hidden = true; drive.reset(); rowGuide.finish(state);
+  gesture = null; target = null; workDestination = null; endTurn = null; aligningAtEnd = false; keys.clear(); demo = null; cursor.visible = false;
+  el("#gesture").hidden = true; drive.reset();
 }
 function reset() {
-  stop(); state = start(); field.reset(); lastBrush = null; rowGuide = new RowGuide();
+  stop(); state = start(); field.reset(); lastBrush = null;
   boom.reset(); blockedTime = 0; releaseTurn = null; releaseAnchor = null;
-  guideLine.visible = false;
   endpointStudy = null; endpointOutline.visible = false; paintEnabled = true;
-  workedRows = new WorkedRows(); rowChoices = [null, null]; practice = false; practiceRows = 0;
-  el("#row-choices").hidden = true; rowHints.forEach(line => line.visible = false);
+  workedRows = new WorkedRows();
   el("#endpoint-result").hidden = true;
   el("#study-note").textContent = "Use the same gesture in both versions. Switching starts a fresh sandbox meadow.";
   updateCamera();
 }
 function chooseDestination(point: Point) {
-  rowTurn = null;
-  let choice: RowChoice | null = null;
-  if (profile === "gentle" && rows && tool !== "wander") {
-    for (const side of [-1, 1] as const) {
-      const candidate = nextRow(workedRows.last, state, side, world.obstacles);
-      if (candidate && Math.abs(along(point, candidate.row.axis) - candidate.row.to) < 1
-        && Math.abs(across(point, candidate.row.axis) - candidate.row.lane) < tuning.rowCapture) {
-        choice = { ...candidate, point, row: { ...candidate.row, to: along(point, candidate.row.axis) } }; break;
-      }
-    }
-  }
+  endTurn = null; aligningAtEnd = false;
+  const alignment = profile === "gentle" && tool !== "wander"
+    ? alignmentForTap(workedRows.last, state, point, world.obstacles) : null;
   target = { ...point }; paintEnabled = true;
   workDestination = profile === "gentle" ? WorkDestination.create(point, state, tool) : null;
-  if (choice && workDestination) {
-    rowTurn = new RowReturn(state, choice); paintEnabled = false; lastBrush = null; rowGuide.finish(state);
+  if (alignment && workDestination) {
+    endTurn = new EndTurn(state, alignment); aligningAtEnd = true; paintEnabled = false; lastBrush = null;
   }
   cursor.position.set(point.x, 0.1, point.z); cursor.visible = true;
   if (workDestination) {
     el("#endpoint-result").hidden = false;
-    el("#endpoint-result").textContent = rowTurn ? "Turning gently into the row you chose…" : "Working toward your square…";
+    el("#endpoint-result").textContent = endTurn ? "Turning to face back down your row…" : "Working toward your square…";
   }
 }
 function setTarget(x: number, y: number) {
@@ -176,8 +155,8 @@ function setTarget(x: number, y: number) {
 }
 function pointerStart(x: number, y: number, id: number) {
   gesture = { id, x, y, lastX: x, lastY: y, start: time, moved: false, driving: false };
-  releaseTurn = null; releaseAnchor = null; rowGuide.finish(state);
-  workDestination = null; rowTurn = null; paintEnabled = true;
+  releaseTurn = null; releaseAnchor = null;
+  workDestination = null; endTurn = null; aligningAtEnd = false; paintEnabled = true;
   endpointStudy = null; endpointOutline.visible = false; el("#endpoint-result").hidden = true;
   if (profile === "gentle" && view === "follow") { target = null; cursor.visible = false; }
   else setTarget(x, y);
@@ -187,16 +166,18 @@ function pointerMove(x: number, y: number) {
   gesture.lastX = x; gesture.lastY = y;
   gesture.moved ||= Math.hypot(x - gesture.x, y - gesture.y) > 8;
   if (profile === "gentle" && view === "follow") gesture.driving ||= gesture.moved;
-  else setTarget(x, y);
+  else if (profile === "current" || gesture.moved) setTarget(x, y);
 }
 function pointerEnd() {
   if (!gesture) return;
+  const releasedSteering = gesture.driving || gesture.moved;
   if (profile === "gentle" && view === "follow") {
     if (!gesture.driving && !gesture.moved) setTarget(gesture.lastX, gesture.lastY);
     else { target = null; workDestination = null; cursor.visible = false; }
     drive.reset();
   }
-  releaseAnchor = state.heading; releaseTurn = 0; gesture = null;
+  releaseAnchor = releasedSteering ? state.heading : null;
+  releaseTurn = releasedSteering ? 0 : null; gesture = null;
   el("#gesture").hidden = true;
 }
 surface.addEventListener("pointerdown", e => {
@@ -214,7 +195,7 @@ window.addEventListener("resize", () => { stop(); resize(); });
 window.addEventListener("keydown", e => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "a", "s", "d"].includes(e.key)) {
-    e.preventDefault(); keys.add(e.key.toLowerCase()); target = null; workDestination = null; rowTurn = null; paintEnabled = true;
+    e.preventDefault(); keys.add(e.key.toLowerCase()); target = null; workDestination = null; endTurn = null; aligningAtEnd = false; paintEnabled = true;
   }
   if (e.code === "Space" || e.key === "Escape") { e.preventDefault(); stop(); }
 });
@@ -226,11 +207,10 @@ document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach(b => b.oncli
   reset(); resize(); syncUI();
 });
 document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach(b => b.onclick = () => {
-  lastBrush = null; tool = b.dataset.tool as Tool; tractor.setTool(tool); rowGuide.finish(state);
+  lastBrush = null; tool = b.dataset.tool as Tool; tractor.setTool(tool);
   if (target) {
-    const activeReturn = rowTurn;
-    chooseDestination(target);
-    if (activeReturn && tool !== "wander") { rowTurn = activeReturn; paintEnabled = false; }
+    // Working tools share the same approach. Keep an in-progress arrival aligned.
+    if (!aligningAtEnd || tool === "wander") chooseDestination(target);
   }
   else { endpointStudy = null; endpointOutline.visible = false; el("#endpoint-result").hidden = true; }
   document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
@@ -241,7 +221,6 @@ el<HTMLSelectElement>("#reference").onchange = e => {
   if (reference === "web") view = "iso";
   reset(); resize(); syncUI();
 };
-el<HTMLInputElement>("#rows").onchange = e => { rows = (e.target as HTMLInputElement).checked; stop(); };
 el("#reset").onclick = reset;
 el("#stop").onclick = stop;
 el("#zoom-in").onclick = () => { zoom = clamp(zoom + 0.2, 0.75, 2); resize(); };
@@ -256,19 +235,6 @@ el("#turn-demo").onclick = () => {
   demo = { start: time, released: false, nextEvent: 0 };
   pointerStart(innerWidth * 0.5, innerHeight * 0.45, -1);
   el("#study-note").textContent = "Script: drag right, hold with ±2 px tremor, then lift at 1.5 s. Watch the turn after release. Run once in each version.";
-};
-el("#row-demo").onclick = () => {
-  profile = "gentle"; rows = true; el<HTMLInputElement>("#rows").checked = true;
-  if (tool === "wander") el<HTMLButtonElement>('[data-tool="mow"]').click();
-  reset(); practice = true; syncUI();
-  state = { x: FIELD.minX + FIELD.cell / 2, z: 0.125, heading: Math.PI / 2, speed: 0 };
-  chooseDestination({ x: FIELD.maxX - FIELD.cell / 2, z: 0.125 });
-  workDestination!.alignToRow(0, 0.125, Math.PI / 2);
-  el("#study-note").textContent = "Your first row is underway. Then choose a neighboring row: right, left, right, left, right. Each choice drives a real turn and pass. Nothing is painted in advance.";
-  boom.reset(); updateCamera();
-};
-for (const [index, id] of ["#row-left", "#row-right"].entries()) el(id).onclick = () => {
-  const choice = rowChoices[index]; if (choice) chooseDestination(choice.point);
 };
 el("#endpoint-demo").onclick = () => {
   reset();
@@ -296,15 +262,11 @@ function paint() {
 function finishWork() {
   // Flush the actual attachment sweep, including a point already under the tool.
   paint(); lastPaint = time; paintEnabled = false; lastBrush = null;
-  if (workDestination) workedRows.finish(workDestination.point, state, workDestination.row?.lane);
-  if (practice) {
-    practiceRows++;
-    el("#study-note").textContent = practiceRows >= 6
-      ? "Six rows, each driven by your choices. Keep gardening, or start fresh to try the other view."
-      : `Row ${practiceRows} finished. Choose the next row on the ${practiceRows % 2 ? "right" : "left"}, or point somewhere else to make your own pattern.`;
-  }
-  el("#endpoint-result").textContent = "Selected square worked. Settling gently.";
-  target = null; workDestination = null; cursor.visible = false; rowGuide.finish(state);
+  if (workDestination) workedRows.finish(workDestination.point, state);
+  el("#endpoint-result").textContent = aligningAtEnd
+    ? "Worked your spot. Facing down the row and settling here." : "Selected square worked. Settling gently.";
+  aligningAtEnd = false;
+  target = null; workDestination = null; cursor.visible = false;
 }
 
 function tick(now: number) {
@@ -328,8 +290,8 @@ function tick(now: number) {
     el("#gesture-dot").style.transform = `translateX(${clamp(gesture.lastX - gesture.x, -110, 110)}px)`;
   }
   const previous = state;
-  if (!rowTurn && workDestination?.covered(state)) finishWork();
-  const workPlan = !rowTurn ? workDestination?.plan(state) : undefined;
+  if (!endTurn && workDestination?.covered(state)) finishWork();
+  const workPlan = !endTurn ? workDestination?.plan(state) : undefined;
   let movementTarget = workPlan?.target ?? target;
   if (keys.size && !(profile === "gentle" && view === "follow")) {
     let sx = Number(keys.has("arrowright") || keys.has("d")) - Number(keys.has("arrowleft") || keys.has("a"));
@@ -339,40 +301,32 @@ function tick(now: number) {
     const direction = right.multiplyScalar(sx).addScaledVector(down, sy).normalize();
     movementTarget = sx || sy ? { x: state.x + direction.x * 12, z: state.z + direction.z * 12 } : null;
   }
-  if (!rowTurn && profile === "gentle" && rows && tool !== "wander" && movementTarget) {
-    movementTarget = rowGuide.target(state, movementTarget);
-    if (workDestination && rowGuide.active) {
-      const { axis, lane, heading } = rowGuide.active;
-      workDestination.alignToRow(axis, lane, heading);
-    }
-  }
-  else if (!movementTarget || !rows || tool === "wander") rowGuide.finish(state);
-  if (rowTurn) {
-    state = rowTurn.step(state, dt, world.obstacles);
-    if (rowTurn.blocked) {
-      stop(); el("#endpoint-result").textContent = "This row needs more turning room. Choose another approach.";
-    } else if (rowTurn.done) {
-      workDestination?.alignToRow(rowTurn.choice.row.axis, rowTurn.choice.row.lane, rowTurn.heading);
-      rowTurn = null; paintEnabled = true; lastBrush = null;
-      el("#endpoint-result").textContent = "Lined up. Working through your chosen row…";
+  if (endTurn) {
+    state = endTurn.step(state, dt, world.obstacles);
+    if (endTurn.blocked) {
+      stop(); el("#endpoint-result").textContent = "There isn't room to turn here. Choose another spot.";
+    } else if (endTurn.done) {
+      workDestination?.setArrivalHeading(endTurn.alignment.heading);
+      endTurn = null; paintEnabled = true; lastBrush = null;
+      el("#endpoint-result").textContent = "Finishing the spot you clicked, then stopping here…";
     }
   } else if (profile === "gentle" && view === "follow") {
     let input: { drag: number } | { target: Point } | null = gesture?.driving ? { drag: gesture.lastX - gesture.x } : movementTarget ? { target: movementTarget } : null;
     if (keys.size) input = { drag: 110 * (Number(keys.has("arrowright") || keys.has("d")) - Number(keys.has("arrowleft") || keys.has("a"))) };
     state = drive.step(state, dt, input, world.obstacles, workPlan?.paceScale ?? 1);
-  } else state = baseline(reference, state, movementTarget, dt, world.obstacles, profile === "gentle" && rowGuide.active ? false : rows, workPlan?.paceScale ?? 1);
+  } else state = baseline(reference, state, movementTarget, dt, world.obstacles, profile === "current", workPlan?.paceScale ?? 1);
   workedRows.sample(state, paintEnabled && tool !== "wander" && state.speed > 0.1);
-  if (!rowTurn && target && workPlan?.paceScale !== 0 && Math.hypot(state.x - previous.x, state.z - previous.z) < 0.003 && state.speed < 0.15
+  if (!endTurn && target && workPlan?.paceScale !== 0 && Math.hypot(state.x - previous.x, state.z - previous.z) < 0.003 && state.speed < 0.15
     && Math.abs(angleDifference(state.heading, previous.heading)) < dt * 0.1) {
     blockedTime += dt; if (blockedTime > 1) {
       if (workDestination) el("#endpoint-result").textContent = "That square needs a different approach.";
       target = null; workDestination = null; cursor.visible = false;
     }
   } else blockedTime = 0;
-  if (!rowTurn && workDestination?.covered(state)) {
+  if (!endTurn && workDestination?.covered(state)) {
     finishWork();
   } else if (!workDestination && movementTarget && target && Math.hypot(movementTarget.x - state.x, movementTarget.z - state.z) < 0.5) {
-    target = null; cursor.visible = false; rowGuide.finish(state);
+    target = null; cursor.visible = false;
   }
   turnRate = dt ? angleDifference(state.heading, previous.heading) / dt * 180 / Math.PI : 0;
   if (releaseAnchor !== null) releaseTurn = (releaseTurn ?? 0) + Math.abs(angleDifference(state.heading, previous.heading)) * 180 / Math.PI;
@@ -380,33 +334,9 @@ function tick(now: number) {
   if (state.speed === 0) lastBrush = null;
   tractor.group.position.set(state.x, 0, state.z); tractor.group.rotation.y = state.heading;
   tractor.update(state.speed, dt, time);
-  attachment.position.y += ((rowTurn ? 0.4 : 0) - attachment.position.y) * (1 - Math.exp(-8 * dt));
+  attachment.position.y += ((endTurn ? 0.4 : 0) - attachment.position.y) * (1 - Math.exp(-8 * dt));
   world.update(time, dt); updateCamera(dt);
-  guideLine.visible = profile === "gentle" && rows && !!(rowGuide.active || rowTurn);
-  if (guideLine.visible) {
-    const path = rowTurn ? [...rowTurn.path, rowTurn.choice.point] : (() => {
-      const { axis, lane } = rowGuide.active!;
-      return axis === 0 ? [{ x: FIELD.minX, z: lane }, { x: FIELD.maxX, z: lane }]
-        : [{ x: lane, z: FIELD.minZ }, { x: lane, z: FIELD.maxZ }];
-    })();
-    guideLine.geometry.dispose();
-    guideLine.geometry = new THREE.BufferGeometry().setFromPoints(path.map(p => new THREE.Vector3(p.x, 0.12, p.z)));
-    guideLine.computeLineDistances();
-  }
   if (time - sampleTime > 0.1) {
-    rowChoices = profile === "gentle" && rows && tool !== "wander" && !target && !gesture && !keys.size
-      ? ([-1, 1] as const).map(side => nextRow(workedRows.last, state, side, world.obstacles)) : [null, null];
-    el("#row-choices").hidden = !rowChoices.some(Boolean);
-    rowChoices.forEach((choice, i) => {
-      el<HTMLButtonElement>(i === 0 ? "#row-left" : "#row-right").hidden = !choice;
-      rowHints[i].visible = !!choice;
-      if (choice) {
-        const start = rowPoint(choice.row.axis, choice.row.from, choice.row.lane);
-        rowHints[i].geometry.dispose(); rowHints[i].geometry = new THREE.BufferGeometry().setFromPoints(
-          [start, choice.point].map(p => new THREE.Vector3(p.x, 0.13, p.z)));
-        rowHints[i].computeLineDistances();
-      }
-    });
     el("#speed").textContent = `${state.speed.toFixed(1)} m/s`;
     el("#turn").textContent = `${Math.abs(turnRate).toFixed(0)}°/s`;
     el("#release").textContent = releaseTurn === null ? "—" : `${releaseTurn.toFixed(1)}°`;
@@ -423,7 +353,5 @@ function tick(now: number) {
 resize(); syncUI(); tractor.setTool(tool); requestAnimationFrame(tick);
 Object.defineProperty(window, "__HANDLING_LAB__", { get: () => ({ profile, reference, view, tool, state: { ...state }, target,
   workPoint: workDestination?.point ?? null, endpointCell: endpointStudy?.cell ?? null,
-  rowTurn: rowTurn ? { elapsed: rowTurn.elapsed, radius: rowTurn.radius } : null,
-  workedRow: workedRows.last, practiceRows,
   endpointValue: endpointStudy ? field.grid[endpointStudy.cell] : null,
-  turnRate, releaseTurn, row: rowGuide.active, painted: field.grid.filter(x => x !== 0).length }) });
+  turnRate, releaseTurn, endTurn: !!endTurn, workedRow: workedRows.last, painted: field.grid.filter(x => x !== 0).length }) });

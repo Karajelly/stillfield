@@ -6,7 +6,7 @@ export type Profile = "native" | "web" | "gentle";
 export const tuning = {
   turnRate: 1.2, tapTurnRate: 1.4, steeringResponse: 12,
   acceleration: 4, braking: 10, deadzone: 10, dragRange: 110,
-  brushRadius: 1.25, rowPitch: 2.15, rowCapture: 0.55,
+  brushRadius: 1.25,
   tightTurnSpeed: 1.29,
 };
 
@@ -99,48 +99,6 @@ export class GentleDrive {
     x += Math.sin(heading) * speed * dt;
     z += Math.cos(heading) * speed * dt;
     return constrain(state, { x, z, heading, speed }, dt, obstacles);
-  }
-}
-
-export function nearbyRow(requested: number, lanes: number[]) {
-  let selected = requested, distance = tuning.rowCapture;
-  for (const lane of lanes) {
-    for (const candidate of [lane - tuning.rowPitch, lane + tuning.rowPitch]) {
-      const error = Math.abs(candidate - requested);
-      if (error < distance) { distance = error; selected = candidate; }
-    }
-  }
-  return selected;
-}
-
-/** Deliberate, near-cardinal passes only. No autopilot turns or gap completion. */
-export class RowGuide {
-  lanes: [number[], number[]] = [[], []];
-  active: { axis: number; lane: number; heading: number; start: Point } | null = null;
-  recorded = false;
-  finish(state: TractorState) {
-    if (this.active && !this.recorded && Math.hypot(state.x - this.active.start.x, state.z - this.active.start.z) >= 6) {
-      this.lanes[this.active.axis].push(this.active.lane);
-    }
-    this.active = null; this.recorded = false;
-  }
-  target(state: TractorState, target: Point) {
-    const distance = Math.hypot(target.x - state.x, target.z - state.z);
-    const desired = Math.atan2(target.x - state.x, target.z - state.z);
-    const snapped = Math.round(desired / (Math.PI / 2)) * Math.PI / 2;
-    if (this.active && Math.abs(angleDifference(desired, this.active.heading)) > 0.28) this.finish(state);
-    if (!this.active && distance > 6 && Math.abs(angleDifference(desired, snapped)) < 0.13
-      && Math.abs(angleDifference(state.heading, snapped)) < 0.2) {
-      const axis = Math.abs(Math.sin(snapped)) > 0.5 ? 0 : 1;
-      const lane = nearbyRow(axis === 0 ? target.z : target.x, this.lanes[axis]);
-      this.active = { axis, lane, heading: snapped, start: { x: state.x, z: state.z } };
-      this.recorded = false;
-    }
-    if (!this.active) return target;
-    if (!this.recorded && Math.hypot(state.x - this.active.start.x, state.z - this.active.start.z) >= 6) {
-      this.lanes[this.active.axis].push(this.active.lane); this.recorded = true;
-    }
-    return this.active.axis === 0 ? { x: target.x, z: this.active.lane } : { x: this.active.lane, z: target.z };
   }
 }
 

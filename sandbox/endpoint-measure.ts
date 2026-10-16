@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { angleDifference, cellsUnderBrush, FIELD } from "../src/simulation";
 import type { Point, Obstacle, Tool, TractorState } from "../src/simulation";
-import { baseline, GentleDrive, RowGuide, tuning } from "./handling";
+import { baseline, GentleDrive, tuning } from "./handling";
 import { attachmentPoint, WorkDestination } from "./work-destination";
 
 type Model = "native" | "web" | "gentle";
 function run(model: Model, point: Point, initial: TractorState, fps: number, tool: Tool = "mow",
-  proposed = true, obstacles: Obstacle[] = [], guide?: RowGuide, retarget?: Point) {
+  proposed = true, obstacles: Obstacle[] = [], retarget?: Point) {
   let state = { ...initial }, goal = proposed ? WorkDestination.create(point, state, tool) : null;
   let target: Point | null = point, previousBrush: Point | null = null, lastPaint = 0, blockedTime = 0;
   const field = new Map<number, number>(), drive = new GentleDrive();
@@ -30,7 +30,6 @@ function run(model: Model, point: Point, initial: TractorState, fps: number, too
     }
     const plan = goal?.plan(state);
     let movementTarget = plan?.target ?? target;
-    if (guide && movementTarget) movementTarget = guide.target(state, movementTarget);
     state = model === "gentle" ? drive.step(state, dt, movementTarget ? { target: movementTarget } : null, obstacles, plan?.paceScale ?? 1)
       : baseline(model, state, movementTarget, dt, obstacles, false, plan?.paceScale ?? 1);
     distance += Math.hypot(state.x - previous.x, state.z - previous.z);
@@ -85,11 +84,9 @@ for (const model of ["native", "web", "gentle"] as const) {
   assert.ok(Math.hypot(wander.final.x - to.x, wander.final.z - to.z) < 0.6); checked++;
   const blocked = run(model, to, from, 60, "mow", true, [{ x: 8, z: 0, radius: 2 }]);
   assert.equal(blocked.status, "blocked"); assert.equal(blocked.endpointValue, 0); checked++;
-  const redirected = run(model, to, from, 60, "sow", true, [], undefined, { x: 1, z: -6 });
+  const redirected = run(model, to, from, 60, "sow", true, [], { x: 1, z: -6 });
   assert.equal(redirected.status, "worked"); assert.equal(redirected.endpointValue, 3); checked++;
-  const guide = new RowGuide(); guide.lanes[0] = [-2.15 + 0.45];
-  const assisted = run(model, to, from, 60, "till", true, [], guide);
-  assert.equal(assisted.status, "worked"); assert.equal(assisted.endpointValue, 2); checked++;
+
 }
 assert.equal(WorkDestination.create({ x: 40, z: 0 }, cases[0].from, "mow"), null);
 assert.equal(WorkDestination.create({ x: 0, z: 0 }, cases[0].from, "wander"), null);

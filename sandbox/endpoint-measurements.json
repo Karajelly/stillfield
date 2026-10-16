@@ -1,5 +1,5 @@
 {
-  "checked": 525,
+  "checked": 522,
   "note": "Unobstructed work endpoints plus deliberate blockage; pure model checks, not touch hardware assessment.",
   "comparison": [
     {
@@ -30,12 +30,12 @@
         "proposed": true,
         "status": "worked",
         "endpointValue": 1,
-        "completedAt": 3.783333333333333,
-        "distance": 14.923117159471563,
+        "completedAt": 4.983333333333333,
+        "distance": 16.045135753462812,
         "final": {
-          "x": 19.923117159471563,
+          "x": 21.045135753462812,
           "z": 0.125,
-          "heading": 1.5707963267948966,
+          "heading": 1.5707963267948963,
           "speed": 0
         },
         "point": {
@@ -72,12 +72,12 @@
         "proposed": true,
         "status": "worked",
         "endpointValue": 1,
-        "completedAt": 3.6333333333333333,
-        "distance": 15.092774097115246,
+        "completedAt": 4.616666666666666,
+        "distance": 16.103329438544993,
         "final": {
-          "x": 20.092774097115246,
+          "x": 21.103329438544993,
           "z": 0.125,
-          "heading": 1.5707963267948966,
+          "heading": 1.5707963267948963,
           "speed": 0
         },
         "point": {
@@ -114,10 +114,10 @@
         "proposed": true,
         "status": "worked",
         "endpointValue": 1,
-        "completedAt": 3.8833333333333333,
-        "distance": 14.961432819798304,
+        "completedAt": 5.066666666666666,
+        "distance": 16.067675263328823,
         "final": {
-          "x": 19.961432819798304,
+          "x": 21.067675263328823,
           "z": 0.125,
           "heading": 1.5707963267948966,
           "speed": 0

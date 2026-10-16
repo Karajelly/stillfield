@@ -1,0 +1,240 @@
+{
+  "note": "Actual row followed by a nearby click, alignment, working the clicked spot, and rest. No next-row buttons or automatic continuation. Model checks, not touch feel assessment.",
+  "cases": 220,
+  "maxFacingErrorDegrees": 0.18271781449809033,
+  "maxLateralError": 0.001622507868332105,
+  "stopDistancePastClick": [
+    2.1570316448240248,
+    2.233270741086849
+  ],
+  "elapsedSeconds": [
+    6.799999999999981,
+    7.5333333333334975
+  ],
+  "manual": [
+    {
+      "fps": 30,
+      "initialSpeed": 0,
+      "width": 2.1604436188776956
+    },
+    {
+      "fps": 30,
+      "initialSpeed": 4.675,
+      "width": 2.2237960371120655
+    },
+    {
+      "fps": 60,
+      "initialSpeed": 0,
+      "width": 2.1650803070465705
+    },
+    {
+      "fps": 60,
+      "initialSpeed": 4.675,
+      "width": 2.2249127588935593
+    },
+    {
+      "fps": 120,
+      "initialSpeed": 0,
+      "width": 2.167136754786166
+    },
+    {
+      "fps": 120,
+      "initialSpeed": 4.675,
+      "width": 2.225192754906587
+    }
+  ],
+  "examples": [
+    {
+      "model": "native",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": -2.5,
+      "tool": "mow",
+      "endOffset": 0,
+      "elapsed": 7.19999999999998,
+      "facingErrorDegrees": 0.13096986975684216,
+      "lateralError": 0.0012268533514162884,
+      "alongDistance": 2.1632857403226704
+    },
+    {
+      "model": "native",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": -0.25,
+      "tool": "mow",
+      "endOffset": 0,
+      "elapsed": 6.983333333333314,
+      "facingErrorDegrees": 0.11418524777931909,
+      "lateralError": 0.001055272604247974,
+      "alongDistance": 2.1704868834733757
+    },
+    {
+      "model": "native",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": 0.25,
+      "tool": "mow",
+      "endOffset": 0,
+      "elapsed": 6.983333333333314,
+      "facingErrorDegrees": 0.11418524777933313,
+      "lateralError": 0.0010489069360418123,
+      "alongDistance": 2.1736810389907117
+    },
+    {
+      "model": "native",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": 2.5,
+      "tool": "mow",
+      "endOffset": 0,
+      "elapsed": 7.1666666666666465,
+      "facingErrorDegrees": 0.1309698697568562,
+      "lateralError": 0.0012238260641050797,
+      "alongDistance": 2.1646100944251727
+    },
+    {
+      "model": "web",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": -2.5,
+      "tool": "mow",
+      "endOffset": 0,
+      "elapsed": 7.24999999999998,
+      "facingErrorDegrees": 0.13239433471274933,
+      "lateralError": 0.001088487982548434,
+      "alongDistance": 2.228940142437782
+    },
+    {
+      "model": "web",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": -0.25,
+      "tool": "mow",
+      "endOffset": 0,
+      "elapsed": 7.04999999999998,
+      "facingErrorDegrees": 0.11240121135506674,
+      "lateralError": 0.0009171943344468622,
+      "alongDistance": 2.232466809671283
+    },
+    {
+      "model": "web",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": 0.25,
+      "tool": "mow",
+      "endOffset": 0,
+      "elapsed": 7.033333333333314,
+      "facingErrorDegrees": 0.11240121135513163,
+      "lateralError": 0.0009406717691263847,
+      "alongDistance": 2.2204993568384963
+    },
+    {
+      "model": "web",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": 2.5,
+      "tool": "mow",
+      "endOffset": 0,
+      "elapsed": 7.19999999999998,
+      "facingErrorDegrees": 0.13239433471286516,
+      "lateralError": 0.0011106600411867062,
+      "alongDistance": 2.2193448442342225
+    },
+    {
+      "model": "gentle",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": -2.5,
+      "tool": "mow",
+      "endOffset": 0,
+      "elapsed": 7.183333333333313,
+      "facingErrorDegrees": 0.13451982283538516,
+      "lateralError": 0.0011910500673558107,
+      "alongDistance": 2.196720634542812
+    },
+    {
+      "model": "gentle",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": -0.25,
+      "tool": "mow",
+      "endOffset": 0,
+      "elapsed": 7.349999999999979,
+      "facingErrorDegrees": 0.1778631674378592,
+      "lateralError": 0.0015850511335623874,
+      "alongDistance": 2.1935197079609527
+    },
+    {
+      "model": "gentle",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": 0.25,
+      "tool": "mow",
+      "endOffset": 0,
+      "elapsed": 7.0833333333333135,
+      "facingErrorDegrees": 0.13194848185638525,
+      "lateralError": 0.0011613945707722255,
+      "alongDistance": 2.1999156590540783
+    },
+    {
+      "model": "gentle",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": 2.5,
+      "tool": "mow",
+      "endOffset": 0,
+      "elapsed": 7.483333333333312,
+      "facingErrorDegrees": 0.12050006563095972,
+      "lateralError": 0.0010664544127398127,
+      "alongDistance": 2.1971626734869165
+    },
+    {
+      "model": "gentle",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": 2.15,
+      "tool": "till",
+      "endOffset": -1,
+      "elapsed": 7.316666666666646,
+      "facingErrorDegrees": 0.18271781449809033,
+      "lateralError": 0.001622507868332105,
+      "alongDistance": 2.1929241694776205
+    },
+    {
+      "model": "gentle",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": 2.15,
+      "tool": "till",
+      "endOffset": 1,
+      "elapsed": 6.799999999999981,
+      "facingErrorDegrees": 0.06078542755135144,
+      "lateralError": 0.0005559144459735801,
+      "alongDistance": 2.198354117899953
+    },
+    {
+      "model": "gentle",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": 2.15,
+      "tool": "sow",
+      "endOffset": -1,
+      "elapsed": 7.316666666666646,
+      "facingErrorDegrees": 0.18271781449809033,
+      "lateralError": 0.001622507868332105,
+      "alongDistance": 2.1929241694776205
+    },
+    {
+      "model": "gentle",
+      "fps": 60,
+      "heading": 1.5707963267948966,
+      "lateral": 2.15,
+      "tool": "sow",
+      "endOffset": 1,
+      "elapsed": 6.799999999999981,
+      "facingErrorDegrees": 0.06078542755135144,
+      "lateralError": 0.0005559144459735801,
+      "alongDistance": 2.198354117899953
+    }
+  ]
+}

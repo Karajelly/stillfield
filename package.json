@@ -2,6 +2,17 @@
   "name": "stillfield",
   "private": true,
   "version": "0.1.0",
+  "description": "A tranquil farming and zen garden playground for iPhone, iPad, and web.",
+  "license": "MIT",
+  "author": "John Karakelle",
+  "homepage": "https://stillfield.io",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Karajelly/stillfield.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Karajelly/stillfield/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",

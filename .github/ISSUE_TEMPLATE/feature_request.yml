@@ -1,0 +1,26 @@
+name: Idea or feature request
+description: Suggest something that fits Stillfield's calm
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Stillfield is deliberately quiet: no currency, deadlines, energy meters, quests, or penalties. Ideas that add pressure or tracking won't fit, but gentle ideas are very welcome.
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to see?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would it make the game calmer or nicer?
+    validations:
+      required: true
+  - type: checkboxes
+    id: pr
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd be interested in building this myself

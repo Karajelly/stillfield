@@ -1,0 +1,19 @@
+# How to play
+
+The full guide to Stillfield's controls and farming loop.
+
+
+- Tap where cultivating, sowing, harvesting, or mowing should finish. The tractor continues until its trailing implement works that square, then stops. In overhead view, drag across the meadow to keep choosing destinations. Pinch or use the zoom buttons to change your view.
+- In the native app, tap the vehicle button beside the zoom controls to switch into **Tractor view**, a perspective view following behind you. Hold to roll, move left or right from where you touched to steer, return to center to go straight, and lift to coast to a stop. A quick tap still chooses a work endpoint. Pinch to adjust camera distance. Each view keeps its own zoom during play, and your chosen view saves with your meadow.
+- After a straight row, let the tractor settle and tap the neighboring ground beside its end. It lifts the implement, turns into your chosen spot, faces back along the row, works the spot, and stops ready for your next input. There are no suggested lanes, spacing correction, or automatic next passes.
+- A cream ring stays on the spot you chose. Tap again to redirect the tractor; its cruising pace stays gentle. The 2.5 m working swath spans five 50 cm cells and follows the visible deck continuously between frames, with 25 cm of forgiving edge coverage on each side.
+- The main dock follows **Cultivate → Sow → Harvest**, with **Wander** for a quiet ride. Cultivate grass, stubble, or unwanted crops into prepared soil; mowing is optional. Plowing over crops leaves soil ready to sow without adding harvest rewards. Sowing only works in prepared soil. Three illustrated crop buttons appear while **Sow** is selected. Choose wheat, sunflowers, or pumpkins; seeds are unlimited and all crops use the same tools.
+- Crops move through planted soil, shoots, leafy growth, and maturity. Sunflowers take **3 minutes**, wheat **6**, and pumpkins **9** of active play. Mature crops wait indefinitely. Pausing, opening a sheet, or leaving the game pauses growth; no time passes offline.
+- Harvest mature crops to leave stubble and fill the field’s display by the barn path: sunflower pots, golden wheat sheaves in a wheelbarrow, and pumpkins in a wooden cart. The first harvested cell is visible immediately. Displays fill through three stages and never prevent further harvesting.
+- Sowing immediately changes the soil: golden seed rows for wheat, striped seed pairs on olive-brown beds for sunflowers, and simple orange seed rows for pumpkins. Small seeds make fresh planting visible in tractor view as well as from above.
+- A new farm starts with three small, mature plots of wheat, sunflowers, and pumpkins, ready to harvest. Two full mown strips and a half-length strip sit along the bottom of the field, with the tractor at the end of the half strip. Repeated sowing and invalid passes leave crops and progress untouched. There is no selling, hauling, upkeep, or penalty for stopping.
+- The pause button gives you a moment to breathe.
+- Settings control pace, golden light, haptics, and nature-sound volume. The tractor cruises at 3 m/s by default; the pace slider reaches 4.5 m/s.
+- Enable sound with the speaker button for wind, birds, and a soft tractor hum.
+- Ground states, selected crop, exact growth progress, mown paths, harvest displays, tractor position, tool, and settings save on this device. There is no account or cloud sync.
+- **Settings → A fresh meadow** asks before clearing the field. The rest of your preferences stay in place.

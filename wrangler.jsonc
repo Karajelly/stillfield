@@ -1,0 +1,10 @@
+{
+  // Cloudflare Workers config for stillfield.io (static assets built by `npm run build`).
+  "name": "stillfield",
+  "compatibility_date": "2026-11-03",
+  "assets": {
+    "directory": "./dist"
+  },
+  // Required by `wrangler preview`, which Workers Builds runs for pull request branches.
+  "previews": {}
+}

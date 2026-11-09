@@ -79,6 +79,8 @@ The browser proof of concept remains in `src/` and `public/`. It uses Vite, Type
 
 Stillfield is the browser’s farm identity. Landscape labels mark Windmill hill, the barn, the pond, and the field; they stay anchored when zooming, clear the controls, and fade when driving begins. Compact and portrait layouts keep the landscape free of labels.
 
+Tractor view matches the native app. `src/follow-camera.ts` ports `TractorFollowCamera` (the level boom, 1.3° quiet zone, scenery clearance, and narrow-screen field of view) and `SteeringGesture` from `StillfieldCore`; keep the pairs in sync. Drag steering reuses `GentleDrive` through `TractorNavigation`'s follow mode. Taps project through the rendered perspective camera, and taps that land in the sky or beyond the drivable area are ignored. Each view keeps its own zoom during play, the chosen view saves with the meadow, and V toggles it. Landscape labels stay hidden in tractor view.
+
 ```sh
 npm install
 npm run dev

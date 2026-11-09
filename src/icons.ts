@@ -49,6 +49,8 @@ const paths: Record<string, string> = {
   down: '<path d="m7 10 5 5 5-5"/>',
   right: '<path d="m10 7 5 5-5 5"/>',
   menu: '<path d="M5 6h14M5 12h14M5 18h14"/>',
+  tractor:
+    '<path d="M8.5 10V4.5h7V10M6 10h12v6H6Z"/><rect x="2.5" y="11.5" width="4" height="8.5" rx="1.6"/><rect x="17.5" y="11.5" width="4" height="8.5" rx="1.6"/><path d="M10.5 16v3h3v-3"/>',
   camera:
     '<path d="M8 5h8l2 3h3v12H3V8h3l2-3Z"/><circle cx="12" cy="13" r="4"/>',
 };

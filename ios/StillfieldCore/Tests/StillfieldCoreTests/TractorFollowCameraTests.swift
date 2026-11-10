@@ -127,3 +127,16 @@ import Testing
     #expect(project([200, 700], fov: .infinity) == nil)
     #expect(project([200, 700], viewport: [0, 800]) == nil)
 }
+
+@Test func perspectiveTapsBeyondTheDrivableMeadowAreIgnored() {
+    let near = PerspectiveGroundProjection.drivable(FarmPoint(x: 12, z: -4))
+    #expect(near?.x == 12 && near?.z == -4)
+    for edge in [FarmPoint(x: 39, z: 28), FarmPoint(x: -39, z: -30)] {
+        #expect(PerspectiveGroundProjection.drivable(edge) != nil)
+    }
+    for far in [FarmPoint(x: 39.01, z: 0), FarmPoint(x: -120, z: 0), FarmPoint(x: 0, z: 28.5),
+                FarmPoint(x: 0, z: -30.5), FarmPoint(x: .nan, z: 0)] {
+        #expect(PerspectiveGroundProjection.drivable(far) == nil)
+    }
+    #expect(PerspectiveGroundProjection.drivable(nil) == nil)
+}

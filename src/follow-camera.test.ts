@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as THREE from "three";
-import { FOLLOW_ZOOM, SteeringGesture, TractorFollowCamera } from "./follow-camera";
+import { drivableTarget, FOLLOW_ZOOM, SteeringGesture, TractorFollowCamera } from "./follow-camera";
 import type { TractorState } from "./simulation";
 
 const tractorAt = (heading: number, x = 0, z = 0): TractorState => ({ x, z, heading, speed: 0 });
@@ -128,4 +128,11 @@ test("only movement turns a tap into driving; holding still stays a tap", () => 
   drag.update(100, 200);
   assert.equal(drag.moved, true, "returning to center still drives straight, never a tap");
   assert.equal(drag.heading, 1);
+});
+
+test("taps beyond the drivable meadow are ignored instead of pulled to its edge", () => {
+  assert.deepEqual(drivableTarget({ x: 12, z: -4 }), { x: 12, z: -4 });
+  for (const edge of [{ x: 39, z: 28 }, { x: -39, z: -30 }]) assert.ok(drivableTarget(edge));
+  for (const far of [{ x: 39.01, z: 0 }, { x: -120, z: 0 }, { x: 0, z: 28.5 }, { x: 0, z: -30.5 }, { x: Number.NaN, z: 0 }])
+    assert.equal(drivableTarget(far), null);
 });

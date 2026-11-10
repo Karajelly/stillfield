@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { clamp } from "./simulation";
 import { steeringOffset } from "./handling";
-import type { Obstacle, TractorState } from "./simulation";
+import type { Obstacle, Point, TractorState } from "./simulation";
 
 export type CameraMode = "overview" | "tractor";
 
@@ -98,4 +98,12 @@ export class SteeringGesture {
   get drag() { return this.location.x - this.origin.x; }
   /** Drag right to turn right. Heading-positive is screen-left for the +Z forward tractor. */
   get heading() { return this.startHeading - steeringOffset(this.drag); }
+}
+
+/**
+ * Behind the tractor, taps on scenery beyond the drivable meadow are ignored rather than
+ * pulled to its edge. Matches PerspectiveGroundProjection.drivable in Swift.
+ */
+export function drivableTarget(point: Point): Point | null {
+  return point.x >= -39 && point.x <= 39 && point.z >= -30 && point.z <= 28 ? point : null;
 }

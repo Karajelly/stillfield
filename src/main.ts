@@ -12,7 +12,7 @@ import type { Point, Tool, TractorState } from "./simulation";
 import { icon, brandMark } from "./icons";
 import { overviewFraming } from "./overview";
 import { DriveKeyboard, GridKeyboard, isDriveKey } from "./keyboard-navigation";
-import { FOLLOW_ZOOM, SteeringGesture, TractorFollowCamera } from "./follow-camera";
+import { drivableTarget, FOLLOW_ZOOM, SteeringGesture, TractorFollowCamera } from "./follow-camera";
 import type { CameraMode } from "./follow-camera";
 
 interface Save {
@@ -552,11 +552,7 @@ function pointerTarget(event: { clientX: number; clientY: number }) {
   raycaster.setFromCamera(pointer, view);
   if (raycaster.ray.intersectPlane(groundPlane, intersection)) {
     // Sky and far-scenery taps behind the tractor must never send it to a far edge.
-    if (
-      view === followView &&
-      (Math.abs(intersection.x) > 39 || intersection.z < -30 || intersection.z > 28)
-    )
-      return;
+    if (view === followView && !drivableTarget(intersection)) return;
     keyboard.reset();
     target = {
       x: clamp(intersection.x, -39, 39),

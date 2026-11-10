@@ -254,11 +254,11 @@ final class FarmController {
                 cameraUp: vector(transform.columns.1), cameraForward: -vector(transform.columns.2),
                 verticalHalfExtent: Double(projection.scale))
         } else if let projection = camera.components[PerspectiveCameraComponent.self] {
-            destination = PerspectiveGroundProjection.project(
+            destination = PerspectiveGroundProjection.drivable(PerspectiveGroundProjection.project(
                 screenPoint: screenPoint, viewportSize: viewportSize,
                 cameraPosition: vector(transform.columns.3), cameraRight: vector(transform.columns.0),
                 cameraUp: vector(transform.columns.1), cameraForward: -vector(transform.columns.2),
-                verticalFieldOfView: Double(projection.fieldOfViewInDegrees))
+                verticalFieldOfView: Double(projection.fieldOfViewInDegrees)))
         } else { destination = nil }
         guard let destination else { return }
         target = FarmPoint(x: min(39, max(-39, destination.x)), z: min(28, max(-30, destination.z)))

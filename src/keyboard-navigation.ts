@@ -89,3 +89,30 @@ export function advanceGridTractor(state: TractorState, input: GridInput, dt: nu
   return { x: state.x + direction.x * travel, z: state.z + direction.z * travel,
     heading, speed: travel < distance ? 0 : speed };
 }
+
+const driveAxes: Record<string, { throttle?: number; steer?: number }> = {
+  KeyW: { throttle: 1 }, ArrowUp: { throttle: 1 },
+  KeyS: { throttle: -1 }, ArrowDown: { throttle: -1 },
+  KeyA: { steer: -1 }, ArrowLeft: { steer: -1 },
+  KeyD: { steer: 1 }, ArrowRight: { steer: 1 },
+};
+
+/**
+ * Tractor view's keyboard, as in most farming and driving games: W or ↑ rolls,
+ * S or ↓ settles to a stop, and A/D or ←/→ steer. The most recent key wins on each axis.
+ */
+export class DriveKeyboard {
+  private held: string[] = [];
+  press(code: string) {
+    if (!Object.hasOwn(driveAxes, code) || this.held.includes(code)) return;
+    this.held.push(code);
+  }
+  release(code: string) { this.held = this.held.filter((held) => held !== code); }
+  reset() { this.held = []; }
+  get input(): { throttle: number; steer: number } | null {
+    if (!this.held.length) return null;
+    const latest = (axis: "throttle" | "steer") =>
+      this.held.map((code) => driveAxes[code][axis]).filter((value) => value !== undefined).at(-1) ?? 0;
+    return { throttle: latest("throttle"), steer: latest("steer") };
+  }
+}

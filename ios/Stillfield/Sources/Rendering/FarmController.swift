@@ -215,7 +215,7 @@ final class FarmController {
         let started = steeringGesture == nil
         if started {
             navigation.cancel(); target = nil; destinationMarker.isEnabled = false
-            steeringGesture = SteeringGesture(location: SIMD2(Double(origin.x), Double(origin.y)), time: elapsed)
+            steeringGesture = SteeringGesture(location: SIMD2(Double(origin.x), Double(origin.y)), heading: tractorState.heading)
         }
         steeringGesture?.update(SIMD2(Double(point.x), Double(point.y)))
         if cameraMode == .overview && (started || steeringGesture?.moved == true) { chooseGround(at: point) }
@@ -226,10 +226,10 @@ final class FarmController {
     func endSteering() {
         defer { steeringGesture = nil; steeringSuppressed = false }
         guard !steeringSuppressed, let gesture = steeringGesture else { return }
-        if cameraMode == .tractor && !gesture.isDriving(at: elapsed) {
+        if cameraMode == .tractor && !gesture.moved {
             chooseGround(at: CGPoint(x: gesture.location.x, y: gesture.location.y))
         }
-        // The next frame has no drag input: yaw stops immediately, travel coasts.
+        // The next frame has no drag input: yaw stops immediately, travel settles.
     }
 
     func cancelSteering() {
@@ -302,7 +302,7 @@ final class FarmController {
         if !introDismissed { dismissIntro() }
         selectionFeedback()
         persist()
-        showToast(cameraMode == .tractor ? "Hold to roll. Steer gently, then lift to settle." : "A little room to see it all.")
+        showToast(cameraMode == .tractor ? "Drag to roll. Slide sideways to steer, then lift to settle." : "A little room to see it all.")
     }
 
     private func updateFollowCamera(deltaTime: Double = 0, snap: Bool = false) {
@@ -411,8 +411,8 @@ final class FarmController {
         fieldRenderer?.animate(seconds: dt)
         if growth.advancedSeconds > 0 { dirty = true }
         elapsed += dt
-        let input: DriveInput? = cameraMode == .tractor && steeringGesture?.isDriving(at: elapsed) == true
-            ? .drag(steeringGesture!.drag) : nil
+        let input: DriveInput? = cameraMode == .tractor && steeringGesture?.moved == true
+            ? .heading(steeringGesture!.heading) : nil
         let movement = navigation.step(tractorState, deltaTime: dt, tool: tool, obstacles: obstacles,
                                        pace: pace, manual: input, follow: cameraMode == .tractor)
         tractorState = movement.state

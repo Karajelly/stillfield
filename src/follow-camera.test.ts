@@ -111,16 +111,21 @@ test("narrow screens widen the field of view; wide screens keep a calm 58°", ()
   assert.equal(TractorFollowCamera.verticalFieldOfView(Number.NaN), 58);
 });
 
-test("a quick tap chooses a destination; holding or moving starts steering", () => {
-  const tap = new SteeringGesture(100, 200, 10);
+test("only movement turns a tap into driving; holding still stays a tap", () => {
+  const tap = new SteeringGesture(100, 200, 1);
   tap.update(104, 203);
-  assert.equal(tap.isDriving(10.2), false);
-  assert.equal(tap.isDriving(10.23), true);
-  const drag = new SteeringGesture(100, 200, 10);
-  drag.update(140, 200);
-  assert.equal(drag.isDriving(10.01), true);
-  assert.equal(drag.drag, 40);
+  assert.equal(tap.moved, false, "tremor and long presses stay taps");
+  const drag = new SteeringGesture(100, 200, 1);
+  drag.update(100, 170);
+  assert.equal(drag.moved, true, "a small push upward starts rolling straight");
+  assert.equal(drag.heading, 1);
+  drag.update(105, 170);
+  assert.equal(drag.heading, 1, "a 10 px dead zone absorbs wobble");
+  drag.update(210, 170);
+  assert.ok(Math.abs(drag.heading - (1 - Math.PI / 4)) < 1e-9, "100 px past the dead zone turns a quarter-turn right");
+  drag.update(-1000, 170);
+  assert.ok(Math.abs(drag.heading - (1 + Math.PI)) < 1e-9, "turning is capped at an about-face");
   drag.update(100, 200);
-  assert.equal(drag.moved, true, "returning to center still steers straight");
-  assert.equal(drag.drag, 0);
+  assert.equal(drag.moved, true, "returning to center still drives straight, never a tap");
+  assert.equal(drag.heading, 1);
 });

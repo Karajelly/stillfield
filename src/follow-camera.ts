@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { clamp } from "./simulation";
+import { steeringOffset } from "./handling";
 import type { Obstacle, TractorState } from "./simulation";
 
 export type CameraMode = "overview" | "tractor";
@@ -76,12 +77,17 @@ export class TractorFollowCamera {
   }
 }
 
-/** The hold delay separates destination taps from continuous third-person driving. */
+/**
+ * Tractor view's touch and mouse gesture. A tap that stays put chooses a destination;
+ * moving more than 8 px starts rolling, and the sideways offset from where you
+ * pressed sets the direction to hold, relative to where the tractor faced then.
+ * There is no hold timer: only movement turns a tap into driving.
+ */
 export class SteeringGesture {
   readonly origin: { x: number; y: number };
   location: { x: number; y: number };
   moved = false;
-  constructor(x: number, y: number, readonly start: number) {
+  constructor(x: number, y: number, readonly startHeading: number) {
     this.origin = { x, y };
     this.location = { x, y };
   }
@@ -89,6 +95,7 @@ export class SteeringGesture {
     this.location = { x, y };
     this.moved ||= Math.hypot(x - this.origin.x, y - this.origin.y) > 8;
   }
-  isDriving(time: number) { return this.moved || time - this.start > 0.22; }
   get drag() { return this.location.x - this.origin.x; }
+  /** Drag right to turn right. Heading-positive is screen-left for the +Z forward tractor. */
+  get heading() { return this.startHeading - steeringOffset(this.drag); }
 }

@@ -11,7 +11,7 @@ import { TractorNavigation } from "./tractor-navigation";
 import type { Point, Tool, TractorState } from "./simulation";
 import { icon, brandMark } from "./icons";
 import { overviewFraming } from "./overview";
-import { GridKeyboard, isDriveKey } from "./keyboard-navigation";
+import { DriveKeyboard, GridKeyboard, isDriveKey } from "./keyboard-navigation";
 import { FOLLOW_ZOOM, SteeringGesture, TractorFollowCamera } from "./follow-camera";
 import type { CameraMode } from "./follow-camera";
 
@@ -78,7 +78,7 @@ let navigation = new TractorNavigation();
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
   <main class="farm-app welcoming">
-    <div id="scene" aria-label="Your pastoral farm. Tap or drag the meadow to drive. WASD or arrow keys follow the field rows, turning in place." role="application" tabindex="0"></div>
+    <div id="scene" aria-label="Your pastoral farm. Tap or drag the meadow to drive. WASD or arrow keys follow the field rows, turning in place; in tractor view, W rolls, A and D steer, and S settles." role="application" tabindex="0"></div>
     <div class="vignette" aria-hidden="true"></div>
     <header class="topbar menu-panel" id="top-controls">
       <a class="brand" href="#" aria-label="Stillfield home">stillfield</a>
@@ -340,13 +340,13 @@ function setCameraMode(mode: CameraMode, announce = true) {
   button.title = `${tractorView ? "Farm view" : "Tractor view"} (V)`;
   document.querySelector("#recenter")!.setAttribute("aria-label", tractorView ? "Center behind the tractor" : "Center the farm");
   document.querySelector("#drive-hint")!.innerHTML = tractorView
-    ? `hold to roll, then steer left or right <span class="hint-dot">·</span> tap to choose a spot`
+    ? `<span class="hint-desktop"><kbd>W</kbd> to roll <span class="hint-dot">·</span><kbd>A</kbd><kbd>D</kbd> to steer <span class="hint-dot">·</span></span> drag to roll and steer <span class="hint-dot">·</span> tap a spot`
     : `<span class="hint-desktop"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to drive <span class="hint-dot">·</span></span> tap or click to roam around`;
   resize();
   if (!announce) return;
   dismissIntro();
   persist();
-  toast(tractorView ? "Hold to roll. Steer gently, then let go to settle." : "A little room to see it all.");
+  toast(tractorView ? "Drag to roll. Slide sideways to steer, then let go to settle." : "A little room to see it all.");
 }
 function zoomBy(amount: number) {
   if (cameraMode === "tractor")
@@ -446,6 +446,7 @@ function stop() {
   steering = null;
   target = null;
   keyboard.reset();
+  driveKeys.reset();
   cursor.visible = false;
   tractorState.speed = 0;
   audio.setDriving(0);
@@ -499,7 +500,7 @@ function openDialog(content: string) {
 }
 function showHelp() {
   openDialog(
-    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO STILLFIELD</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>Tap where the work should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop.<br>WASD or arrow keys follow the field rows. Tap a new direction to turn in place; hold to drive. Up follows the view, even when the window is narrow.<br>The tractor button beside the zoom controls, or V, follows behind your tractor. Hold to roll, move left or right from where you pressed to steer, and let go to settle.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Cultivate prepares soil and clears any crops. Sow wheat, sunflowers, or pumpkins, then harvest when they’re ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests gather in pots and carts by the field.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Crops grow only while you’re here: sunflowers in 3 minutes, wheat in 6, pumpkins in 9. Nothing withers. Your meadow saves on this device.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
+    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO STILLFIELD</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>Tap where the work should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop.<br>WASD or arrow keys follow the field rows. Tap a new direction to turn in place; hold to drive. Up follows the view, even when the window is narrow.<br>The tractor button beside the zoom controls, or V, follows behind your tractor. Drag to roll; slide left or right from where you pressed to choose its direction, and let go to settle. With keys, W rolls, A and D steer, and S settles.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Cultivate prepares soil and clears any crops. Sow wheat, sunflowers, or pumpkins, then harvest when they’re ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests gather in pots and carts by the field.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Crops grow only while you’re here: sunflowers in 3 minutes, wheat in 6, pumpkins in 9. Nothing withers. Your meadow saves on this device.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
   );
   dialog.querySelector("#help-done")!.addEventListener("click", closeDialog);
 }
@@ -571,9 +572,9 @@ function pointerTarget(event: { clientX: number; clientY: number }) {
 let pointerId: number | null = null;
 let pointerOrigin = { x: 0, y: 0 },
   pointerMoved = false;
-/** Tractor view: hold to roll and steer from where you touched; a quick tap chooses a destination. */
+/** Tractor view: drag to roll and steer from where you pressed; a tap that stays put chooses a destination. */
 let steering: SteeringGesture | null = null;
-const clock = () => performance.now() / 1000;
+const driveKeys = new DriveKeyboard();
 sceneContainer.addEventListener("pointerdown", (e) => {
   if (
     paused ||
@@ -590,9 +591,10 @@ sceneContainer.addEventListener("pointerdown", (e) => {
   if (cameraMode === "tractor") {
     navigation.cancel();
     keyboard.reset();
+    driveKeys.reset();
     target = null;
     cursor.visible = false;
-    steering = new SteeringGesture(e.clientX, e.clientY, clock());
+    steering = new SteeringGesture(e.clientX, e.clientY, tractorState.heading);
     dismissIntro();
     scheduleControlsHide();
   } else pointerTarget(e);
@@ -610,8 +612,8 @@ sceneContainer.addEventListener("pointermove", (e) => {
 });
 sceneContainer.addEventListener("pointerup", (e) => {
   if (e.pointerId === pointerId) {
-    // The next frame has no drag input: yaw stops immediately, travel coasts.
-    if (steering && !steering.isDriving(clock()))
+    // The next frame has no drag input: yaw stops immediately, travel settles.
+    if (steering && !steering.moved)
       pointerTarget({ clientX: steering.location.x, clientY: steering.location.y });
     steering = null;
     pointerId = null;
@@ -646,11 +648,14 @@ window.addEventListener("keydown", (e) => {
   }
   if (isDriveKey(e.code)) {
     e.preventDefault();
-    if (!paused && !e.repeat) {
-      if (cameraMode === "tractor" && followCamera.heading !== null) {
-        // Up follows the view: behind the tractor, it means the way you're facing.
-        keyboardDown.set(-Math.sin(followCamera.heading), 0, -Math.cos(followCamera.heading));
-      }
+    if (!paused && !e.repeat && cameraMode === "tractor") {
+      // Behind the tractor, keys drive it like a vehicle instead of following the rows.
+      navigation.cancel();
+      target = null;
+      driveKeys.press(e.code);
+      dismissIntro();
+      scheduleControlsHide();
+    } else if (!paused && !e.repeat) {
       keyboard.press(e.code, keyboardDown);
       dismissIntro();
       scheduleControlsHide();
@@ -675,6 +680,7 @@ window.addEventListener("keydown", (e) => {
 });
 window.addEventListener("keyup", (e) => {
   keyboard.release(e.code);
+  driveKeys.release(e.code);
 });
 window.addEventListener("focus", () => {
   windowActive = true;
@@ -776,11 +782,13 @@ function animate(now: number) {
       selectedTool,
       world.obstacles,
       pace,
-      steering?.isDriving(clock())
-        ? { drag: steering.drag }
-        : gridInput
-          ? { grid: gridInput }
-          : null,
+      steering?.moved
+        ? { heading: steering.heading }
+        : cameraMode === "tractor" && driveKeys.input
+          ? { keys: driveKeys.input }
+          : gridInput
+            ? { grid: gridInput }
+            : null,
       cameraMode === "tractor",
     );
     tractorState = movement.state;
@@ -852,7 +860,8 @@ if (import.meta.env.DEV)
       cameraMode,
       tractorZoom,
       followHeading: followCamera.heading,
-      steering: steering?.isDriving(clock()) ? steering.drag : null,
+      steering: steering?.moved ? steering.heading : null,
+      driveKeys: driveKeys.input,
       drawCalls: renderer.info.render.calls,
       camera: {
         left: camera.left,

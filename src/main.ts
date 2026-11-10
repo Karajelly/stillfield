@@ -12,6 +12,26 @@ import type { Point, Tool, TractorState } from "./simulation";
 import { icon, brandMark } from "./icons";
 import { overviewFraming } from "./overview";
 import { GridKeyboard, isDriveKey } from "./keyboard-navigation";
+import {
+  DAY_COPY,
+  DAY_HOLDS,
+  daylightAt,
+  holdSeconds,
+  wrapDay,
+} from "./daylight";
+import type { DayHold, DayPhase } from "./daylight";
+import { createDusk } from "./dusk";
+import { Wind, WIND_STEPS, sliceNotes, windFrequency } from "./wind";
+import {
+  PHOTO,
+  POSTCARD_SIZE,
+  composePostcard,
+  growingLine,
+  photograph,
+  postcardBlob,
+  postcardCamera,
+} from "./postcard";
+import type { PostcardView } from "./postcard";
 
 interface Save {
   version: 1 | 2 | 3;
@@ -22,7 +42,10 @@ interface Save {
   tool: Tool;
   guide: boolean;
   pace: number;
+  /** Kept for saves from before the day began to move. */
   golden: boolean;
+  light?: DayHold;
+  day?: number;
   intro: boolean;
   volume: number;
 }
@@ -39,6 +62,13 @@ try {
   /* A private meadow works even without browser storage. */
 }
 const tools: Tool[] = ["cultivate", "sow", "harvest", "wander"];
+const LIGHT_NAMES: Record<DayHold, string> = {
+  flow: "Drifting",
+  morning: "Morning",
+  golden: "Golden",
+  dusk: "Dusk",
+  night: "Night",
+};
 let selectedTool: Tool = tools.includes(saved.tool!)
   ? saved.tool!
   : saved.tool === "mow" || saved.tool === "restore"
@@ -47,8 +77,18 @@ let selectedTool: Tool = tools.includes(saved.tool!)
 let selectedCrop: Crop = CROPS.includes(saved.crop!) ? saved.crop! : "wheat";
 let windowActive = document.hasFocus();
 let pace =
-    typeof saved.pace === "number" ? clamp(saved.pace, 0.55, 1.25) : 0.85,
-  golden = saved.golden ?? false;
+    typeof saved.pace === "number" ? clamp(saved.pace, 0.55, 1.25) : 0.85;
+// The day drifts unless the player keeps a favourite light. An older save with
+// golden light switched on keeps its golden hour.
+let light: DayHold = DAY_HOLDS.includes(saved.light!)
+  ? saved.light!
+  : saved.golden
+    ? "golden"
+    : "flow";
+let dayTime =
+  light === "flow"
+    ? wrapDay(typeof saved.day === "number" ? saved.day : 0)
+    : holdSeconds(light);
 let paused = false,
   soundEnabled = false,
   modalOpen = false,
@@ -80,8 +120,8 @@ app.innerHTML = `
       <a class="brand" href="#" aria-label="Stillfield home">stillfield</a>
       <button class="place-pill" id="place" aria-label="About Stillfield"><span class="live-dot"></span>Your farm ${icon("down")}</button>
       <div class="top-actions">
-        <div class="weather">${icon("sun")}<span id="weather-copy">A slow summer morning<span>76° · a gentle breeze</span></span></div>
-        <div class="action-group"><button class="round-button" id="sound" aria-label="Turn on nature sounds" aria-pressed="false" title="Nature sounds">${icon("muted")}</button><button class="round-button" id="pause" aria-label="Pause" aria-pressed="false" title="Pause (space)">${icon("pause")}</button><button class="round-button" id="settings" aria-label="Open settings" title="Make yourself at home">${icon("settings")}</button></div>
+        <div class="weather" id="weather"></div>
+        <div class="action-group"><button class="round-button" id="postcard" aria-label="Make a postcard of your meadow" title="A postcard">${icon("camera")}</button><button class="round-button" id="sound" aria-label="Turn on nature sounds" aria-pressed="false" title="Nature sounds">${icon("muted")}</button><button class="round-button" id="pause" aria-label="Pause" aria-pressed="false" title="Pause (space)">${icon("pause")}</button><button class="round-button" id="settings" aria-label="Open settings" title="Make yourself at home">${icon("settings")}</button></div>
       </div>
     </header>
     <section class="welcome" id="welcome" aria-labelledby="welcome-title">
@@ -209,7 +249,8 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 sceneContainer.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
-scene.background = new THREE.Color("#e8ecda");
+const sky = new THREE.Color("#e8ecda");
+scene.background = sky;
 scene.fog = new THREE.Fog("#e8ecda", 125, 230);
 const camera = new THREE.OrthographicCamera(-55, 55, 35, -35, 0.1, 300);
 const keyboardDown = new THREE.Vector3();
@@ -233,6 +274,8 @@ const world = createWorld(scene);
 const field = createField(scene, saved.farm ?? saved.grid);
 const tractor = createTractor(scene);
 tractor.setTool(selectedTool);
+const dusk = createDusk(scene, tractor.group);
+const wind = new Wind();
 let volume =
   typeof saved.volume === "number" ? clamp(saved.volume, 0, 1) : 0.45;
 const audio = new FarmAudio();
@@ -344,16 +387,47 @@ function positionLabels() {
   }
 }
 void document.fonts.ready.then(positionLabels);
-function setLight() {
-  sun.color.set(golden ? "#ffd299" : "#fff1ce");
-  sun.intensity = golden ? 3.3 : 3.1;
-  hemi.color.set(golden ? "#ffe3bb" : "#fff8df");
-  hemi.intensity = golden ? 2.0 : 2.5;
-  scene.background = new THREE.Color(golden ? "#eee5ce" : "#e8ecda");
-  scene.fog!.color.set(golden ? "#eee5ce" : "#e8ecda");
-  document.querySelector("#weather-copy")!.innerHTML =
-    `${golden ? "A little golden hour" : "A slow summer morning"}<span>76° · a gentle breeze</span>`;
-  document.body.classList.toggle("golden", golden);
+const SUN_DISTANCE = 67.4;
+let shownPhase: DayPhase | undefined,
+  shownHaze = "";
+/** Set the lights, the sky, and the interface's tint for this moment of the day. */
+function applyDaylight() {
+  const now = daylightAt(dayTime);
+  sun.color.setRGB(...now.sun, THREE.SRGBColorSpace);
+  sun.intensity = now.sunPower;
+  sun.position.set(
+    now.sunFrom[0] * SUN_DISTANCE,
+    now.sunFrom[1] * SUN_DISTANCE,
+    now.sunFrom[2] * SUN_DISTANCE,
+  );
+  sun.shadow.intensity = now.shadow;
+  hemi.color.setRGB(...now.skyLight, THREE.SRGBColorSpace);
+  hemi.groundColor.setRGB(...now.groundLight, THREE.SRGBColorSpace);
+  hemi.intensity = now.ambient;
+  sky.setRGB(...now.sky, THREE.SRGBColorSpace);
+  scene.fog!.color.copy(sky);
+  renderer.toneMappingExposure = now.exposure;
+  // The page edges take a paler shade of the sky by day and the sky itself at night.
+  const haze = now.sky.map((value) =>
+    Math.round(255 * (value + (1 - value) * 0.5 * (1 - now.glow))),
+  );
+  const hazeCss = haze.join(" ");
+  if (hazeCss !== shownHaze) {
+    shownHaze = hazeCss;
+    document.body.style.setProperty("--haze", hazeCss);
+    document.body.classList.toggle(
+      "after-dark",
+      0.2126 * haze[0] + 0.7152 * haze[1] + 0.0722 * haze[2] < 150,
+    );
+  }
+  if (now.phase !== shownPhase) {
+    shownPhase = now.phase;
+    const [title, detail] = DAY_COPY[now.phase];
+    const dark = now.phase === "dusk" || now.phase === "night";
+    document.querySelector("#weather")!.innerHTML =
+      `${icon(dark ? "moon" : "sun")}<span id="weather-copy">${title}<span>${detail}</span></span>`;
+  }
+  return now;
 }
 function persist() {
   try {
@@ -365,7 +439,9 @@ function persist() {
       tool: selectedTool,
       guide: false,
       pace,
-      golden,
+      golden: light === "golden",
+      light,
+      day: dayTime,
       intro: introDismissed,
       volume,
     };
@@ -427,16 +503,19 @@ async function toggleSound() {
 }
 const dialog = document.querySelector<HTMLDialogElement>("#dialog")!;
 let modalOpener: HTMLElement | null = null;
+let postcardUrl: string | undefined;
 function closeDialog() {
   dialog.close();
   modalOpen = false;
   modalOpener?.focus();
 }
-function openDialog(content: string) {
+function openDialog(content: string, kind = "") {
   setControlsHidden(false);
   stop();
-  modalOpener = document.activeElement as HTMLElement;
+  // A dialog that replaces another keeps the control that first opened one.
+  if (!dialog.open) modalOpener = document.activeElement as HTMLElement;
   modalOpen = true;
+  dialog.className = kind;
   document.querySelector("#dialog-content")!.innerHTML =
     `<button class="dialog-close round-button" aria-label="Close">${icon("close")}</button>${content}`;
   dialog.showModal();
@@ -450,13 +529,23 @@ function showHelp() {
 }
 function showSettings() {
   openDialog(
-    `<div class="eyebrow">THE WAY YOU LIKE IT</div><h2 id="dialog-title">Settle <em>in.</em></h2><p>A few small comforts for your time outside.</p><div class="settings-list"><label class="setting-row"><span><strong>Golden light</strong><small>A warmer kind of afternoon.</small></span><input type="checkbox" id="golden-setting" ${golden ? "checked" : ""}><span class="switch"></span></label><label class="range-setting" for="pace-setting"><strong>Your pace</strong><input type="range" id="pace-setting" min="0.55" max="1.25" step="0.05" value="${pace}"><span><small>Unhurried</small><small>A little breezier</small></span></label><label class="range-setting" for="volume-setting"><strong>Nature sounds</strong><input type="range" id="volume-setting" min="0" max="1" step="0.05" value="${volume}"><span><small>A whisper</small><small>All around you</small></span></label></div><button class="reset-button" id="fresh">${icon("reset")} A fresh meadow</button><p class="settings-footnote">${storageAvailable ? "Your meadow is saved automatically on this device." : "Browser storage is unavailable. This meadow lasts for this visit."}</p>`,
+    `<div class="eyebrow">THE WAY YOU LIKE IT</div><h2 id="dialog-title">Settle <em>in.</em></h2><p>A few small comforts for your time outside.</p><div class="settings-list"><div class="choice-setting"><span id="light-label"><strong>Time of day</strong><small>Let the day drift by, or keep the light you like.</small></span><div class="choice-row" role="group" aria-labelledby="light-label">${DAY_HOLDS.map((hold) => `<button class="choice ${hold === light ? "selected" : ""}" data-light="${hold}" aria-pressed="${hold === light}">${LIGHT_NAMES[hold]}</button>`).join("")}</div></div><label class="range-setting" for="pace-setting"><strong>Your pace</strong><input type="range" id="pace-setting" min="0.55" max="1.25" step="0.05" value="${pace}"><span><small>Unhurried</small><small>A little breezier</small></span></label><label class="range-setting" for="volume-setting"><strong>Nature sounds</strong><input type="range" id="volume-setting" min="0" max="1" step="0.05" value="${volume}"><span><small>A whisper</small><small>All around you</small></span></label></div><button class="reset-button" id="fresh">${icon("reset")} A fresh meadow</button><p class="settings-footnote">${storageAvailable ? "Your meadow is saved automatically on this device." : "Browser storage is unavailable. This meadow lasts for this visit."}</p>`,
   );
-  dialog.querySelector("#golden-setting")!.addEventListener("change", (e) => {
-    golden = (e.target as HTMLInputElement).checked;
-    setLight();
-    persist();
-  });
+  const lightChoices =
+    dialog.querySelectorAll<HTMLButtonElement>("[data-light]");
+  lightChoices.forEach((choice) =>
+    choice.addEventListener("click", () => {
+      light = choice.dataset.light as DayHold;
+      // A held light jumps to its moment; drifting carries on from wherever it is.
+      if (light !== "flow") dayTime = holdSeconds(light);
+      lightChoices.forEach((other) => {
+        const selected = other === choice;
+        other.classList.toggle("selected", selected);
+        other.setAttribute("aria-pressed", String(selected));
+      });
+      persist();
+    }),
+  );
   dialog.querySelector("#pace-setting")!.addEventListener("input", (e) => {
     pace = Number((e.target as HTMLInputElement).value);
     persist();
@@ -470,6 +559,91 @@ function showSettings() {
       if (!soundEnabled) await toggleSound();
     });
   dialog.querySelector("#fresh")!.addEventListener("click", showReset);
+}
+async function showPostcard(view: PostcardView = "farm") {
+  openDialog(
+    `<div class="eyebrow">A KEEPSAKE</div><h2 id="dialog-title">Wish you <em>were here.</em></h2><p>Your meadow, just as it is right now. It stays on this device unless you send it somewhere.</p><img class="postcard-preview" id="postcard-preview" width="${POSTCARD_SIZE.width}" height="${POSTCARD_SIZE.height}" alt="A postcard of your meadow"><div class="choice-row" role="group" aria-label="What the postcard shows">${(
+      [
+        ["farm", "The whole farm"],
+        ["field", "Just the field"],
+      ] as const
+    )
+      .map(
+        ([id, name]) =>
+          `<button class="choice ${id === view ? "selected" : ""}" data-view="${id}" aria-pressed="${id === view}">${name}</button>`,
+      )
+      .join(
+        "",
+      )}</div><button class="primary-button" id="postcard-save" disabled>Save the postcard ${icon("arrow")}</button><button class="text-button" id="postcard-share" hidden>Send it to someone</button>`,
+    "postcard",
+  );
+  const preview = dialog.querySelector<HTMLImageElement>("#postcard-preview")!;
+  dialog
+    .querySelectorAll<HTMLButtonElement>("[data-view]")
+    .forEach((choice) =>
+      choice.addEventListener("click", () => {
+        if (choice.dataset.view !== view)
+          void showPostcard(choice.dataset.view as PostcardView);
+      }),
+    );
+  dialog
+    .querySelector<HTMLButtonElement>(`[data-view="${view}"]`)!
+    .focus({ preventScroll: true });
+  // The caption uses the interface fonts, so wait for them before drawing.
+  await Promise.all([
+    document.fonts.load('italic 400 62px "Lora Variable"'),
+    document.fonts.load('500 72px "Lora Variable"'),
+    document.fonts.load('400 30px "DM Sans Variable"'),
+  ]).catch(() => {});
+  if (!preview.isConnected) return;
+  const shot = postcardCamera(view);
+  const cursorShown = cursor.visible;
+  cursor.visible = false;
+  // Fireflies are sized in screen pixels, so scale them to the larger picture.
+  dusk.setPointScale(
+    PHOTO.height /
+      (shot.top - shot.bottom) /
+      ((innerHeight * zoom) / (camera.top - camera.bottom)),
+  );
+  let photo: HTMLCanvasElement;
+  try {
+    photo = photograph(renderer, scene, shot);
+  } finally {
+    cursor.visible = cursorShown;
+    dusk.setPointScale(1);
+    renderer.render(scene, camera);
+  }
+  const card = composePostcard(
+    photo,
+    DAY_COPY[daylightAt(dayTime).phase][0],
+    growingLine(field.engine.cells, (cell) => field.engine.cropAt(cell)),
+  );
+  const blob = await postcardBlob(card);
+  if (!blob || !preview.isConnected) return;
+  if (postcardUrl) URL.revokeObjectURL(postcardUrl);
+  postcardUrl = URL.createObjectURL(blob);
+  preview.src = postcardUrl;
+  preview.classList.add("ready");
+  const save = dialog.querySelector<HTMLButtonElement>("#postcard-save")!;
+  save.disabled = false;
+  save.addEventListener("click", () => {
+    const link = document.createElement("a");
+    link.href = postcardUrl!;
+    link.download = "stillfield-postcard.png";
+    link.click();
+    toast("Saved. A little meadow to keep.");
+  });
+  const file = new File([blob], "stillfield-postcard.png", {
+    type: "image/png",
+  });
+  const share = dialog.querySelector<HTMLButtonElement>("#postcard-share")!;
+  if (navigator.canShare?.({ files: [file] })) {
+    share.hidden = false;
+    share.addEventListener("click", () => {
+      // Closing the share sheet is not an error worth mentioning.
+      void navigator.share({ files: [file] }).catch(() => {});
+    });
+  }
 }
 function showReset() {
   openDialog(
@@ -647,6 +821,9 @@ document
   .querySelector("#resume")!
   .addEventListener("click", () => setPaused(false));
 document.querySelector("#settings")!.addEventListener("click", showSettings);
+document
+  .querySelector("#postcard")!
+  .addEventListener("click", () => void showPostcard());
 document.querySelector("#place")!.addEventListener("click", showHelp);
 document.querySelector("#zoom-in")!.addEventListener("click", () => {
   zoom = clamp(zoom + 0.12, 0.7, 1.65);
@@ -666,7 +843,11 @@ dialog.addEventListener("click", (e) => {
 dialog.addEventListener("cancel", () => {
   modalOpen = false;
 });
-setLight();
+dialog.addEventListener("close", () => {
+  if (postcardUrl) URL.revokeObjectURL(postcardUrl);
+  postcardUrl = undefined;
+});
+applyDaylight();
 resize();
 updateTool(selectedTool);
 let changedSinceSave = false;
@@ -685,8 +866,11 @@ function animate(now: number) {
     introSeconds += Math.min(activeSeconds, 0.25);
     if (introSeconds >= 5) dismissIntro();
   }
+  const daylight = applyDaylight();
+  dusk.update(daylight.glow, reducedMotion ? 0 : time);
   if (!paused && !modalOpen && windowActive) {
     time += dt;
+    if (light === "flow") dayTime = wrapDay(dayTime + activeSeconds);
     const growth = field.advance(activeSeconds);
     changedSinceSave ||= growth.advancedSeconds > 0;
     const gridInput = keyboard.input;
@@ -736,7 +920,26 @@ function animate(now: number) {
     attachment.position.y +=
       ((navigation.turn || navigation.gridTurning ? 0.4 : 0) - attachment.position.y) *
       (1 - Math.exp(-8 * dt));
-    world.update(reducedMotion ? 0 : time, reducedMotion ? 0 : dt);
+    // A gust reads the field as it crosses: each beat sounds what grows there.
+    const gust = wind.advance(activeSeconds);
+    for (const step of gust.steps)
+      for (const note of sliceNotes(field.engine, step))
+        audio.windNote(
+          note.voice,
+          note.voice === "stubble"
+            ? 0
+            : windFrequency(note.voice, note.band, daylight.glow > 0.6),
+          note.level,
+          (step / (WIND_STEPS - 1)) * 1.2 - 0.6,
+        );
+    field.wind(reducedMotion ? null : gust.front, time);
+    audio.setGust(gust.strength);
+    audio.setAmbience(daylight.birds, daylight.glow);
+    // The windmills pick up while the gust passes.
+    world.update(
+      reducedMotion ? 0 : time,
+      reducedMotion ? 0 : dt * (1 + gust.strength * 2.2),
+    );
     audio.setDriving(tractorState.speed / 6);
     cursor.scale.setScalar(1 + Math.sin(time * 3) * 0.08);
     if (time - lastSave > 3 && changedSinceSave) {
@@ -757,7 +960,18 @@ if (import.meta.env.DEV)
       paused,
       guide: false,
       pace,
-      golden,
+      golden: light === "golden",
+      light,
+      day: dayTime,
+      phase: daylightAt(dayTime).phase,
+      gusting: wind.gusting,
+      // Development helpers for checking the day and the wind without waiting.
+      setDay(seconds: number) {
+        dayTime = wrapDay(seconds);
+      },
+      gust() {
+        wind.gust();
+      },
       hasDriven,
       controlsHidden,
       introDismissed,

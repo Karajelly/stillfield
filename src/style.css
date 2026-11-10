@@ -1192,9 +1192,12 @@ dialog.postcard {
 }
 .postcard-preview {
   display: block;
-  width: 100%;
+  /* Keep the view choice and the save button on screen in short windows. */
+  width: auto;
   height: auto;
-  margin-bottom: 14px;
+  max-width: 100%;
+  max-height: max(170px, 100dvh - 440px);
+  margin: 0 auto 14px;
   border-radius: 6px;
   background: #ecefdf;
   box-shadow:

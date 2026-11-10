@@ -90,6 +90,11 @@ export function sliceNotes(field: FieldReader, step: number): WindNote[] {
   return notes;
 }
 
+/** A gentle four-beat pulse, so a long row breathes instead of hammering. */
+export function beatAccent(step: number): number {
+  return step % 4 === 0 ? 1 : step % 2 === 0 ? 0.75 : 0.55;
+}
+
 // Ten lanes span two octaves of a pentatonic scale, so any field is consonant.
 const MAJOR = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
 const MINOR = [0, 3, 5, 7, 10, 12, 15, 17, 19, 22];

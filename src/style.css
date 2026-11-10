@@ -1236,11 +1236,11 @@ dialog.postcard .primary-button {
 .after-dark dialog .round-button {
   color: #596f55;
 }
-.after-dark .world-label {
+.lamplit .world-label {
   color: #f1efdc;
   text-shadow: 0 1px 4px #1f2c3a;
 }
-.after-dark .world-label span {
+.lamplit .world-label span {
   background: #f1efdc;
 }
 .after-dark .place-pill,

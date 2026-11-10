@@ -9,6 +9,7 @@ import {
   WIND_BANDS,
   WIND_STEPS,
   Wind,
+  beatAccent,
   sliceNotes,
   windFrequency,
 } from "./wind";
@@ -132,6 +133,10 @@ describe("the wind playing the field", () => {
     assert.ok(
       Math.abs(windFrequency("wheat", WIND_BANDS - 2) / root - 2 ** (2 / 12)) < 1e-9,
     );
+  });
+
+  it("accents the first of every four beats and never silences one", () => {
+    assert.deepEqual([0, 1, 2, 3, 4].map(beatAccent), [1, 0.55, 0.75, 0.55, 1]);
   });
 
   it("crosses the field once, sounding every beat in order, then rests", () => {

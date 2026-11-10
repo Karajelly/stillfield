@@ -21,7 +21,13 @@ import {
 } from "./daylight";
 import type { DayHold, DayPhase } from "./daylight";
 import { createDusk } from "./dusk";
-import { Wind, WIND_STEPS, sliceNotes, windFrequency } from "./wind";
+import {
+  Wind,
+  WIND_STEPS,
+  beatAccent,
+  sliceNotes,
+  windFrequency,
+} from "./wind";
 import {
   PHOTO,
   POSTCARD_SIZE,
@@ -420,6 +426,8 @@ function applyDaylight() {
       0.2126 * haze[0] + 0.7152 * haze[1] + 0.0722 * haze[2] < 150,
     );
   }
+  // The ground darkens before the sky does, so labels on it switch earlier.
+  document.body.classList.toggle("lamplit", now.glow > 0.4);
   if (now.phase !== shownPhase) {
     shownPhase = now.phase;
     const [title, detail] = DAY_COPY[now.phase];
@@ -929,7 +937,7 @@ function animate(now: number) {
           note.voice === "stubble"
             ? 0
             : windFrequency(note.voice, note.band, daylight.glow > 0.6),
-          note.level,
+          note.level * beatAccent(step),
           (step / (WIND_STEPS - 1)) * 1.2 - 0.6,
         );
     field.wind(reducedMotion ? null : gust.front, time);

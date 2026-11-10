@@ -92,7 +92,7 @@ export class FarmAudio {
     this.gust = gust;
     if (this.context && this.windGain)
       this.windGain.gain.setTargetAtTime(
-        0.12 + gust * 0.11,
+        0.12 + gust * 0.06,
         this.context.currentTime,
         0.4,
       );
@@ -137,7 +137,7 @@ export class FarmAudio {
       band.frequency.value = 3200;
       band.Q.value = 0.7;
       brush.connect(band).connect(envelope);
-      envelope.gain.linearRampToValueAtTime(0.02 * loud, now + 0.05);
+      envelope.gain.linearRampToValueAtTime(0.03 * loud, now + 0.05);
       envelope.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
       end = now + 0.36;
       sources.push(brush);
@@ -155,7 +155,7 @@ export class FarmAudio {
         soften.frequency.value = 1500;
         tone.connect(soften).connect(envelope);
         extras.push(soften);
-        envelope.gain.linearRampToValueAtTime(0.03 * loud, now + 0.14);
+        envelope.gain.linearRampToValueAtTime(0.05 * loud, now + 0.14);
         envelope.gain.setTargetAtTime(0, now + 0.3, 0.22);
         end = now + 1.3;
       } else {
@@ -172,7 +172,7 @@ export class FarmAudio {
           extras.push(quiet);
         }
         envelope.gain.linearRampToValueAtTime(
-          (bell ? 0.022 : 0.06) * loud,
+          (bell ? 0.04 : 0.085) * loud,
           now + (bell ? 0.008 : 0.015),
         );
         end = now + (bell ? 1.5 : 1.0);
@@ -297,7 +297,7 @@ export class FarmAudio {
     windLowPass.frequency.value = 720;
     windLowPass.Q.value = 0.5;
     const windGain = context.createGain();
-    windGain.gain.value = 0.12 + this.gust * 0.11;
+    windGain.gain.value = 0.12 + this.gust * 0.06;
     this.windGain = windGain;
     wind
       .connect(windHighPass)
@@ -448,7 +448,7 @@ export class FarmAudio {
       const time = start + pulse * 0.058;
       envelope.gain.setValueAtTime(0, time);
       envelope.gain.linearRampToValueAtTime(
-        0.0075 * this.crickets,
+        0.011 * this.crickets,
         time + 0.012,
       );
       envelope.gain.linearRampToValueAtTime(0, time + 0.04);
@@ -486,7 +486,7 @@ export class FarmAudio {
       owl.frequency.setValueAtTime(352, time);
       owl.frequency.linearRampToValueAtTime(318, time + length);
       envelope.gain.setValueAtTime(0, time);
-      envelope.gain.linearRampToValueAtTime(0.03, time + 0.07);
+      envelope.gain.linearRampToValueAtTime(0.04, time + 0.07);
       envelope.gain.linearRampToValueAtTime(0, time + length);
     }
     owl.onended = () => {

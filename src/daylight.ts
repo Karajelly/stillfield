@@ -99,16 +99,16 @@ const KEYS: Key[] = [
     sunPower: 2.3,
     sunFrom: [-58, 15, -16],
     shadow: 0.8,
-    skyLight: "#e6c9d2",
-    groundLight: "#6b7670",
+    skyLight: "#f0cfc8",
+    groundLight: "#6f7669",
     ambient: 1.9,
-    sky: "#dcc8cb",
+    sky: "#e8c9c4",
     exposure: 1.1,
     glow: 0.7,
     birds: 0.25,
   },
   {
-    at: 0.7,
+    at: 0.705,
     sun: "#8fa6dc",
     sunPower: 0.55,
     sunFrom: [-40, 36, -26],
@@ -157,7 +157,7 @@ const KEYS: Key[] = [
 const HOLD_AT: Record<Exclude<DayHold, "flow">, number> = {
   morning: 0,
   golden: 0.5,
-  dusk: 0.655,
+  dusk: 0.64,
   night: 0.81,
 };
 
@@ -165,7 +165,7 @@ export const DAY_COPY: Record<DayPhase, [string, string]> = {
   morning: ["A slow summer morning", "76° · a gentle breeze"],
   afternoon: ["A long, easy afternoon", "81° · a gentle breeze"],
   golden: ["A little golden hour", "76° · a gentle breeze"],
-  dusk: ["A soft blue dusk", "70° · crickets tuning up"],
+  dusk: ["A soft pink dusk", "70° · crickets tuning up"],
   night: ["A quiet, bright night", "64° · fireflies by the pond"],
   dawn: ["First light", "62° · dew on the rows"],
 };

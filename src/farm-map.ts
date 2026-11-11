@@ -4,11 +4,11 @@ import { clamp, FAR_FIELD, FIELD } from "./simulation";
 import type { Obstacle, Point, TractorState } from "./simulation";
 import type { TractorNavigation } from "./tractor-navigation";
 
-/** Foxglove field sits west of the barn field, one quiet lane away. */
+/** Foxglove field sits west of the barn field, one quiet lane away, with twice the room. */
 export const FAR_SITE: FieldSite = {
   id: "foxglove",
   bounds: FAR_FIELD,
-  displayLocation: { x: -72, z: -15.8 },
+  displayLocation: { x: -87, z: -23 },
   original: false,
 };
 export const SITES: readonly FieldSite[] = [HOME_SITE, FAR_SITE];

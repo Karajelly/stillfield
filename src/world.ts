@@ -115,8 +115,9 @@ export function createWorld(scene: THREE.Scene): {
     [42, -1.5, -36, 20, 6, 16],
     [56, -1, -9, 15, 5, 21],
     // Pushed beyond Foxglove field so the lane west runs on level ground.
-    [-106, -1, -4, 16, 4, 23],
-    [-50, -2, 33, 20, 5, 17],
+    [-138, -1, 0, 16, 4, 23],
+    // Eased south so Foxglove field's lane stays on level ground.
+    [-50, -2, 40, 20, 5, 17],
     [6, -2, 51, 34, 5, 18],
   ];
   hills.forEach((h, i) =>
@@ -882,7 +883,7 @@ export function createWorld(scene: THREE.Scene): {
     }
     birds.push(bird);
   }
-  // Foxglove field: a smaller meadow to the west, one quiet lane from the barn.
+  // Foxglove field: a roomier meadow to the west, one quiet lane from the barn.
   // Built last so every random value above keeps its established result.
   lane(
     LANE.map(({ x, z }) => new THREE.Vector3(x, 0.072, z)),
@@ -891,53 +892,59 @@ export function createWorld(scene: THREE.Scene): {
   );
   lane(
     [
-      [-55, -8],
-      [-55, 7],
-      [-57, 11],
-      [-62, 12],
-      [-84, 12],
-      [-88, 10],
-      [-89, 4],
-      [-89, -9],
-      [-86, -13],
-      [-62, -13.5],
-      [-57, -12],
+      [-55, -10],
+      [-55, 8],
+      [-55.5, 17],
+      [-58, 21.5],
+      [-65, 22.5],
+      [-110, 22.5],
+      [-117, 21],
+      [-119.5, 15],
+      [-119.5, -14],
+      [-117, -19.5],
+      [-110, -21],
+      [-64, -21],
+      [-57.5, -19.5],
+      [-55.5, -15],
     ].map(([x, z]) => new THREE.Vector3(x, 0.07, z)),
     2.4,
     palette.path,
     true,
   );
   for (const h of [
-    [-80, -1, -38, 22, 5, 13],
-    [-60, -1.5, -42, 18, 5, 12],
-    [-80, -2, 33, 24, 5, 15],
+    [-95, -1, -42, 26, 5, 13],
+    [-66, -1.5, -45, 18, 5, 12],
+    [-100, -2, 42, 28, 5, 15],
   ])
     add(hillGeometry, palette.hillLight, ...(h as [number, number, number, number, number, number]));
   [
-    [-91, -19, 1.2, 0],
-    [-80, -20.5, 1.0, 2],
-    [-68, -19.5, 1.3, 1],
-    [-57, -20, 0.9, 0],
-    [-95, -6, 1.2, 1],
-    [-94, 5, 1.0, 0],
-    [-86, 17, 1.1, 2],
-    [-71, 18.5, 0.9, 1],
-    [-60, 16.5, 1.2, 0],
+    [-121, -27, 1.2, 0],
+    [-108, -27.5, 1.0, 2],
+    [-97, -26.5, 1.3, 1],
+    [-75, -27, 1.1, 0],
+    [-58, -27, 0.9, 2],
+    [-125, -10, 1.2, 1],
+    [-124, 2, 1.0, 0],
+    [-125, 14, 1.1, 2],
+    [-114, 27, 1.1, 2],
+    [-98, 27.5, 0.9, 1],
+    [-82, 26.5, 1.2, 0],
+    [-64, 27, 1.0, 1],
     // A few companions along the lane itself.
     [-44, 4.2, 0.9, 2],
     [-47.5, -6.2, 1.0, 1],
   ].forEach(([x, z, sc, v]) => tree(x, z, sc, v));
   fence([
-    [-92, -15],
-    [-92, 10],
+    [-122.5, -22],
+    [-122.5, 24],
   ]);
   for (let i = 0; i < 3; i++)
     add(
       cylinder,
       palette.wheat,
-      -63.5 + (i % 2) * 1.6,
+      -64 + (i % 2) * 1.6,
       0.75 + (i === 2 ? 1.35 : 0),
-      -17.2,
+      -24.5,
       0.8,
       1.4,
       0.8,

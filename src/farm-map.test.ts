@@ -70,6 +70,18 @@ test("each framing fits its field in portrait and landscape without turning the 
   }
 });
 
+test("landscape keeps its zoom in Foxglove field; narrow screens ease back to fit", () => {
+  for (const aspect of [1.5, 16 / 9, 874 / 402]) {
+    assert.equal(overviewFraming(aspect, 1).vertical, overviewFraming(aspect, 0).vertical);
+  }
+  for (const aspect of [375 / 667, 402 / 874, 1]) {
+    const home = overviewFraming(aspect, 0).vertical, far = overviewFraming(aspect, 1).vertical;
+    assert.ok(far > home && far < home * 1.5);
+    const midway = overviewFraming(aspect, 0.5).vertical;
+    assert.ok(midway > home && midway < far, "the view eases back along the lane");
+  }
+});
+
 test("the lane is on screen from the home field, so it can be tapped", () => {
   for (const [width, height] of [[402, 874], [874, 402], [1280, 800]]) {
     const camera = cameraFor(width, height, 0);
@@ -120,7 +132,10 @@ test("routes step around anything on the way to the lane", () => {
 test("Foxglove field keeps its own soil, crops, harvest display, and save", () => {
   const far = new FarmingEngine(undefined, FARMING_CONFIG, true, FAR_SITE);
   assert.equal(far.cells.length, cellCount(FAR_FIELD));
-  assert.equal(far.cells.length, 60 * 40);
+  assert.equal(far.cells.length, 120 * 75);
+  assert.equal(far.cells.length, 2 * cellCount(FIELD), "twice the home field");
+  const area = (f: typeof FIELD) => (f.maxX - f.minX) * (f.maxZ - f.minZ);
+  assert.equal(area(FAR_FIELD), 2 * area(FIELD));
   assert.ok(far.cells.every((c) => c === Ground.grass), "a new field starts as quiet meadow");
   assert.equal(far.fieldId, "foxglove");
   const events = far.apply({ x: -80, z: 0 }, { x: -64, z: 0 }, "cultivate");

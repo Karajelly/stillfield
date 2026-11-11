@@ -19,11 +19,11 @@ export interface FieldBounds {
 }
 /** The original working field beside the barn. */
 export const FIELD: FieldBounds = { minX: -25, maxX: 20, minZ: -12, maxZ: 13, cell: 0.5 };
-/** A smaller field to the west, reached along the lane past the tree line. */
-export const FAR_FIELD: FieldBounds = { minX: -87, maxX: -57, minZ: -11, maxZ: 9, cell: 0.5 };
+/** Twice the home field's area (and cells), to the west along the lane past the tree line. */
+export const FAR_FIELD: FieldBounds = { minX: -117, maxX: -57, minZ: -18, maxZ: 19.5, cell: 0.5 };
 export const FIELDS: readonly FieldBounds[] = [FIELD, FAR_FIELD];
 /** Where the tractor may roam: both fields, the lanes, and the meadow around them. */
-export const WORLD = { minX: -95, maxX: 39, minZ: -30, maxZ: 28 };
+export const WORLD = { minX: -125, maxX: 39, minZ: -30, maxZ: 28 };
 export const fieldColumns = (bounds: FieldBounds) =>
   Math.round((bounds.maxX - bounds.minX) / bounds.cell);
 export const fieldRows = (bounds: FieldBounds) =>

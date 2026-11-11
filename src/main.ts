@@ -2,21 +2,30 @@ import * as THREE from "three";
 import "./style.css";
 import { createWorld } from "./world";
 import { createField } from "./field";
-import { CROPS, CROP_NAMES } from "./farming";
+import { CROPS, CROP_NAMES, HOME_SITE } from "./farming";
 import type { Crop, FarmSnapshot } from "./farming";
 import { createTractor } from "./tractor";
 import { FarmAudio } from "./audio";
-import { clamp, FIELD } from "./simulation";
+import { clamp, clampToWorld, FAR_FIELD, FIELD } from "./simulation";
 import { TractorNavigation } from "./tractor-navigation";
 import type { Point, Tool, TractorState } from "./simulation";
 import { icon, brandMark } from "./icons";
 import { overviewFraming } from "./overview";
 import { GridKeyboard, isDriveKey } from "./keyboard-navigation";
+import {
+  FAR_SITE,
+  LaneRide,
+  laneDestination,
+  SITE_NAMES,
+  viewBlend,
+} from "./farm-map";
 
 interface Save {
   version: 1 | 2 | 3;
   grid?: number[];
   farm?: FarmSnapshot;
+  /** Fields beyond the original one, by field ID. Older saves simply omit it. */
+  fields?: FarmSnapshot[];
   crop?: Crop;
   tractor: TractorState;
   tool: Tool;
@@ -67,8 +76,7 @@ let tractorState: TractorState =
   )
     ? { ...saved.tractor, speed: 0 }
     : defaultTractor;
-tractorState.x = clamp(tractorState.x, -39, 39);
-tractorState.z = clamp(tractorState.z, -30, 28);
+Object.assign(tractorState, clampToWorld(tractorState));
 let target: Point | null = null;
 let navigation = new TractorNavigation();
 const app = document.querySelector<HTMLDivElement>("#app")!;
@@ -96,6 +104,7 @@ app.innerHTML = `
     <div class="world-label" id="barn-label"><span></span>The barn</div>
     <div class="world-label" id="pond-label"><span></span>The pond</div>
     <div class="world-label" id="field-label"><span></span>The field</div>
+    <div class="world-label" id="far-field-label"><span></span>${SITE_NAMES[FAR_SITE.id]}</div>
     <div id="destination" aria-hidden="true"><span></span></div>
     <section class="bottom-center menu-panel" id="tool-controls" aria-label="Tractor tools">
       <div class="crop-choices" id="crop-choice" role="group" aria-label="Crop to sow" hidden>${CROPS.map((crop) => `<button class="crop-button ${crop} ${crop === selectedCrop ? "selected" : ""}" data-crop="${crop}" aria-label="Sow ${CROP_NAMES[crop]}" aria-pressed="${crop === selectedCrop}">${icon(crop)}<span>${CROP_NAMES[crop]}</span></button>`).join("")}</div>
@@ -113,6 +122,7 @@ app.innerHTML = `
       <div class="drive-hint" id="drive-hint"><span class="hint-desktop"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to drive <span class="hint-dot">·</span></span> tap or click to roam around</div>
     </section>
     <footer class="bottom-bar menu-panel" id="view-controls">
+      <button class="travel-button" id="travel" aria-pressed="false"></button>
       <div class="zoom-controls"><button id="zoom-out" aria-label="Zoom out">−</button><button id="recenter" aria-label="Center the farm" title="Center the farm">${icon("expand")}</button><button id="zoom-in" aria-label="Zoom in">+</button></div>
     </footer>
     <button class="controls-toggle" id="controls-toggle" aria-label="Hide controls" aria-expanded="true" aria-controls="top-controls tool-controls view-controls" title="Hide controls (M)" hidden>${icon("right")}</button>
@@ -229,8 +239,16 @@ sun.shadow.normalBias = 0.04;
 sun.shadow.bias = -0.0003;
 sun.shadow.radius = 3;
 scene.add(sun);
+scene.add(sun.target);
+const sunOffset = sun.position.clone();
 const world = createWorld(scene);
-const field = createField(scene, saved.farm ?? saved.grid);
+const savedField = (id: string) =>
+  Array.isArray(saved.fields) ? saved.fields.find((f) => f?.fieldId === id) : undefined;
+const fields = [
+  createField(scene, saved.farm ?? saved.grid, HOME_SITE),
+  createField(scene, savedField(FAR_SITE.id), FAR_SITE),
+];
+const field = fields[0];
 const tractor = createTractor(scene);
 tractor.setTool(selectedTool);
 let volume =
@@ -254,6 +272,9 @@ const raycaster = new THREE.Raycaster(),
   pointer = new THREE.Vector2(),
   groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
   intersection = new THREE.Vector3();
+// The view slides along the lane with the tractor; inside a field it holds still.
+let view = viewBlend(tractorState);
+let travel: LaneRide | null = null;
 let zoom = 1,
   lastTime = 0,
   time = 0,
@@ -262,7 +283,8 @@ let zoom = 1,
 const keyboard = new GridKeyboard();
 function updateTool(tool: Tool) {
   selectedTool = tool;
-  navigation.changeTool(tractorState, tool, world.obstacles);
+  // A ride down the lane keeps its implement lifted, whatever the tool.
+  if (!travel) navigation.changeTool(tractorState, tool, world.obstacles);
   target = navigation.target;
   tractor.setTool(tool);
   document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((b) => {
@@ -289,11 +311,17 @@ function dismissIntro() {
   persist();
 }
 function resize() {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  frameView();
+}
+/** Rotation keeps the same field (and the same spot on the lane) in view. */
+function frameView() {
   const width = window.innerWidth,
     height = window.innerHeight;
-  renderer.setSize(width, height);
   const aspect = width / height;
-  const { position, focus, vertical } = overviewFraming(aspect);
+  const { position, focus, vertical } = overviewFraming(aspect, view);
+  sun.position.copy(focus).add(sunOffset);
+  sun.target.position.copy(focus);
   camera.position.copy(position);
   camera.lookAt(focus);
   camera.updateMatrixWorld();
@@ -319,6 +347,11 @@ function positionLabels() {
     ["barn-label", new THREE.Vector3(-18, 8, -29), 0],
     ["pond-label", new THREE.Vector3(30.5, 0, 20), -8],
     ["field-label", new THREE.Vector3(-12, 0, FIELD.maxZ + 1.5), -6],
+    [
+      "far-field-label",
+      new THREE.Vector3((FAR_FIELD.minX + FAR_FIELD.maxX) / 2, 0, FAR_FIELD.maxZ + 1.5),
+      -6,
+    ],
   ] as const) {
     const v = p.clone().project(camera);
     const el = document.getElementById(id)!;
@@ -360,6 +393,7 @@ function persist() {
     const data: Save = {
       version: 3,
       farm: field.engine.snapshot(),
+      fields: fields.slice(1).map((f) => f.engine.snapshot()),
       crop: selectedCrop,
       tractor: { ...tractorState, speed: 0 },
       tool: selectedTool,
@@ -387,6 +421,7 @@ function toast(message: string) {
   toastTimer = window.setTimeout(() => el.classList.remove("visible"), 3400);
 }
 function stop() {
+  endTravel();
   navigation.cancel();
   pointerId = null;
   target = null;
@@ -444,7 +479,7 @@ function openDialog(content: string) {
 }
 function showHelp() {
   openDialog(
-    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO STILLFIELD</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>Tap where the work should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop.<br>WASD or arrow keys follow the field rows. Tap a new direction to turn in place; hold to drive. Up follows the view, even when the window is narrow.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Cultivate prepares soil and clears any crops. Sow wheat, sunflowers, or pumpkins, then harvest when they’re ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests gather in pots and carts by the field.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Crops grow only while you’re here: sunflowers in 3 minutes, wheat in 6, pumpkins in 9. Nothing withers. Your meadow saves on this device.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
+    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO STILLFIELD</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>Tap where the work should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop.<br>WASD or arrow keys follow the field rows. Tap a new direction to turn in place; hold to drive. Up follows the view, even when the window is narrow.<br>A lane past the tree line leads to Foxglove field. Tap the signpost to ride there, or tap the lane and follow it.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Cultivate prepares soil and clears any crops. Sow wheat, sunflowers, or pumpkins, then harvest when they’re ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests gather in pots and carts by the field.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Crops grow only while you’re here: sunflowers in 3 minutes, wheat in 6, pumpkins in 9. Nothing withers. Your meadow saves on this device.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
   );
   dialog.querySelector("#help-done")!.addEventListener("click", closeDialog);
 }
@@ -476,10 +511,12 @@ function showReset() {
     `<div class="dialog-symbol">${icon("sow")}</div><div class="eyebrow">BEGIN AGAIN, GENTLY</div><h2 id="dialog-title">A fresh <em>meadow.</em></h2><p>Return your paths, crops, and harvest displays to an empty meadow. A blank canvas for another quiet afternoon.</p><button class="primary-button" id="confirm-reset">Let it grow ${icon("sow")}</button><button class="text-button" id="cancel-reset">Keep my little corner</button>`,
   );
   dialog.querySelector("#confirm-reset")!.addEventListener("click", () => {
-    field.reset();
+    fields.forEach((f) => f.reset());
     navigation = new TractorNavigation();
     tractorState = { ...defaultTractor };
     stop();
+    view = viewBlend(tractorState);
+    frameView();
     persist();
     closeDialog();
     toast("A fresh start. Take your time.");
@@ -495,10 +532,8 @@ function pointerTarget(event: PointerEvent) {
   raycaster.setFromCamera(pointer, camera);
   if (raycaster.ray.intersectPlane(groundPlane, intersection)) {
     keyboard.reset();
-    target = {
-      x: clamp(intersection.x, -39, 39),
-      z: clamp(intersection.z, -30, 28),
-    };
+    endTravel();
+    target = clampToWorld(intersection);
     navigation.choose(target, tractorState, selectedTool, world.obstacles);
     cursor.position.set(target.x, 0.09, target.z);
     cursor.visible = true;
@@ -566,6 +601,7 @@ window.addEventListener("keydown", (e) => {
   if (isDriveKey(e.code)) {
     e.preventDefault();
     if (!paused && !e.repeat) {
+      endTravel();
       keyboard.press(e.code, keyboardDown);
       dismissIntro();
       scheduleControlsHide();
@@ -650,15 +686,62 @@ document.querySelector("#settings")!.addEventListener("click", showSettings);
 document.querySelector("#place")!.addEventListener("click", showHelp);
 document.querySelector("#zoom-in")!.addEventListener("click", () => {
   zoom = clamp(zoom + 0.12, 0.7, 1.65);
-  resize();
+  frameView();
 });
 document.querySelector("#zoom-out")!.addEventListener("click", () => {
   zoom = clamp(zoom - 0.12, 0.7, 1.65);
-  resize();
+  frameView();
 });
 document.querySelector("#recenter")!.addEventListener("click", () => {
   zoom = 1;
-  resize();
+  frameView();
+});
+const travelButton = document.querySelector<HTMLButtonElement>("#travel")!;
+let travelButtonState = "";
+/** The signpost always points to the other end of the lane. */
+function updateTravelButton() {
+  const destination = travel?.to ?? laneDestination(tractorState);
+  const state = `${travel ? "riding" : "idle"}:${destination.id}`;
+  if (state === travelButtonState) return;
+  travelButtonState = state;
+  const name = SITE_NAMES[destination.id];
+  travelButton.innerHTML = travel
+    ? `${icon("pause")}<span>Stop here</span>`
+    : `${icon("signpost")}<span>${name}</span>`;
+  travelButton.setAttribute("aria-pressed", String(!!travel));
+  travelButton.setAttribute(
+    "aria-label",
+    travel ? `Stop on the way to ${name}` : `Ride the lane to ${name}`,
+  );
+  travelButton.title = travel ? "Stop here" : `Ride the lane to ${name}`;
+}
+function startTravel() {
+  if (paused || modalOpen) return;
+  keyboard.reset();
+  travel = new LaneRide(
+    laneDestination(tractorState),
+    tractorState,
+    navigation,
+    world.obstacles,
+  );
+  target = navigation.target;
+  cursor.position.set(travel.end.x, 0.09, travel.end.z);
+  dismissIntro();
+  scheduleControlsHide();
+  updateTravelButton();
+}
+function endTravel() {
+  if (!travel) return;
+  travel = null;
+  navigation.cancel();
+  target = null;
+  updateTravelButton();
+}
+travelButton.addEventListener("click", () => {
+  if (travel) {
+    endTravel();
+    cursor.visible = false;
+  } else startTravel();
 });
 dialog.addEventListener("click", (e) => {
   if (e.target === dialog) closeDialog();
@@ -669,6 +752,7 @@ dialog.addEventListener("cancel", () => {
 setLight();
 resize();
 updateTool(selectedTool);
+updateTravelButton();
 let changedSinceSave = false;
 const attachment = tractor.group.getObjectByName("attachment")!;
 const reducedMotion = window.matchMedia(
@@ -687,33 +771,61 @@ function animate(now: number) {
   }
   if (!paused && !modalOpen && windowActive) {
     time += dt;
-    const growth = field.advance(activeSeconds);
-    changedSinceSave ||= growth.advancedSeconds > 0;
+    for (const f of fields)
+      changedSinceSave ||= f.advance(activeSeconds).advancedSeconds > 0;
     const gridInput = keyboard.input;
     const previousHeading = tractorState.heading;
     const movement = navigation.step(
       tractorState,
       dt,
-      selectedTool,
+      travel ? "wander" : selectedTool,
       world.obstacles,
       pace,
-      gridInput ? { grid: gridInput } : null,
+      gridInput && !travel ? { grid: gridInput } : null,
     );
     tractorState = movement.state;
     changedSinceSave ||= tractorState.heading !== previousHeading;
+    if (travel) {
+      const arrived = travel.to,
+        ride = travel.update(tractorState, movement.blocked);
+      if (ride === "blocked") {
+        endTravel();
+        toast("Something’s in the way. Tap the lane to find a way round.");
+      } else if (ride === "arrived") {
+        endTravel();
+        toast(
+          arrived.id === FAR_SITE.id
+            ? "Foxglove field. A little more room to roam."
+            : "Home again, by the barn.",
+        );
+      }
+    }
     target = navigation.target;
     cursor.visible = target !== null;
+    // Follow the tractor along the lane; settle on whichever field it reaches.
+    const desiredView = viewBlend(tractorState);
+    if (Math.abs(desiredView - view) > 1e-4) {
+      view = reducedMotion
+        ? desiredView
+        : view + (desiredView - view) * (1 - Math.exp(-3 * dt));
+      if (Math.abs(desiredView - view) <= 1e-4) view = desiredView;
+      frameView();
+    }
+    updateTravelButton();
     movement.paint.forEach((point, index, points) => {
-      const event = field.paint(
-        point.x,
-        point.z,
-        selectedTool,
-        points[Math.max(0, index - 1)],
-        selectedCrop,
-      );
-      changedSinceSave ||= event.groundChanges.length > 0;
-      if (event.harvestResults.length)
-        audio.harvest(event.harvestResults[0].crop);
+      // A sweep only touches cells under the implement, so every field can listen.
+      for (const f of fields) {
+        const event = f.paint(
+          point.x,
+          point.z,
+          selectedTool,
+          points[Math.max(0, index - 1)],
+          selectedCrop,
+        );
+        changedSinceSave ||= event.groundChanges.length > 0;
+        if (event.harvestResults.length)
+          audio.harvest(event.harvestResults[0].crop);
+      }
     });
     if (tractorState.speed > 0.1) {
       if (!hasDriven) {
@@ -734,7 +846,7 @@ function animate(now: number) {
     tractor.group.rotation.y = tractorState.heading;
     tractor.update(tractorState.speed, dt, time);
     attachment.position.y +=
-      ((navigation.turn || navigation.gridTurning ? 0.4 : 0) - attachment.position.y) *
+      ((navigation.turn || navigation.gridTurning || travel ? 0.4 : 0) - attachment.position.y) *
       (1 - Math.exp(-8 * dt));
     world.update(reducedMotion ? 0 : time, reducedMotion ? 0 : dt);
     audio.setDriving(tractorState.speed / 6);
@@ -763,6 +875,10 @@ if (import.meta.env.DEV)
       introDismissed,
       grid: Array.from(field.grid),
       farm: field.engine.snapshot(),
+      farms: fields.map((f) => f.engine.snapshot()),
+      view,
+      traveling: travel ? travel.to.id : null,
+      route: travel ? travel.route.map((p) => ({ ...p })) : [],
       crop: selectedCrop,
       drawCalls: renderer.info.render.calls,
       camera: {

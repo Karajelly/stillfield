@@ -1,4 +1,5 @@
-import { angleDifference, clamp, FIELD } from "./simulation";
+import { angleDifference, clamp, fieldAt, fieldColumns, fieldRows } from "./simulation";
+import type { FieldBounds } from "./simulation";
 import type { Point, Tool, TractorState } from "./simulation";
 import { tuning } from "./handling";
 
@@ -13,6 +14,7 @@ export class WorkDestination {
   readonly point: Point;
   readonly center: Point;
   readonly cell: number;
+  readonly field: FieldBounds;
   readonly corners: Point[];
   private heading: number;
   private routePoint: Point;
@@ -20,27 +22,27 @@ export class WorkDestination {
   private aligning = false;
 
   static create(point: Point, state: TractorState, tool: Tool): WorkDestination | null {
-    if (tool === "wander" || !Number.isFinite(point.x) || !Number.isFinite(point.z)
-      || point.x < FIELD.minX || point.x > FIELD.maxX
-      || point.z < FIELD.minZ || point.z > FIELD.maxZ) return null;
-    return new WorkDestination(point, state);
+    const field = fieldAt(point);
+    if (tool === "wander" || !field) return null;
+    return new WorkDestination(point, state, field);
   }
-  private constructor(point: Point, state: TractorState) {
+  private constructor(point: Point, state: TractorState, field: FieldBounds) {
     this.point = { ...point };
-    const columns = Math.round((FIELD.maxX - FIELD.minX) / FIELD.cell);
-    const rows = Math.round((FIELD.maxZ - FIELD.minZ) / FIELD.cell);
-    const col = clamp(Math.floor((point.x - FIELD.minX) / FIELD.cell), 0, columns - 1);
-    const row = clamp(Math.floor((point.z - FIELD.minZ) / FIELD.cell), 0, rows - 1);
+    this.field = field;
+    const columns = fieldColumns(field);
+    const rows = fieldRows(field);
+    const col = clamp(Math.floor((point.x - field.minX) / field.cell), 0, columns - 1);
+    const row = clamp(Math.floor((point.z - field.minZ) / field.cell), 0, rows - 1);
     this.cell = row * columns + col;
-    this.center = { x: FIELD.minX + (col + 0.5) * FIELD.cell, z: FIELD.minZ + (row + 0.5) * FIELD.cell };
+    this.center = { x: field.minX + (col + 0.5) * field.cell, z: field.minZ + (row + 0.5) * field.cell };
     this.corners = [-0.5, 0.5].flatMap(x => [-0.5, 0.5].map(z =>
-      ({ x: this.center.x + x * FIELD.cell, z: this.center.z + z * FIELD.cell })));
+      ({ x: this.center.x + x * field.cell, z: this.center.z + z * field.cell })));
     const dx = this.center.x - state.x, dz = this.center.z - state.z;
     const along = dx * Math.sin(state.heading) + dz * Math.cos(state.heading);
     const across = dx * Math.cos(state.heading) - dz * Math.sin(state.heading);
     // A click under the tractor's existing swath needs a little forward travel,
     // not a U-turn toward the point the tractor has already passed.
-    const underSwath = Math.abs(across) < tuning.brushRadius - FIELD.cell && along >= -attachmentOffset && along < 2;
+    const underSwath = Math.abs(across) < tuning.brushRadius - field.cell && along >= -attachmentOffset && along < 2;
     this.heading = underSwath ? state.heading : Math.atan2(dx, dz);
     this.routePoint = underSwath
       ? { x: state.x + Math.sin(state.heading) * along, z: state.z + Math.cos(state.heading) * along }
@@ -62,7 +64,7 @@ export class WorkDestination {
     else this.locked = true;
     const brush = attachmentPoint(state);
     const remaining = Math.max(0, Math.hypot(brush.x - this.center.x, brush.z - this.center.z)
-      - (tuning.brushRadius - FIELD.cell * Math.SQRT2 / 2));
+      - (tuning.brushRadius - this.field.cell * Math.SQRT2 / 2));
     return {
       target: { x: this.routePoint.x + Math.sin(this.heading) * (attachmentOffset + 0.6),
         z: this.routePoint.z + Math.cos(this.heading) * (attachmentOffset + 0.6) },

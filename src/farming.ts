@@ -4,8 +4,10 @@ import {
   FIELD_ROWS,
   cellsUnderBrush,
   cellsUnderSweep,
+  fieldColumns,
+  fieldRows,
 } from "./simulation";
-import type { Point, Tool } from "./simulation";
+import type { FieldBounds, Point, Tool } from "./simulation";
 import { tuning } from "./handling";
 
 export const CROPS = ["wheat", "sunflowers", "pumpkins"] as const;
@@ -78,9 +80,24 @@ const emptyDisplay = (): Record<Crop, number> => ({
   pumpkins: 0,
 });
 
-export function validFarm(value: unknown): value is FarmSnapshot {
-  return validSnapshot(value, 3, CELL_COUNT);
+export const cellCount = (bounds: FieldBounds) => fieldColumns(bounds) * fieldRows(bounds);
+export function validFarm(value: unknown, bounds: FieldBounds = FIELD): value is FarmSnapshot {
+  return validSnapshot(value, 3, cellCount(bounds));
 }
+/** Identity and harvest display placement for each field. */
+export interface FieldSite {
+  id: string;
+  bounds: FieldBounds;
+  displayLocation: Point;
+  /** Only the original field has starter plots and legacy saves. */
+  original: boolean;
+}
+export const HOME_SITE: FieldSite = {
+  id: "willowbrook",
+  bounds: FIELD,
+  displayLocation: { x: -16, z: -15.5 },
+  original: true,
+};
 
 function validSnapshot(
   value: unknown,
@@ -192,18 +209,20 @@ export function migrateFarm(value: unknown): FarmSnapshot | undefined {
 }
 
 export class FarmingEngine {
-  readonly cells = new Uint8Array(CELL_COUNT);
-  readonly crops = new Uint8Array(CELL_COUNT);
-  readonly progress = new Float64Array(CELL_COUNT);
+  readonly cells: Uint8Array;
+  readonly crops: Uint8Array;
+  readonly progress: Float64Array;
   readonly fieldId: string;
   readonly displayLocation: Point;
   readonly config: FarmingConfig;
+  readonly bounds: FieldBounds;
   display = emptyDisplay();
 
   constructor(
     saved?: FarmSnapshot | number[],
     config = FARMING_CONFIG,
     starter = true,
+    site: FieldSite = HOME_SITE,
   ) {
     if (
       !CROPS.every(
@@ -223,17 +242,27 @@ export class FarmingEngine {
     )
       throw new Error("Invalid farming configuration");
     this.config = structuredClone(config);
-    const snapshot = migrateFarm(saved);
-    this.fieldId = snapshot?.fieldId ?? "willowbrook";
+    this.bounds = { ...site.bounds };
+    const count = cellCount(site.bounds);
+    this.cells = new Uint8Array(count);
+    this.crops = new Uint8Array(count);
+    this.progress = new Float64Array(count);
+    // Legacy grids only ever belonged to the original field.
+    const snapshot = site.original
+      ? migrateFarm(saved)
+      : validFarm(saved, site.bounds) && saved.fieldId === site.id
+        ? saved
+        : undefined;
+    this.fieldId = snapshot?.fieldId ?? site.id;
     this.displayLocation = {
-      ...(snapshot?.displayLocation ?? { x: -16, z: -15.5 }),
+      ...(snapshot?.displayLocation ?? site.displayLocation),
     };
     if (snapshot) {
       this.cells.set(snapshot.cells);
       this.crops.set(snapshot.crops);
       this.progress.set(snapshot.progress);
       this.display = { ...snapshot.display };
-    } else if (starter) {
+    } else if (starter && site.original) {
       for (let x = -21; x <= 13; x += 0.2)
         for (const z of [10.8, 7.8])
           for (const i of cellsUnderBrush(x, z, 1.05))
@@ -285,7 +314,7 @@ export class FarmingEngine {
   ): FarmingEvents {
     if (!Number.isFinite(radius) || radius < 0) return events();
     return this.applyCells(
-      cellsUnderSweep(from, to, radius + this.config.edgeCoverage),
+      cellsUnderSweep(from, to, radius + this.config.edgeCoverage, this.bounds),
       action,
       crop,
     );
@@ -299,7 +328,7 @@ export class FarmingEngine {
     const result = events();
     const harvested = new Map<Crop, number[]>();
     for (const i of indices) {
-      if (!Number.isInteger(i) || i < 0 || i >= CELL_COUNT) continue;
+      if (!Number.isInteger(i) || i < 0 || i >= this.cells.length) continue;
       const state = this.cells[i];
       if (
         action === "cultivate" &&
@@ -354,7 +383,7 @@ export class FarmingEngine {
   advance(seconds: number, active = true): FarmingEvents {
     const result = events();
     if (!active || !Number.isFinite(seconds) || seconds <= 0) return result;
-    for (let i = 0; i < CELL_COUNT; i++) {
+    for (let i = 0; i < this.cells.length; i++) {
       if (this.cells[i] !== Ground.growing) continue;
       result.advancedSeconds = seconds;
       const before = this.stage(i);
@@ -374,7 +403,7 @@ export class FarmingEngine {
 
   rest(): FarmingEvents {
     let next = Infinity;
-    for (let i = 0; i < CELL_COUNT; i++)
+    for (let i = 0; i < this.cells.length; i++)
       if (this.cells[i] === Ground.growing)
         next = Math.min(
           next,

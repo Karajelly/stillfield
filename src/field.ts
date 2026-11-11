@@ -1,19 +1,21 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { FIELD, FIELD_COLUMNS, FIELD_ROWS, seededRandom } from "./simulation";
+import { fieldColumns, fieldRows, seededRandom } from "./simulation";
 import type { Point, Tool } from "./simulation";
-import { FarmingEngine, Ground } from "./farming";
-import type { Crop, FarmSnapshot, FarmingEvents } from "./farming";
+import { FARMING_CONFIG, FarmingEngine, Ground, HOME_SITE } from "./farming";
+import type { Crop, FarmSnapshot, FarmingEvents, FieldSite } from "./farming";
 import { createHarvestDisplay } from "./harvest-display";
-export const COLUMNS = FIELD_COLUMNS,
-  ROWS = FIELD_ROWS;
 
 export function createField(
   scene: THREE.Scene,
   saved?: FarmSnapshot | number[],
+  site: FieldSite = HOME_SITE,
 ) {
-  const engine = new FarmingEngine(saved);
+  const engine = new FarmingEngine(saved, FARMING_CONFIG, true, site);
   const grid = engine.cells;
+  const FIELD = site.bounds,
+    COLUMNS = fieldColumns(FIELD),
+    ROWS = fieldRows(FIELD);
   const canvas = document.createElement("canvas");
   canvas.width = COLUMNS * 5;
   canvas.height = ROWS * 5;
@@ -95,7 +97,7 @@ export function createField(
       ctx.fillRect(col * 5 + 2, row * 5 + 1, 1, 2);
     }
   }
-  const random = seededRandom(22);
+  const random = seededRandom(site.original ? 22 : 61);
   const points: {
     x: number;
     z: number;

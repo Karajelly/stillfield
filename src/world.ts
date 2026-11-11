@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { LANE } from "./farm-map";
 
 type Obstacle = { x: number; z: number; radius: number };
 
@@ -113,7 +114,8 @@ export function createWorld(scene: THREE.Scene): {
     [12, -1, -45, 21, 5, 13],
     [42, -1.5, -36, 20, 6, 16],
     [56, -1, -9, 15, 5, 21],
-    [-52, -1, -7, 16, 4, 23],
+    // Pushed beyond Foxglove field so the lane west runs on level ground.
+    [-106, -1, -4, 16, 4, 23],
     [-50, -2, 33, 20, 5, 17],
     [6, -2, 51, 34, 5, 18],
   ];
@@ -240,8 +242,9 @@ export function createWorld(scene: THREE.Scene): {
     [-36, -25, 1.3, 2],
     [-39, -18, 1.0, 0],
     [-34, -12, 1.1, 1],
-    [-37, -4, 1.3, 0],
-    [-34, 3, 0.85, 1],
+    // These two stand aside for the lane to Foxglove field.
+    [-37.5, -6.8, 1.3, 0],
+    [-34, 4.6, 0.85, 1],
     [-38, 11, 1.1, 2],
     [-32, 25, 1.2, 0],
     [-39, 28, 0.9, 1],
@@ -271,7 +274,10 @@ export function createWorld(scene: THREE.Scene): {
     if (x > -30 && x < 26 && z > -18 && z < 21) continue;
     if (x > 19 && x < 39 && z > 10 && z < 29) continue;
     if (x > -31 && x < 11 && z < -18) continue;
-    add(
+    // Consume the same random values either way, so the rest of the meadow is unchanged.
+    const onLane = x < -26 && Math.abs(z + 1) < 3;
+    const detail = onLane ? () => {} : add;
+    detail(
       sphere,
       i % 3 ? palette.leaf : palette.leafLight,
       x,
@@ -283,7 +289,7 @@ export function createWorld(scene: THREE.Scene): {
     );
     if (i % 3 === 0)
       for (let j = 0; j < 4; j++)
-        add(
+        detail(
           sphere,
           palette.flower,
           x + rand() - 0.5,
@@ -876,6 +882,78 @@ export function createWorld(scene: THREE.Scene): {
     }
     birds.push(bird);
   }
+  // Foxglove field: a smaller meadow to the west, one quiet lane from the barn.
+  // Built last so every random value above keeps its established result.
+  lane(
+    LANE.map(({ x, z }) => new THREE.Vector3(x, 0.072, z)),
+    2.4,
+    palette.path,
+  );
+  lane(
+    [
+      [-55, -8],
+      [-55, 7],
+      [-57, 11],
+      [-62, 12],
+      [-84, 12],
+      [-88, 10],
+      [-89, 4],
+      [-89, -9],
+      [-86, -13],
+      [-62, -13.5],
+      [-57, -12],
+    ].map(([x, z]) => new THREE.Vector3(x, 0.07, z)),
+    2.4,
+    palette.path,
+    true,
+  );
+  for (const h of [
+    [-80, -1, -38, 22, 5, 13],
+    [-60, -1.5, -42, 18, 5, 12],
+    [-80, -2, 33, 24, 5, 15],
+  ])
+    add(hillGeometry, palette.hillLight, ...(h as [number, number, number, number, number, number]));
+  [
+    [-91, -19, 1.2, 0],
+    [-80, -20.5, 1.0, 2],
+    [-68, -19.5, 1.3, 1],
+    [-57, -20, 0.9, 0],
+    [-95, -6, 1.2, 1],
+    [-94, 5, 1.0, 0],
+    [-86, 17, 1.1, 2],
+    [-71, 18.5, 0.9, 1],
+    [-60, 16.5, 1.2, 0],
+    // A few companions along the lane itself.
+    [-44, 4.2, 0.9, 2],
+    [-47.5, -6.2, 1.0, 1],
+  ].forEach(([x, z, sc, v]) => tree(x, z, sc, v));
+  fence([
+    [-92, -15],
+    [-92, 10],
+  ]);
+  for (let i = 0; i < 3; i++)
+    add(
+      cylinder,
+      palette.wheat,
+      -63.5 + (i % 2) * 1.6,
+      0.75 + (i === 2 ? 1.35 : 0),
+      -17.2,
+      0.8,
+      1.4,
+      0.8,
+      Math.PI / 2,
+      0,
+      0,
+    );
+  // Foxgloves for the field's name: tall lavender spires by the lane's end.
+  for (let i = 0; i < 9; i++) {
+    const x = -53 + rand() * 1.5,
+      z = 2.4 + i * 0.75 + rand() * 0.3,
+      h = 0.7 + rand() * 0.5;
+    add(cylinder, palette.leafDark, x, h / 2, z, 0.04, h, 0.04);
+    add(sphere, i % 2 ? palette.lavender : palette.lavenderDark, x, h + 0.15, z, 0.16, 0.42, 0.16);
+  }
+
   for (const batch of batches.values()) {
     const instances = new THREE.InstancedMesh(
       batch.geometry,

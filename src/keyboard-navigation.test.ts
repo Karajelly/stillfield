@@ -3,7 +3,7 @@ import { test } from "node:test";
 import * as THREE from "three";
 import { advanceGridTractor, GridKeyboard, gridHeading } from "./keyboard-navigation";
 import { overviewFraming } from "./overview";
-import { angleDifference, cruiseSpeed } from "./simulation";
+import { angleDifference, cruiseSpeed, WORLD } from "./simulation";
 import type { TractorState } from "./simulation";
 import { TractorNavigation } from "./tractor-navigation";
 import { attachmentPoint } from "./work-destination";
@@ -134,7 +134,7 @@ test("obstacles and map edges stop grid driving without sideways slides, and all
     for (let i = 0; i < 60; i++) state = advanceGridTractor(state, { heading: Math.PI, driving: true }, 1 / 30, obstacles);
     assert.ok(state.z < contact - 1); assert.equal(state.x, 0);
   }
-  for (const [x, z, heading] of [[39, 0, Math.PI / 2], [-39, 0, -Math.PI / 2], [0, 28, 0], [0, -30, Math.PI]]) {
+  for (const [x, z, heading] of [[WORLD.maxX, 0, Math.PI / 2], [WORLD.minX, 0, -Math.PI / 2], [0, WORLD.maxZ, 0], [0, WORLD.minZ, Math.PI]]) {
     const state = advanceGridTractor({ x, z, heading, speed: 4.5 }, { heading, driving: true }, 1 / 30, []);
     assert.deepEqual(state, { x, z, heading, speed: 0 });
   }

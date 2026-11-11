@@ -157,6 +157,9 @@ final class FieldRenderer {
     }
     func animate(seconds: Double) { harvestDisplay.update(seconds: seconds) }
 
+    /// The lean of the most bent patch, 0 when the field is at rest.
+    var strongestLean: Float { leaning.max() ?? 0 }
+
     /// Lean the patches a gust front has just crossed, then let them settle.
     /// The web bends each plant; here a whole patch leans together, because a
     /// patch is one mesh and rebuilding meshes every frame would stutter.

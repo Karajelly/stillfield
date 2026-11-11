@@ -1,8 +1,8 @@
 name: Native look (temporary)
 
 # Temporary, and removed before this pull request is ready: runs two UI tests in
-# a simulator and keeps their screenshots, so the native day, night lights, and
-# postcards can be looked at from an environment that has no Xcode.
+# a simulator and keeps their screenshots, so the native night lights, the gust
+# lean, and postcards can be looked at from an environment that has no Xcode.
 on:
   pull_request:
     paths:
@@ -23,44 +23,54 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - name: List simulators
-        run: xcrun simctl list devices available | grep -E "iPhone|iPad" | head -30
-      - name: Run the night and settings UI tests
+      - name: Run the night and gust UI tests
         continue-on-error: true
         run: >
           xcodebuild -project ios/Stillfield.xcodeproj -scheme Stillfield
           -destination 'platform=iOS Simulator,name=iPhone 16'
           -derivedDataPath ios/.build -resultBundlePath look.xcresult
           -only-testing:StillfieldUITests/StillfieldUITests/testNightLightsAndAPostcard
-          -only-testing:StillfieldUITests/StillfieldUITests/testNativeToolsSettingsAndPause
+          -only-testing:StillfieldUITests/StillfieldUITests/testAHeldGustLeansAPatchOfTheField
           -quiet test CODE_SIGNING_ALLOWED=NO
       - name: Summarize and export screenshots
         if: always()
         run: |
-          xcrun xcresulttool get test-results summary --path look.xcresult | head -80 || true
+          xcrun xcresulttool get test-results summary --path look.xcresult | grep -E '"(result|passedTests|failedTests|testName|failureText)"' || true
           xcrun xcresulttool export attachments --path look.xcresult --output-path shots || true
-          ls -la shots || true
-          cat shots/manifest.json || true
       - uses: actions/upload-artifact@v4
         if: always()
         continue-on-error: true
         with:
           name: native-look
           path: shots
-      # The artifact above holds the full-size screenshots. These small copies
+      # The artifact above holds the full-size screenshots. These close-up crops
       # go in the log because the environment reviewing this run can read job
       # logs but cannot download artifacts.
-      - name: Print small copies of the screenshots
+      - name: Print close-up crops of the screenshots
         if: always()
         run: |
+          cat > crop.swift <<'SWIFT'
+          import CoreGraphics
+          import Foundation
+          import ImageIO
+          import UniformTypeIdentifiers
+          let a = CommandLine.arguments
+          let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: a[1]) as CFURL, nil)!
+          let image = CGImageSourceCreateImageAtIndex(source, 0, nil)!
+          print("size", image.width, image.height)
+          let rect = CGRect(x: Int(a[2])!, y: Int(a[3])!, width: Int(a[4])!, height: Int(a[5])!)
+          let cropped = image.cropping(to: rect)!
+          let out = CGImageDestinationCreateWithURL(URL(fileURLWithPath: a[6]) as CFURL, UTType.jpeg.identifier as CFString, 1, nil)!
+          CGImageDestinationAddImage(out, cropped, [kCGImageDestinationLossyCompressionQuality: 0.45] as CFDictionary)
+          CGImageDestinationFinalize(out)
+          SWIFT
           python3 - <<'PY'
           import base64, json, subprocess
+          # name -> list of (label, x, y, width, height) in screenshot pixels
           wanted = {
-              "A quiet, bright night": 180,
-              "A postcard of the night meadow": 180,
-              "A soft pink dusk": 150,
-              "Native settings": 140,
-              "Welcome to Willowbrook": 140,
+              "A gust held over the wheat": [("gust-field", 300, 880, 500, 470)],
+              "Welcome to Willowbrook": [("still-field", 300, 880, 500, 470)],
+              "A quiet, bright night": [("night-pond", 230, 1670, 380, 300), ("night-barn", 660, 600, 380, 360)],
           }
           seen = set()
           for test in json.load(open("shots/manifest.json")):
@@ -69,14 +79,12 @@ jobs:
                   if name not in wanted or name in seen:
                       continue
                   seen.add(name)
-                  subprocess.run(
-                      ["sips", "--resampleWidth", str(wanted[name]), "-s", "format", "jpeg",
-                       "-s", "formatOptions", "40", "shots/" + attachment["exportedFileName"],
-                       "--out", "small.jpg"],
-                      check=True, stdout=subprocess.DEVNULL)
-                  data = base64.b64encode(open("small.jpg", "rb").read()).decode()
-                  print(f"=====BEGIN {name}")
-                  for start in range(0, len(data), 2000):
-                      print(data[start:start + 2000])
-                  print("=====END")
+                  for label, x, y, width, height in wanted[name]:
+                      subprocess.run(["swift", "crop.swift", "shots/" + attachment["exportedFileName"],
+                                      str(x), str(y), str(width), str(height), "crop.jpg"], check=True)
+                      data = base64.b64encode(open("crop.jpg", "rb").read()).decode()
+                      print(f"=====BEGIN {label}")
+                      for start in range(0, len(data), 2000):
+                          print(data[start:start + 2000])
+                      print("=====END")
           PY

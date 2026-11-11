@@ -58,6 +58,8 @@ final class FarmController {
     @ObservationIgnored private var testSteeringCount = 0
     @ObservationIgnored private var testTouchCount = 0
     @ObservationIgnored private var lastTelemetry = -1.0
+    /// UI tests can hold a gust front in place, to check the lean it gives the field.
+    @ObservationIgnored private var heldGustFront: Double?
 #endif
 
     @ObservationIgnored private var farmingConfiguration = FarmingConfiguration()
@@ -134,6 +136,10 @@ final class FarmController {
         if testing && ProcessInfo.processInfo.arguments.contains("--fast-crops") {
             // UI tests exercise automatic active-play growth without several-minute waits.
             for crop in Crop.allCases { farmingConfiguration.growthSeconds[crop] = 45 }
+        }
+        if testing && ProcessInfo.processInfo.arguments.contains("--still-gust") {
+            // Just past the west edge of the third column of patches, where its lean peaks.
+            heldGustFront = -12.2
         }
 #endif
         tractorState = saved.tractor
@@ -536,7 +542,11 @@ final class FarmController {
         }
         audio.setGust(gust.strength)
         let still = UIAccessibility.isReduceMotionEnabled
-        fieldRenderer?.lean(front: still ? nil : gust.front, time: elapsed)
+        var front = still ? nil : gust.front
+#if DEBUG
+        if let heldGustFront { front = heldGustFront }
+#endif
+        fieldRenderer?.lean(front: front, time: elapsed)
         dusk?.animate(time: still ? 0 : elapsed)
         for (wheel, original) in wheels { wheel.orientation = original * simd_quatf(angle: wheelAngle, axis: [1, 0, 0]) }
         if !still {
@@ -578,6 +588,8 @@ final class FarmController {
             + ",touchCount=\(testTouchCount)"
             + ",rowTurn=\(navigation.turningAtRowEnd ? 1 : 0)"
             + ",tractorView=\(cameraMode == .tractor ? 1 : 0)"
+            + ",gust=\(wind.isGusting ? 1 : 0)"
+            + ",lean=\(Int(((fieldRenderer?.strongestLean ?? 0) * 1000).rounded()))"
             + String(format: ",heading=%.3f,cameraX=%.3f,cameraY=%.3f,cameraZ=%.3f",
                      tractorState.heading, Double(camera.position.x), Double(camera.position.y), Double(camera.position.z))
         if let target {

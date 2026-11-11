@@ -326,6 +326,21 @@ final class StillfieldUITests: XCTestCase {
         dismissSheetAndWait(in: app)
     }
 
+    func testAHeldGustLeansAPatchOfTheField() throws {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--fresh-meadow", "--still-gust"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tool.harvest"].waitForExistence(timeout: 40))
+        if app.buttons["action.begin"].exists { app.buttons["action.begin"].tap() }
+        // The lean is reported in thousandths; a patch at the front leans by about 0.4.
+        XCTAssertTrue(waitUntil(timeout: 15) { self.farmingValue("lean", in: app) > 300 },
+                      "A gust front held over the field must lean the patch behind it.")
+        attachScreenshot("A gust held over the wheat", app: app)
+    }
+
     func testTouchSteeringPaintAndBackgroundLifecycle() throws {
         let app = launchFreshMeadow()
         defer { app.terminate() }

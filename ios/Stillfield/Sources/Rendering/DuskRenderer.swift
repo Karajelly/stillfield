@@ -14,8 +14,9 @@ final class DuskRenderer {
     /// Lenses and the headlight beam, in the tractor's own space.
     let lamps = Entity()
 
-    // Light strengths were worked out on paper from the daylight calibration in
-    // FarmController, not yet tuned by eye on a device.
+    // Light strengths were worked out from the daylight calibration in
+    // FarmController and checked in simulator screenshots, where they read as
+    // soft pools. They have not been tuned by eye on a device.
     private static let barnLumens: Float = 450_000
     private static let millLumens: Float = 180_000
     private static let beamLumens: Float = 700_000

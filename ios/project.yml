@@ -56,6 +56,7 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         UIRequiresFullScreen: false
         ITSAppUsesNonExemptEncryption: false
+        NSPhotoLibraryAddUsageDescription: Stillfield adds a postcard to your photo library only when you choose Save Image.
         UIUserInterfaceStyle: Light
   StillfieldUITests:
     type: bundle.ui-testing

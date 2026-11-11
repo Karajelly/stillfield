@@ -4,7 +4,7 @@ import XCTest
 final class StillfieldUITests: XCTestCase {
     private let meadowControlIdentifiers = [
         "tool.harvest", "tool.cultivate", "tool.sow", "tool.wander",
-        "action.pause", "action.sound", "action.settings",
+        "action.postcard", "action.pause", "action.sound", "action.settings",
         "action.camera",
         "Zoom out", "Center the farm", "Zoom in"
     ]
@@ -289,18 +289,41 @@ final class StillfieldUITests: XCTestCase {
         attachScreenshot("A moment to breathe", app: app)
         app.buttons["pause.resume"].tap()
         app.buttons["action.settings"].tap()
-        XCTAssertTrue(app.switches["settings.golden"].waitForExistence(timeout: 3))
+        // The segments of the time-of-day control are buttons named for each light.
+        XCTAssertTrue(app.buttons["Dusk"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Drifting"].isSelected)
         attachScreenshot("Native settings", app: app)
-        app.switches["settings.golden"].tap()
+        app.buttons["Dusk"].tap()
+        XCTAssertTrue(app.buttons["Dusk"].isSelected)
         dismissSheetAndWait(in: app)
+        attachScreenshot("A soft pink dusk", app: app)
         app.terminate()
         app.launchArguments = ["--ui-testing"]
         app.launch()
         XCTAssertTrue(app.buttons["tool.sow"].waitForExistence(timeout: 40))
         XCTAssertTrue(app.buttons["tool.sow"].isSelected)
         app.buttons["action.settings"].tap()
-        XCTAssertEqual(app.switches["settings.golden"].value as? String, "1")
+        XCTAssertTrue(app.buttons["Dusk"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Dusk"].isSelected)
         attachScreenshot("Settings restored after relaunch", app: app)
+    }
+
+    func testNightLightsAndAPostcard() throws {
+        let app = launchFreshMeadow()
+        defer { app.terminate() }
+        app.buttons["action.settings"].tap()
+        XCTAssertTrue(app.buttons["Night"].waitForExistence(timeout: 3))
+        app.buttons["Night"].tap()
+        dismissSheetAndWait(in: app)
+        attachScreenshot("A quiet, bright night", app: app)
+        XCTAssertTrue(app.buttons["action.postcard"].isHittable)
+        app.buttons["action.postcard"].tap()
+        // The sheet only opens when the photograph shows more than one flat colour.
+        XCTAssertTrue(app.images["postcard.picture"].waitForExistence(timeout: 8),
+                      "The postcard must capture the meadow, not an empty view.")
+        XCTAssertTrue(app.buttons["postcard.share"].exists)
+        attachScreenshot("A postcard of the night meadow", app: app)
+        dismissSheetAndWait(in: app)
     }
 
     func testTouchSteeringPaintAndBackgroundLifecycle() throws {

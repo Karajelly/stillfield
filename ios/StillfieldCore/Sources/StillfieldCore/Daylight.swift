@@ -151,7 +151,7 @@ public struct Daylight: Equatable, Sendable {
             $0.sun = 0xfff4d8; $0.sunPower = 3.2; $0.skyLight = 0xfffbe8; $0.ambient = 2.55; $0.sky = 0xe9eedd
         }
         let golden = morning.with {
-            $0.sun = 0xffd299; $0.sunPower = 3.3; $0.skyLight = 0xffe3bb; $0.groundLight = 0x86895c
+            $0.sun = 0xffd299; $0.sunPower = 3.3; $0.skyLight = 0xffe3bb
             $0.ambient = 2.0; $0.sky = 0xeee5ce; $0.warmth = 1
         }
         let night = Key(

@@ -69,7 +69,6 @@ const golden = {
   sun: "#ffd299",
   sunPower: 3.3,
   skyLight: "#ffe3bb",
-  groundLight: "#86895c",
   ambient: 2.0,
   sky: "#eee5ce",
 };

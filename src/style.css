@@ -1247,6 +1247,12 @@ dialog.postcard .primary-button {
 .after-dark .zoom-controls {
   background: #f7f5e9e0;
 }
+.after-dark .pause-veil span {
+  color: #f1efdc;
+}
+.after-dark .pause-veil > div > .icon {
+  color: #c5cdc0;
+}
 .after-dark .action-group {
   border-left-color: #f1efdc33;
 }

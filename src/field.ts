@@ -181,7 +181,10 @@ export function createField(
       seedCenters,
     ],
     dummy = new THREE.Object3D(),
-    color = new THREE.Color();
+    color = new THREE.Color(),
+    tint = new THREE.Color();
+  // A ripening plant swells briefly about its base; 1 leaves it at rest.
+  let lift = 1;
   function put(
     mesh: THREE.InstancedMesh,
     i: number,
@@ -193,9 +196,9 @@ export function createField(
     sz = sx,
     angle = 0,
   ) {
-    dummy.position.set(x, y, z);
+    dummy.position.set(x, y * lift, z);
     dummy.rotation.set(0, angle, 0);
-    dummy.scale.set(sx, sy, sz);
+    dummy.scale.set(sx * lift, sy * lift, sz * lift);
     dummy.updateMatrix();
     mesh.setMatrixAt(i, dummy.matrix);
   }
@@ -251,32 +254,67 @@ export function createField(
       }
       return;
     }
+    // The engine saves exact progress, so plants rise within each stage
+    // instead of jumping between three heights.
+    const within = stage === 3 ? 1 : engine.progress[p.cell] * 3 - stage,
+      rise = within * within * (3 - 2 * within);
+    const full =
+        crop === "sunflowers" ? 1.15 : crop === "pumpkins" ? 0.22 : 0.85,
+      sprout = Math.min(0.3, full);
     const h =
       stage === 1
-        ? 0.25
-        : crop === "sunflowers"
-          ? 1.15
-          : crop === "pumpkins"
-            ? 0.22
-            : 0.85;
+        ? 0.12 + (sprout - 0.12) * rise
+        : stage === 2
+          ? sprout + (full - sprout) * rise
+          : full;
+    const spread =
+      crop === "pumpkins"
+        ? stage === 1
+          ? 0.2 + 0.25 * rise
+          : stage === 2
+            ? 0.45 + 0.75 * rise
+            : 1.2
+        : stage === 1
+          ? 0.45 + 0.25 * rise
+          : 0.7;
     put(
       grass,
       i,
       p.x,
       0.05,
       p.z,
-      crop === "pumpkins" ? (stage === 1 ? 0.35 : 1.2) : 0.7,
+      spread,
       h,
-      crop === "pumpkins" ? (stage === 1 ? 0.35 : 1.2) : 0.8,
+      crop === "pumpkins" ? spread : spread * (0.8 / 0.7),
       p.angle,
     );
+    // Wheat turns from green toward gold as it nears harvest.
+    const ripening = crop === "wheat" && stage === 2 ? rise * rise * 0.6 : 0;
     grass.setColorAt(
       i,
-      color.set(crop === "wheat" && stage === 3 ? "#cbb36a" : "#78934e"),
+      crop === "wheat" && stage === 3
+        ? color.set("#cbb36a")
+        : color.set("#78934e").lerp(tint.set("#cbb36a"), ripening),
     );
     if (crop === "wheat" && stage >= 2) {
-      put(heads, i, p.x, 0.05 + h * 0.7, p.z, 0.75, 2.3, 0.75, p.angle);
-      heads.setColorAt(i, color.set(stage === 3 ? "#ddc176" : "#90a65e"));
+      const ear = stage === 3 ? 1 : 0.35 + 0.65 * rise;
+      put(
+        heads,
+        i,
+        p.x,
+        0.05 + h * 0.7,
+        p.z,
+        0.75 * ear,
+        2.3 * ear,
+        0.75 * ear,
+        p.angle,
+      );
+      heads.setColorAt(
+        i,
+        stage === 3
+          ? color.set("#ddc176")
+          : color.set("#90a65e").lerp(tint.set("#ddc176"), ripening),
+      );
     }
     if (crop === "sunflowers" && stage >= 2) {
       put(stems, i, p.x, h / 2, p.z, 1, h, 1);
@@ -314,15 +352,68 @@ export function createField(
   }
   redraw();
   const display = createHarvestDisplay(scene, engine);
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Cells that have just ripened, with the seconds since they did.
+  const swells = new Map<number, number>();
+  const SWELL_SECONDS = 0.7,
+    GROWTH_REFRESH_SECONDS = 2,
+    GROWTH_REFRESH_FRAMES = 8;
+  let sinceGrowthRefresh = 0,
+    growCursor = grid.length,
+    growTouched = false;
   function respond(events: FarmingEvents) {
     const cells = [...events.groundChanges, ...events.cropStages];
+    for (const i of events.groundChanges) swells.delete(i);
     for (const i of cells) {
       drawCell(i);
       byCell.get(i)?.forEach(updatePoint);
     }
     if (cells.length) dirty();
     if (events.harvestResults.length) display.harvest(events.harvestResults);
+    // A whole field ripening in one step, as after a long frame, stays still.
+    if (!reducedMotion && events.cropMaturities.length <= 400)
+      for (const i of events.cropMaturities) swells.set(i, 0);
     return events;
+  }
+  /** Ripening follows the path the seed was sown along, a row at a time. */
+  function swell(seconds: number) {
+    if (!swells.size) return;
+    for (const [cell, age] of swells) {
+      const next = age + seconds;
+      if (next >= SWELL_SECONDS) swells.delete(cell);
+      else {
+        swells.set(cell, next);
+        lift = 1 + 0.24 * Math.sin((next / SWELL_SECONDS) * Math.PI);
+      }
+      byCell.get(cell)?.forEach(updatePoint);
+      lift = 1;
+    }
+    dirty();
+  }
+  /** Redraw growing plants a slice per frame, so a full field never stalls one. */
+  function grow(seconds: number) {
+    sinceGrowthRefresh += seconds;
+    if (growCursor >= grid.length) {
+      if (sinceGrowthRefresh < GROWTH_REFRESH_SECONDS) return;
+      sinceGrowthRefresh = 0;
+      growCursor = 0;
+      growTouched = false;
+    }
+    const end = Math.min(
+      grid.length,
+      growCursor + Math.ceil(grid.length / GROWTH_REFRESH_FRAMES),
+    );
+    for (; growCursor < end; growCursor++) {
+      // Seed beds look the same until the first shoots appear.
+      if (
+        grid[growCursor] !== Ground.growing ||
+        engine.progress[growCursor] < 1 / 3
+      )
+        continue;
+      byCell.get(growCursor)?.forEach(updatePoint);
+      growTouched = true;
+    }
+    if (growCursor >= grid.length && growTouched) dirty();
   }
   return {
     engine,
@@ -338,11 +429,15 @@ export function createField(
     },
     advance(seconds: number) {
       const event = respond(engine.advance(seconds));
+      grow(event.advancedSeconds);
+      swell(seconds);
       display.update(seconds);
       return event;
     },
     reset() {
       engine.reset();
+      swells.clear();
+      growCursor = grid.length;
       redraw();
       display.clear();
     },

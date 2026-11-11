@@ -521,8 +521,12 @@ p {
   font-weight: 400;
   border-radius: 50%;
 }
-.zoom-controls button:hover {
+.zoom-controls button:hover,
+.zoom-controls button[aria-pressed="true"] {
   background: #e2e9d3;
+}
+.zoom-controls button[aria-pressed="true"] {
+  color: #5f7350;
 }
 .zoom-controls .icon {
   width: 14px;

@@ -1,7 +1,52 @@
 import type { Crop } from "./farming";
+
+// Short filtered-noise textures, kept at or below the level of the wind.
+const WORK_VOICES: Record<
+  "cultivate" | "sow" | "harvest",
+  {
+    every: number;
+    filter: BiquadFilterType;
+    frequency: number;
+    q: number;
+    gain: number;
+    attack: number;
+    length: number;
+  }
+> = {
+  cultivate: {
+    every: 0.17,
+    filter: "lowpass",
+    frequency: 380,
+    q: 0.7,
+    gain: 0.05,
+    attack: 0.03,
+    length: 0.26,
+  },
+  sow: {
+    every: 0.13,
+    filter: "bandpass",
+    frequency: 2600,
+    q: 5,
+    gain: 0.02,
+    attack: 0.004,
+    length: 0.06,
+  },
+  harvest: {
+    every: 0.2,
+    filter: "bandpass",
+    frequency: 1400,
+    q: 0.9,
+    gain: 0.03,
+    attack: 0.04,
+    length: 0.24,
+  },
+};
 /** A quiet, entirely synthesized soundscape, started only by a user gesture. */
 export class FarmAudio {
   private lastHarvest = -10;
+  private lastWork = -10;
+  private lastRipen = -10;
+  private noise: AudioBuffer | null = null;
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
   private engineGain: GainNode | null = null;
@@ -89,6 +134,75 @@ export class FarmAudio {
     note.stop(ctx.currentTime + 0.6);
   }
 
+  /**
+   * The implement at work: soil turning over, seed ticking from the hopper, or
+   * stalks brushing the cutter. Call it whenever the ground actually changes.
+   */
+  work(tool: "cultivate" | "sow" | "harvest"): void {
+    const ctx = this.context;
+    if (
+      !this.enabled ||
+      !ctx ||
+      !this.master ||
+      !this.noise ||
+      ctx.state !== "running"
+    )
+      return;
+    const voice = WORK_VOICES[tool];
+    if (ctx.currentTime - this.lastWork < voice.every) return;
+    const now = (this.lastWork = ctx.currentTime);
+    const source = ctx.createBufferSource(),
+      filter = ctx.createBiquadFilter(),
+      gain = ctx.createGain();
+    source.buffer = this.noise;
+    filter.type = voice.filter;
+    // A little variation keeps a long row from sounding mechanical.
+    filter.frequency.value = voice.frequency * (0.85 + Math.random() * 0.3);
+    filter.Q.value = voice.q;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(voice.gain, now + voice.attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + voice.length);
+    source.connect(filter).connect(gain).connect(this.master);
+    source.onended = () => {
+      source.disconnect();
+      filter.disconnect();
+      gain.disconnect();
+    };
+    source.start(now, Math.random() * 2.5, voice.length + 0.05);
+  }
+
+  /** Two soft rising notes when a sown patch comes ready. */
+  ripen(crop: Crop): void {
+    const ctx = this.context;
+    if (
+      !this.enabled ||
+      !ctx ||
+      !this.master ||
+      ctx.state !== "running" ||
+      ctx.currentTime - this.lastRipen < 2.4
+    )
+      return;
+    this.lastRipen = ctx.currentTime;
+    const base = crop === "sunflowers" ? 784 : crop === "wheat" ? 587 : 392;
+    for (const [index, ratio] of [1, 1.5].entries()) {
+      const start = ctx.currentTime + index * 0.16;
+      const note = ctx.createOscillator(),
+        gain = ctx.createGain();
+      note.type = "sine";
+      note.frequency.value = base * ratio;
+      note.connect(gain).connect(this.master);
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.02, start + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.95);
+      note.onended = () => {
+        note.disconnect();
+        gain.disconnect();
+      };
+      note.start(start);
+      note.stop(start + 1);
+    }
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -103,6 +217,7 @@ export class FarmAudio {
     for (const node of this.nodes) node.disconnect();
     this.sources.length = 0;
     this.nodes.length = 0;
+    this.noise = null;
     const context = this.context;
     this.context = null;
     this.master = null;
@@ -139,6 +254,7 @@ export class FarmAudio {
     for (let index = 0; index < samples.length; index++) {
       samples[index] = Math.random() * 2 - 1;
     }
+    this.noise = noiseBuffer;
     const wind = context.createBufferSource();
     wind.buffer = noiseBuffer;
     wind.loop = true;

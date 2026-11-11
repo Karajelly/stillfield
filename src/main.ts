@@ -5,6 +5,7 @@ import { createField } from "./field";
 import { CROPS, CROP_NAMES } from "./farming";
 import type { Crop, FarmSnapshot } from "./farming";
 import { createTractor } from "./tractor";
+import { createWorkEffects } from "./effects";
 import { FarmAudio } from "./audio";
 import { clamp, FIELD } from "./simulation";
 import { TractorNavigation } from "./tractor-navigation";
@@ -25,6 +26,7 @@ interface Save {
   golden: boolean;
   intro: boolean;
   volume: number;
+  follow?: boolean;
 }
 let saved: Partial<Save> = {};
 let legacySaveBackup: string | undefined;
@@ -113,7 +115,7 @@ app.innerHTML = `
       <div class="drive-hint" id="drive-hint"><span class="hint-desktop"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to drive <span class="hint-dot">·</span></span> tap or click to roam around</div>
     </section>
     <footer class="bottom-bar menu-panel" id="view-controls">
-      <div class="zoom-controls"><button id="zoom-out" aria-label="Zoom out">−</button><button id="recenter" aria-label="Center the farm" title="Center the farm">${icon("expand")}</button><button id="zoom-in" aria-label="Zoom in">+</button></div>
+      <div class="zoom-controls"><button id="follow" aria-label="Follow the tractor" aria-pressed="false" title="Follow the tractor (V)">${icon("camera")}</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="recenter" aria-label="Center the farm" title="Center the farm">${icon("expand")}</button><button id="zoom-in" aria-label="Zoom in">+</button></div>
     </footer>
     <button class="controls-toggle" id="controls-toggle" aria-label="Hide controls" aria-expanded="true" aria-controls="top-controls tool-controls view-controls" title="Hide controls (M)" hidden>${icon("right")}</button>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -233,6 +235,7 @@ const world = createWorld(scene);
 const field = createField(scene, saved.farm ?? saved.grid);
 const tractor = createTractor(scene);
 tractor.setTool(selectedTool);
+const effects = createWorkEffects(scene);
 let volume =
   typeof saved.volume === "number" ? clamp(saved.volume, 0, 1) : 0.45;
 const audio = new FarmAudio();
@@ -254,7 +257,17 @@ const raycaster = new THREE.Raycaster(),
   pointer = new THREE.Vector2(),
   groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
   intersection = new THREE.Vector3();
+// The overview frames the whole farm. Following keeps the same angle, closer,
+// so the plants and the implement are large enough to enjoy.
+const FOLLOW_ZOOM = { min: 1.9, max: 3.6, default: 2.6 };
+let follow = saved.follow === true,
+  followZoom = FOLLOW_ZOOM.default;
+const cameraBase = new THREE.Vector3(),
+  cameraFocus = new THREE.Vector3(),
+  cameraPan = new THREE.Vector3(),
+  cameraWant = new THREE.Vector3();
 let zoom = 1,
+  cameraZoom = follow ? followZoom : zoom,
   lastTime = 0,
   time = 0,
   lastSave = 0,
@@ -294,17 +307,66 @@ function resize() {
   renderer.setSize(width, height);
   const aspect = width / height;
   const { position, focus, vertical } = overviewFraming(aspect);
+  cameraBase.copy(position);
+  cameraFocus.copy(focus);
+  // Aim before panning: the view slides over the ground without turning.
   camera.position.copy(position);
   camera.lookAt(focus);
+  camera.position.add(cameraPan);
   camera.updateMatrixWorld();
   keyboardDown.copy(position).sub(focus).setY(0).normalize();
   camera.left = (-vertical * aspect) / 2;
   camera.right = (vertical * aspect) / 2;
   camera.top = vertical / 2;
   camera.bottom = -vertical / 2;
-  camera.zoom = zoom;
+  camera.zoom = cameraZoom;
   camera.updateProjectionMatrix();
   positionLabels();
+}
+function setFollow(value: boolean) {
+  follow = value;
+  const button = document.querySelector("#follow")!;
+  button.setAttribute("aria-pressed", String(follow));
+  button.setAttribute(
+    "aria-label",
+    follow ? "Show the whole farm" : "Follow the tractor",
+  );
+  persist();
+}
+function changeZoom(direction: number) {
+  if (follow)
+    followZoom = clamp(
+      followZoom + direction * 0.3,
+      FOLLOW_ZOOM.min,
+      FOLLOW_ZOOM.max,
+    );
+  else zoom = clamp(zoom + direction * 0.12, 0.7, 1.65);
+}
+/** Ease toward the chosen view. Reduced motion cuts straight to it. */
+function updateCamera(dt: number) {
+  if (follow)
+    cameraWant.set(
+      tractorState.x - cameraFocus.x,
+      0,
+      tractorState.z - cameraFocus.z,
+    );
+  else cameraWant.set(0, 0, 0);
+  const wantZoom = follow ? followZoom : zoom;
+  if (
+    cameraPan.distanceToSquared(cameraWant) < 1e-6 &&
+    Math.abs(cameraZoom - wantZoom) < 1e-4
+  )
+    return;
+  const ease = reducedMotion ? 1 : 1 - Math.exp(-3.2 * dt);
+  cameraPan.lerp(cameraWant, ease);
+  cameraZoom += (wantZoom - cameraZoom) * ease;
+  if (cameraPan.distanceToSquared(cameraWant) < 1e-6) cameraPan.copy(cameraWant);
+  if (Math.abs(cameraZoom - wantZoom) < 1e-4) cameraZoom = wantZoom;
+  camera.position.copy(cameraBase).add(cameraPan);
+  camera.zoom = cameraZoom;
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+  if (!hasDriven) positionLabels();
 }
 function positionLabels() {
   camera.updateMatrixWorld();
@@ -368,6 +430,7 @@ function persist() {
       golden,
       intro: introDismissed,
       volume,
+      follow,
     };
     if (legacySaveBackup) {
       localStorage.setItem("stillfield-before-grid-v3", legacySaveBackup);
@@ -477,6 +540,7 @@ function showReset() {
   );
   dialog.querySelector("#confirm-reset")!.addEventListener("click", () => {
     field.reset();
+    effects.clear();
     navigation = new TractorNavigation();
     tractorState = { ...defaultTractor };
     stop();
@@ -577,6 +641,9 @@ window.addEventListener("keydown", (e) => {
     updateTool(
       (["cultivate", "sow", "harvest", "wander"] as Tool[])[Number(e.key) - 1],
     );
+  } else if (e.key.toLowerCase() === "v" && !e.repeat) {
+    e.preventDefault();
+    setFollow(!follow);
   } else if (e.key.toLowerCase() === "m" && hasDriven && !paused && !e.repeat) {
     e.preventDefault();
     setControlsHidden(!controlsHidden);
@@ -637,7 +704,7 @@ welcome.addEventListener("click", dismissIntro);
 document.querySelector(".brand")!.addEventListener("click", (e) => {
   e.preventDefault();
   zoom = 1;
-  resize();
+  setFollow(false);
 });
 document.querySelector("#sound")!.addEventListener("click", toggleSound);
 document
@@ -648,32 +715,43 @@ document
   .addEventListener("click", () => setPaused(false));
 document.querySelector("#settings")!.addEventListener("click", showSettings);
 document.querySelector("#place")!.addEventListener("click", showHelp);
-document.querySelector("#zoom-in")!.addEventListener("click", () => {
-  zoom = clamp(zoom + 0.12, 0.7, 1.65);
-  resize();
-});
-document.querySelector("#zoom-out")!.addEventListener("click", () => {
-  zoom = clamp(zoom - 0.12, 0.7, 1.65);
-  resize();
-});
+document
+  .querySelector("#zoom-in")!
+  .addEventListener("click", () => changeZoom(1));
+document
+  .querySelector("#zoom-out")!
+  .addEventListener("click", () => changeZoom(-1));
 document.querySelector("#recenter")!.addEventListener("click", () => {
   zoom = 1;
-  resize();
+  setFollow(false);
 });
+document
+  .querySelector("#follow")!
+  .addEventListener("click", () => setFollow(!follow));
 dialog.addEventListener("click", (e) => {
   if (e.target === dialog) closeDialog();
 });
 dialog.addEventListener("cancel", () => {
   modalOpen = false;
 });
-setLight();
-resize();
-updateTool(selectedTool);
-let changedSinceSave = false;
-const attachment = tractor.group.getObjectByName("attachment")!;
 const reducedMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)",
 ).matches;
+setLight();
+resize();
+if (follow) {
+  // A saved close view opens on the tractor instead of sweeping in.
+  cameraPan.set(
+    tractorState.x - cameraFocus.x,
+    0,
+    tractorState.z - cameraFocus.z,
+  );
+  resize();
+}
+setFollow(follow);
+updateTool(selectedTool);
+let changedSinceSave = false;
+const attachment = tractor.group.getObjectByName("attachment")!;
 function animate(now: number) {
   requestAnimationFrame(animate);
   const activeSeconds = lastTime ? Math.max(0, (now - lastTime) / 1000) : 0;
@@ -689,6 +767,10 @@ function animate(now: number) {
     time += dt;
     const growth = field.advance(activeSeconds);
     changedSinceSave ||= growth.advancedSeconds > 0;
+    if (growth.cropMaturities.length) {
+      const ripened = field.engine.cropAt(growth.cropMaturities[0]);
+      if (ripened) audio.ripen(ripened);
+    }
     const gridInput = keyboard.input;
     const previousHeading = tractorState.heading;
     const movement = navigation.step(
@@ -714,7 +796,33 @@ function animate(now: number) {
       changedSinceSave ||= event.groundChanges.length > 0;
       if (event.harvestResults.length)
         audio.harvest(event.harvestResults[0].crop);
+      // Feedback follows the ground that really changed, so a pass over
+      // finished work stays as quiet as it is ineffective.
+      if (
+        event.groundChanges.length &&
+        (selectedTool === "cultivate" ||
+          selectedTool === "sow" ||
+          selectedTool === "harvest")
+      ) {
+        audio.work(selectedTool);
+        if (selectedTool === "harvest")
+          for (const result of event.harvestResults)
+            effects.emit(
+              "harvest",
+              result.cells,
+              tractorState.heading,
+              result.crop,
+            );
+        else
+          effects.emit(
+            selectedTool,
+            event.groundChanges,
+            tractorState.heading,
+            selectedCrop,
+          );
+      }
     });
+    effects.update(dt);
     if (tractorState.speed > 0.1) {
       if (!hasDriven) {
         hasDriven = true;
@@ -745,6 +853,7 @@ function animate(now: number) {
       lastSave = time;
     }
   }
+  updateCamera(dt);
   renderer.render(scene, camera);
 }
 requestAnimationFrame(animate);
@@ -761,6 +870,8 @@ if (import.meta.env.DEV)
       hasDriven,
       controlsHidden,
       introDismissed,
+      follow,
+      zoom: cameraZoom,
       grid: Array.from(field.grid),
       farm: field.engine.snapshot(),
       crop: selectedCrop,

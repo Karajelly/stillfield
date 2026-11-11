@@ -50,12 +50,16 @@ export interface FarmSnapshot {
   crops: number[];
   progress: number[];
   display: Record<Crop, number>;
+  /** Cells ever harvested of each crop. Absent in saves from before the tally. */
+  gathered?: Record<Crop, number>;
 }
 export interface HarvestResult {
   fieldId: string;
   crop: Crop;
   cells: number[];
   stage: number;
+  /** The crop's lifetime tally, including these cells. */
+  gathered: number;
 }
 /** Batched events keep rendering/audio outside the engine, including during rest. */
 export interface FarmingEvents {
@@ -100,7 +104,14 @@ function validSnapshot(
       (a) => Array.isArray(a) && a.length === count,
     ) ||
     !s.display ||
-    !CROPS.every((c) => Number.isSafeInteger(s.display[c]) && s.display[c] >= 0)
+    !CROPS.every(
+      (c) => Number.isSafeInteger(s.display[c]) && s.display[c] >= 0,
+    ) ||
+    (s.gathered !== undefined &&
+      (!s.gathered ||
+        !CROPS.every(
+          (c) => Number.isSafeInteger(s.gathered![c]) && s.gathered![c] >= 0,
+        )))
   )
     return false;
   return s.cells.every((state, i) => {
@@ -154,6 +165,7 @@ export function migrateFarm(value: unknown): FarmSnapshot | undefined {
     crops: Array(CELL_COUNT).fill(0),
     progress: Array(CELL_COUNT).fill(0),
     display: { ...source.display },
+    ...(source.gathered && { gathered: { ...source.gathered } }),
   };
   const counts = new Uint8Array(CELL_COUNT * 3),
     progress = new Float64Array(CELL_COUNT * 3);
@@ -199,6 +211,8 @@ export class FarmingEngine {
   readonly displayLocation: Point;
   readonly config: FarmingConfig;
   display = emptyDisplay();
+  /** Unlike the display, the lifetime tally never saturates. */
+  gathered = emptyDisplay();
 
   constructor(
     saved?: FarmSnapshot | number[],
@@ -233,6 +247,11 @@ export class FarmingEngine {
       this.crops.set(snapshot.crops);
       this.progress.set(snapshot.progress);
       this.display = { ...snapshot.display };
+      // Older saves only know what their displays held.
+      for (const crop of CROPS)
+        this.gathered[crop] =
+          snapshot.gathered?.[crop] ??
+          Math.floor(snapshot.display[crop] / HARVEST_UNITS_PER_CELL);
     } else if (starter) {
       for (let x = -21; x <= 13; x += 0.2)
         for (const z of [10.8, 7.8])
@@ -341,11 +360,13 @@ export class FarmingEngine {
         this.config.displayThresholds[2],
         this.display[crop] + cells.length * HARVEST_UNITS_PER_CELL,
       );
+      this.gathered[crop] += cells.length;
       result.harvestResults.push({
         fieldId: this.fieldId,
         crop,
         cells,
         stage: this.displayStage(crop),
+        gathered: this.gathered[crop],
       });
     }
     return result;
@@ -390,6 +411,7 @@ export class FarmingEngine {
     this.crops.fill(0);
     this.progress.fill(0);
     this.clearDisplay();
+    this.gathered = emptyDisplay();
   }
   snapshot(): FarmSnapshot {
     return {
@@ -400,6 +422,7 @@ export class FarmingEngine {
       crops: Array.from(this.crops),
       progress: Array.from(this.progress),
       display: { ...this.display },
+      gathered: { ...this.gathered },
     };
   }
 }

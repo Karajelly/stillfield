@@ -193,6 +193,69 @@ describe("tranquil farming loop", () => {
     f.applyCells([0], "harvest");
     assert.equal(f.displayStage("wheat"), 1);
   });
+  it("keeps an uncapped lifetime tally beside the saturating display", () => {
+    const f = fresh();
+    const cap = FARMING_CONFIG.displayThresholds[2];
+    const cells = Array.from({ length: 150 }, (_, i) => i);
+    let total = 0;
+    for (const crop of ["wheat", "wheat", "pumpkins"] as const) {
+      plant(f, cells, crop);
+      f.rest();
+      const [result] = f.applyCells(cells, "harvest").harvestResults;
+      if (crop === "wheat") total += cells.length;
+      assert.equal(result.gathered, f.gathered[crop]);
+    }
+    // 300 wheat cells is well past the 64 the display can show.
+    assert.equal(f.display.wheat, cap);
+    assert.deepEqual(f.gathered, { wheat: total, sunflowers: 0, pumpkins: 150 });
+    // Passes that gather nothing leave the tally alone.
+    f.applyCells(cells, "harvest");
+    f.applyCells(cells, "cultivate");
+    assert.equal(f.gathered.wheat, 300);
+
+    const save = f.snapshot();
+    assert.ok(validFarm(save));
+    const loaded = new FarmingEngine(JSON.parse(JSON.stringify(save)));
+    assert.deepEqual(loaded.gathered, f.gathered);
+    assert.deepEqual(loaded.snapshot(), save);
+
+    // Clearing the display keeps the tally; a fresh meadow clears both.
+    f.clearDisplay();
+    assert.equal(f.gathered.wheat, 300);
+    f.reset();
+    assert.deepEqual(f.gathered, { wheat: 0, sunflowers: 0, pumpkins: 0 });
+    assert.deepEqual(f.snapshot().gathered, f.gathered);
+  });
+  it("loads saves from before the tally and rejects a malformed one", () => {
+    const f = fresh();
+    const cells = Array.from({ length: 20 }, (_, i) => i);
+    plant(f, cells, "sunflowers");
+    f.rest();
+    f.applyCells(cells, "harvest");
+    const { gathered, ...older } = f.snapshot();
+    assert.deepEqual(gathered, { wheat: 0, sunflowers: 20, pumpkins: 0 });
+    assert.ok(validFarm(older));
+    // The display is all an older save remembers, up to its cap.
+    assert.deepEqual(new FarmingEngine(older).gathered, gathered);
+    const full = { ...older, display: { wheat: 256, sunflowers: 6, pumpkins: 0 } };
+    assert.deepEqual(new FarmingEngine(full).gathered, {
+      wheat: 64,
+      sunflowers: 1,
+      pumpkins: 0,
+    });
+    for (const bad of [
+      null,
+      {},
+      { wheat: 1, sunflowers: 1 },
+      { wheat: -1, sunflowers: 0, pumpkins: 0 },
+      { wheat: 1.5, sunflowers: 0, pumpkins: 0 },
+      { wheat: "3", sunflowers: 0, pumpkins: 0 },
+    ]) {
+      const save: unknown = { ...older, gathered: bad };
+      assert.equal(validFarm(save), false);
+      assert.equal(migrateFarm(save), undefined);
+    }
+  });
   it("sweeps continuously with configurable, forgiving edges and clips outside the field", () => {
     const f = fresh(),
       from = { x: -10, z: 0 },

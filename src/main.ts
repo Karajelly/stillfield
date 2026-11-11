@@ -261,16 +261,20 @@ cursor.visible = false;
 scene.add(cursor);
 // A pale wash over the rows the tractor has been asked to work. It shrinks
 // as each row is done, so what is left to do is always plain to see.
+// Drawn over the meadow rather than under it: at ground level the grass
+// hides it completely.
 const rowWashMaterial = new THREE.MeshBasicMaterial({
   color: "#f9f4d9",
   transparent: true,
-  opacity: 0.2,
+  opacity: 0.24,
   depthWrite: false,
+  depthTest: false,
 });
 const rowWash = Array.from({ length: 12 }, () => {
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), rowWashMaterial);
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.y = 0.056;
+  mesh.renderOrder = 2;
   mesh.visible = false;
   scene.add(mesh);
   return mesh;
@@ -290,7 +294,12 @@ function updateRowWash() {
     if (!mesh.visible) return;
     const rect = rowRect(row, from);
     mesh.position.set(rect.x, 0.056, rect.z);
-    mesh.scale.set(rect.width, rect.depth, 1);
+    // A sliver of meadow between washes keeps neighbouring rows distinct.
+    mesh.scale.set(
+      rect.width - (row.axis === "z" ? 0.3 : 0),
+      rect.depth - (row.axis === "x" ? 0.3 : 0),
+      1,
+    );
   });
 }
 const raycaster = new THREE.Raycaster(),

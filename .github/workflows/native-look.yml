@@ -1,0 +1,49 @@
+name: Native look (temporary)
+
+# Temporary, and removed before this pull request is ready: runs two UI tests in
+# a simulator and keeps their screenshots, so the native day, night lights, and
+# postcards can be looked at from an environment that has no Xcode.
+on:
+  pull_request:
+    paths:
+      - "ios/**"
+      - ".github/workflows/native-look.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-look-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  look:
+    name: Native look (temporary)
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: List simulators
+        run: xcrun simctl list devices available | grep -E "iPhone|iPad" | head -30
+      - name: Run the night and settings UI tests
+        continue-on-error: true
+        run: >
+          xcodebuild -project ios/Stillfield.xcodeproj -scheme Stillfield
+          -destination 'platform=iOS Simulator,name=iPhone 16'
+          -derivedDataPath ios/.build -resultBundlePath look.xcresult
+          -only-testing:StillfieldUITests/StillfieldUITests/testNightLightsAndAPostcard
+          -only-testing:StillfieldUITests/StillfieldUITests/testNativeToolsSettingsAndPause
+          -quiet test CODE_SIGNING_ALLOWED=NO
+      - name: Summarize and export screenshots
+        if: always()
+        run: |
+          xcrun xcresulttool get test-results summary --path look.xcresult | head -80 || true
+          xcrun xcresulttool export attachments --path look.xcresult --output-path shots || true
+          ls -la shots || true
+          cat shots/manifest.json || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: native-look
+          path: shots

@@ -427,6 +427,10 @@ export function createField(
     ) {
       return respond(engine.apply(from, { x, z }, tool, crop));
     },
+    /** Work exactly these cells, as a tidy row does. */
+    paintCells(cells: number[], tool: Tool, crop: Crop = "wheat") {
+      return respond(engine.applyCells(cells, tool, crop));
+    },
     advance(seconds: number) {
       const event = respond(engine.advance(seconds));
       grow(event.advancedSeconds);

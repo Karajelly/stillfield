@@ -2,13 +2,15 @@ import * as THREE from "three";
 import "./style.css";
 import { createWorld } from "./world";
 import { createField } from "./field";
-import { CROPS, CROP_NAMES } from "./farming";
-import type { Crop, FarmSnapshot } from "./farming";
+import { CROPS, CROP_NAMES, Ground } from "./farming";
+import type { Crop, FarmSnapshot, FarmingEvents } from "./farming";
 import { createTractor } from "./tractor";
 import { createWorkEffects } from "./effects";
 import { FarmAudio } from "./audio";
 import { clamp, FIELD } from "./simulation";
 import { TractorNavigation } from "./tractor-navigation";
+import type { ChooseOptions } from "./tractor-navigation";
+import { rowRect } from "./tidy-rows";
 import type { Point, Tool, TractorState } from "./simulation";
 import { icon, brandMark } from "./icons";
 import { overviewFraming } from "./overview";
@@ -27,6 +29,7 @@ interface Save {
   intro: boolean;
   volume: number;
   follow?: boolean;
+  tidy?: boolean;
 }
 let saved: Partial<Save> = {};
 let legacySaveBackup: string | undefined;
@@ -72,7 +75,10 @@ let tractorState: TractorState =
 tractorState.x = clamp(tractorState.x, -39, 39);
 tractorState.z = clamp(tractorState.z, -30, 28);
 let target: Point | null = null;
+// Taps ask for whole rows on the field's lanes unless this is switched off.
+let tidy = saved.tidy !== false;
 let navigation = new TractorNavigation();
+navigation.tidy = tidy;
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
   <main class="farm-app welcoming">
@@ -253,6 +259,40 @@ cursor.rotation.x = -Math.PI / 2;
 cursor.position.y = 0.08;
 cursor.visible = false;
 scene.add(cursor);
+// A pale wash over the rows the tractor has been asked to work. It shrinks
+// as each row is done, so what is left to do is always plain to see.
+const rowWashMaterial = new THREE.MeshBasicMaterial({
+  color: "#f9f4d9",
+  transparent: true,
+  opacity: 0.2,
+  depthWrite: false,
+});
+const rowWash = Array.from({ length: 12 }, () => {
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), rowWashMaterial);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = 0.056;
+  mesh.visible = false;
+  scene.add(mesh);
+  return mesh;
+});
+function updateRowWash() {
+  const rows = navigation.plannedRows,
+    run = navigation.run;
+  rowWash.forEach((mesh, index) => {
+    const row = rows[index];
+    // Only the part of the current row still ahead of the deck.
+    const from =
+      row && index === 0 && run && run.workedTo !== null
+        ? run.workedTo + row.dir
+        : row?.from;
+    mesh.visible =
+      !!row && from !== undefined && (row.to - from) * row.dir >= 0;
+    if (!mesh.visible) return;
+    const rect = rowRect(row, from);
+    mesh.position.set(rect.x, 0.056, rect.z);
+    mesh.scale.set(rect.width, rect.depth, 1);
+  });
+}
 const raycaster = new THREE.Raycaster(),
   pointer = new THREE.Vector2(),
   groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
@@ -431,6 +471,7 @@ function persist() {
       intro: introDismissed,
       volume,
       follow,
+      tidy,
     };
     if (legacySaveBackup) {
       localStorage.setItem("stillfield-before-grid-v3", legacySaveBackup);
@@ -455,6 +496,7 @@ function stop() {
   target = null;
   keyboard.reset();
   cursor.visible = false;
+  updateRowWash();
   tractorState.speed = 0;
   audio.setDriving(0);
 }
@@ -507,14 +549,19 @@ function openDialog(content: string) {
 }
 function showHelp() {
   openDialog(
-    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO STILLFIELD</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>Tap where the work should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop.<br>WASD or arrow keys follow the field rows. Tap a new direction to turn in place; hold to drive. Up follows the view, even when the window is narrow.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Cultivate prepares soil and clears any crops. Sow wheat, sunflowers, or pumpkins, then harvest when they’re ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests gather in pots and carts by the field.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Crops grow only while you’re here: sunflowers in 3 minutes, wheat in 6, pumpkins in 9. Nothing withers. Your meadow saves on this device.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
+    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO STILLFIELD</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>${tidy ? "Tap where a row should end and the tractor works a straight row to it. Tap more rows whenever you like and it works them in turn. Tap twice to fill every row up to that spot. Drag to steer freehand." : "Tap where the work should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop."}<br>WASD or arrow keys follow the field rows. Tap a new direction to turn in place; hold to drive. Up follows the view, even when the window is narrow.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Cultivate prepares soil and clears any crops. Sow wheat, sunflowers, or pumpkins, then harvest when they’re ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests gather in pots and carts by the field.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Crops grow only while you’re here: sunflowers in 3 minutes, wheat in 6, pumpkins in 9. Nothing withers. Your meadow saves on this device.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
   );
   dialog.querySelector("#help-done")!.addEventListener("click", closeDialog);
 }
 function showSettings() {
   openDialog(
-    `<div class="eyebrow">THE WAY YOU LIKE IT</div><h2 id="dialog-title">Settle <em>in.</em></h2><p>A few small comforts for your time outside.</p><div class="settings-list"><label class="setting-row"><span><strong>Golden light</strong><small>A warmer kind of afternoon.</small></span><input type="checkbox" id="golden-setting" ${golden ? "checked" : ""}><span class="switch"></span></label><label class="range-setting" for="pace-setting"><strong>Your pace</strong><input type="range" id="pace-setting" min="0.55" max="1.25" step="0.05" value="${pace}"><span><small>Unhurried</small><small>A little breezier</small></span></label><label class="range-setting" for="volume-setting"><strong>Nature sounds</strong><input type="range" id="volume-setting" min="0" max="1" step="0.05" value="${volume}"><span><small>A whisper</small><small>All around you</small></span></label></div><button class="reset-button" id="fresh">${icon("reset")} A fresh meadow</button><p class="settings-footnote">${storageAvailable ? "Your meadow is saved automatically on this device." : "Browser storage is unavailable. This meadow lasts for this visit."}</p>`,
+    `<div class="eyebrow">THE WAY YOU LIKE IT</div><h2 id="dialog-title">Settle <em>in.</em></h2><p>A few small comforts for your time outside.</p><div class="settings-list"><label class="setting-row"><span><strong>Golden light</strong><small>A warmer kind of afternoon.</small></span><input type="checkbox" id="golden-setting" ${golden ? "checked" : ""}><span class="switch"></span></label><label class="setting-row"><span><strong>Tidy rows</strong><small>Taps make straight rows, side by side.</small></span><input type="checkbox" id="tidy-setting" ${tidy ? "checked" : ""}><span class="switch"></span></label><label class="range-setting" for="pace-setting"><strong>Your pace</strong><input type="range" id="pace-setting" min="0.55" max="1.25" step="0.05" value="${pace}"><span><small>Unhurried</small><small>A little breezier</small></span></label><label class="range-setting" for="volume-setting"><strong>Nature sounds</strong><input type="range" id="volume-setting" min="0" max="1" step="0.05" value="${volume}"><span><small>A whisper</small><small>All around you</small></span></label></div><button class="reset-button" id="fresh">${icon("reset")} A fresh meadow</button><p class="settings-footnote">${storageAvailable ? "Your meadow is saved automatically on this device." : "Browser storage is unavailable. This meadow lasts for this visit."}</p>`,
   );
+  dialog.querySelector("#tidy-setting")!.addEventListener("change", (e) => {
+    tidy = (e.target as HTMLInputElement).checked;
+    navigation.tidy = tidy;
+    persist();
+  });
   dialog.querySelector("#golden-setting")!.addEventListener("change", (e) => {
     golden = (e.target as HTMLInputElement).checked;
     setLight();
@@ -542,6 +589,7 @@ function showReset() {
     field.reset();
     effects.clear();
     navigation = new TractorNavigation();
+    navigation.tidy = tidy;
     tractorState = { ...defaultTractor };
     stop();
     persist();
@@ -550,7 +598,16 @@ function showReset() {
   });
   dialog.querySelector("#cancel-reset")!.addEventListener("click", closeDialog);
 }
-function pointerTarget(event: PointerEvent) {
+/** Whether the selected tool would change a cell, so a fill can pass over idle lanes. */
+function workable(cell: number) {
+  const ground = field.grid[cell];
+  return selectedTool === "cultivate"
+    ? ground !== Ground.soil
+    : selectedTool === "sow"
+      ? ground === Ground.soil
+      : selectedTool === "harvest" && ground === Ground.mature;
+}
+function pointerTarget(event: PointerEvent, options: ChooseOptions = {}) {
   const rect = renderer.domElement.getBoundingClientRect();
   pointer.set(
     ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -559,20 +616,44 @@ function pointerTarget(event: PointerEvent) {
   raycaster.setFromCamera(pointer, camera);
   if (raycaster.ray.intersectPlane(groundPlane, intersection)) {
     keyboard.reset();
-    target = {
-      x: clamp(intersection.x, -39, 39),
-      z: clamp(intersection.z, -30, 28),
-    };
-    navigation.choose(target, tractorState, selectedTool, world.obstacles);
-    cursor.position.set(target.x, 0.09, target.z);
-    cursor.visible = true;
+    navigation.choose(
+      {
+        x: clamp(intersection.x, -39, 39),
+        z: clamp(intersection.z, -30, 28),
+      },
+      tractorState,
+      selectedTool,
+      world.obstacles,
+      { ...options, workable },
+    );
+    changedSinceTap = 0;
+    // A tidy row ends on its lane, not exactly under the finger.
+    target = navigation.target;
+    if (target) cursor.position.set(target.x, 0.09, target.z);
+    cursor.visible = target !== null;
     dismissIntro();
     scheduleControlsHide();
   }
 }
+// A pass that changes nothing says why, once, instead of leaving it a puzzle.
+let changedSinceTap = 0,
+  lastHint = -Infinity;
+function explainIdlePass() {
+  const message =
+    selectedTool === "sow"
+      ? "Seeds like prepared soil. Cultivate here first."
+      : selectedTool === "harvest"
+        ? "Nothing here is ripe just yet."
+        : "";
+  if (!message || time - lastHint < 30) return;
+  lastHint = time;
+  toast(message);
+}
 let pointerId: number | null = null;
 let pointerOrigin = { x: 0, y: 0 },
-  pointerMoved = false;
+  pointerMoved = false,
+  pointerDownAt = 0,
+  lastTap = { time: -Infinity, x: 0, y: 0 };
 sceneContainer.addEventListener("pointerdown", (e) => {
   if (
     paused ||
@@ -585,15 +666,29 @@ sceneContainer.addEventListener("pointerdown", (e) => {
   pointerId = e.pointerId;
   pointerOrigin = { x: e.clientX, y: e.clientY };
   pointerMoved = false;
+  pointerDownAt = performance.now();
+  // A second tap on the same spot asks for every row up to it.
+  const again =
+    tidy &&
+    pointerDownAt - lastTap.time < 400 &&
+    Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30;
+  lastTap = { time: again ? -Infinity : pointerDownAt, x: e.clientX, y: e.clientY };
   sceneContainer.setPointerCapture(e.pointerId);
-  pointerTarget(e);
+  pointerTarget(e, { fill: again });
   sceneContainer.focus({ preventScroll: true });
 });
 sceneContainer.addEventListener("pointermove", (e) => {
   if (e.pointerId !== pointerId || paused || modalOpen) return;
-  pointerMoved ||=
-    Math.hypot(e.clientX - pointerOrigin.x, e.clientY - pointerOrigin.y) > 8;
-  if (pointerMoved) pointerTarget(e);
+  const moved = Math.hypot(
+    e.clientX - pointerOrigin.x,
+    e.clientY - pointerOrigin.y,
+  );
+  // A tap may wobble under a finger. With tidy rows, only a press that is
+  // held or carried well away from where it began becomes freehand steering.
+  pointerMoved ||= tidy
+    ? moved > 8 && (performance.now() - pointerDownAt > 160 || moved > 28)
+    : moved > 8;
+  if (pointerMoved) pointerTarget(e, { freehand: true });
 });
 sceneContainer.addEventListener("pointerup", (e) => {
   if (e.pointerId === pointerId) {
@@ -785,15 +880,11 @@ function animate(now: number) {
     changedSinceSave ||= tractorState.heading !== previousHeading;
     target = navigation.target;
     cursor.visible = target !== null;
-    movement.paint.forEach((point, index, points) => {
-      const event = field.paint(
-        point.x,
-        point.z,
-        selectedTool,
-        points[Math.max(0, index - 1)],
-        selectedCrop,
-      );
+    if (target) cursor.position.set(target.x, 0.09, target.z);
+    updateRowWash();
+    const worked = (event: FarmingEvents) => {
       changedSinceSave ||= event.groundChanges.length > 0;
+      changedSinceTap += event.groundChanges.length;
       if (event.harvestResults.length)
         audio.harvest(event.harvestResults[0].crop);
       // Feedback follows the ground that really changed, so a pass over
@@ -821,7 +912,21 @@ function animate(now: number) {
             selectedCrop,
           );
       }
-    });
+    };
+    movement.paint.forEach((point, index, points) =>
+      worked(
+        field.paint(
+          point.x,
+          point.z,
+          selectedTool,
+          points[Math.max(0, index - 1)],
+          selectedCrop,
+        ),
+      ),
+    );
+    if (movement.cells.length)
+      worked(field.paintCells(movement.cells, selectedTool, selectedCrop));
+    if (movement.completed && tidy && changedSinceTap === 0) explainIdlePass();
     effects.update(dt);
     if (tractorState.speed > 0.1) {
       if (!hasDriven) {
@@ -842,7 +947,8 @@ function animate(now: number) {
     tractor.group.rotation.y = tractorState.heading;
     tractor.update(tractorState.speed, dt, time);
     attachment.position.y +=
-      ((navigation.turn || navigation.gridTurning ? 0.4 : 0) - attachment.position.y) *
+      ((navigation.turn || navigation.gridTurning || navigation.lifted ? 0.4 : 0) -
+        attachment.position.y) *
       (1 - Math.exp(-8 * dt));
     world.update(reducedMotion ? 0 : time, reducedMotion ? 0 : dt);
     audio.setDriving(tractorState.speed / 6);
@@ -883,6 +989,9 @@ if (import.meta.env.DEV)
         bottom: camera.bottom,
       },
       target,
+      tidy,
+      rows: navigation.plannedRows,
+      queued: navigation.hasQueued,
       turningAtRowEnd: !!navigation.turn,
       turningInPlace: navigation.gridTurning,
       workedRow: navigation.rows.last,

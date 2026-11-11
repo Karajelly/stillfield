@@ -588,10 +588,11 @@ final class FarmController {
             + ",touchCount=\(testTouchCount)"
             + ",rowTurn=\(navigation.turningAtRowEnd ? 1 : 0)"
             + ",tractorView=\(cameraMode == .tractor ? 1 : 0)"
-            + ",gust=\(wind.isGusting ? 1 : 0)"
-            + ",lean=\(Int(((fieldRenderer?.strongestLean ?? 0) * 1000).rounded()))"
             + String(format: ",heading=%.3f,cameraX=%.3f,cameraY=%.3f,cameraZ=%.3f",
                      tractorState.heading, Double(camera.position.x), Double(camera.position.y), Double(camera.position.z))
+        // The lean is in thousandths, so the tests can read it as a whole number.
+        let lean = Int(((fieldRenderer?.strongestLean ?? 0) * 1000).rounded())
+        testTelemetry += ",gust=\(wind.isGusting ? 1 : 0),lean=\(lean)"
         if let target {
             testTelemetry += String(format: ",targetX=%.3f,targetZ=%.3f", target.x, target.z)
         }

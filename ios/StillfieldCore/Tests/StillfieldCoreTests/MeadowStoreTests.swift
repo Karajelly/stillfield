@@ -22,6 +22,8 @@ private func withSaveURL(_ body: (URL) throws -> Void) throws {
         save.haptics = false
         save.introDismissed = true
         save.cameraMode = .tractor
+        save.light = .dusk
+        save.day = 432.5
         try MeadowStore.save(save, to: url)
         #expect(MeadowStore.load(from: url) == save)
         save.field.paint(x: 2, z: -4, tool: .cultivate)
@@ -160,4 +162,49 @@ private func withSaveURL(_ body: (URL) throws -> Void) throws {
         #expect(try Data(contentsOf: #require(backups.first)) == bytes)
         #expect(MeadowStore.load(from: url) == migrated)
     }
+}
+
+@Test func meadowsSavedBeforeTheDayMovedKeepTheirLight() throws {
+    for golden in [false, true] {
+        let original = MeadowSave(goldenLight: golden)
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(original)) as? [String: Any])
+        #expect(json["light"] == nil && json["day"] == nil)
+        json.removeValue(forKey: "light")
+        json.removeValue(forKey: "day")
+        let restored = try JSONDecoder().decode(MeadowSave.self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(restored == original)
+        // Golden light becomes a held golden hour; everyone else starts a drifting morning.
+        #expect(restored.resolvedLight == (golden ? .golden : .flow))
+        #expect(restored.resolvedDay == (golden ? Daylight.holdSeconds(.golden) : 0))
+    }
+}
+
+@Test func theHourOfTheDaySurvivesASaveAndAHeldLightWinsOverIt() throws {
+    try withSaveURL { url in
+        var save = MeadowSave(light: .flow, day: 500.25)
+        try MeadowStore.save(save, to: url)
+        let drifting = try #require(MeadowStore.load(from: url))
+        #expect(drifting.resolvedLight == .flow && drifting.resolvedDay == 500.25)
+
+        save.light = .night
+        try MeadowStore.save(save, to: url)
+        let held = try #require(MeadowStore.load(from: url))
+        #expect(held.resolvedLight == .night)
+        #expect(held.resolvedDay == Daylight.holdSeconds(.night))
+
+        // An hour from past the end of the day wraps instead of failing the save.
+        save.light = .flow
+        save.day = Daylight.daySeconds * 3 + 12
+        try MeadowStore.save(save, to: url)
+        let wrapped = try #require(MeadowStore.load(from: url))
+        #expect(wrapped.resolvedDay == 12)
+    }
+}
+
+@Test func anUnknownLightFromANewerBuildLetsTheDayDrift() throws {
+    var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(MeadowSave(day: 90))) as? [String: Any])
+    json["light"] = "noon"
+    let restored = try JSONDecoder().decode(MeadowSave.self, from: JSONSerialization.data(withJSONObject: json))
+    #expect(restored.isValid)
+    #expect(restored.resolvedLight == .flow && restored.resolvedDay == 90)
 }

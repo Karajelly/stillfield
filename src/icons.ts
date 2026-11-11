@@ -49,6 +49,7 @@ const paths: Record<string, string> = {
   down: '<path d="m7 10 5 5 5-5"/>',
   right: '<path d="m10 7 5 5-5 5"/>',
   menu: '<path d="M5 6h14M5 12h14M5 18h14"/>',
+  moon: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/>',
   camera:
     '<path d="M8 5h8l2 3h3v12H3V8h3l2-3Z"/><circle cx="12" cy="13" r="4"/>',
 };

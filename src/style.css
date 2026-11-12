@@ -520,6 +520,20 @@ p {
   width: 14px;
   height: 14px;
 }
+.zoom-controls .view-toggle {
+  margin-right: 5px;
+  color: #596f55;
+}
+.zoom-controls .view-toggle .icon {
+  width: 17px;
+  height: 17px;
+}
+.zoom-controls .view-toggle[aria-pressed="true"] {
+  background: #e0e7ce;
+}
+.farm-app.tractor-view .world-label {
+  display: none;
+}
 .toast {
   position: absolute;
   top: 105px;

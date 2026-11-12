@@ -265,7 +265,7 @@ final class FarmController {
         let started = steeringGesture == nil
         if started {
             navigation.cancel(); target = nil; destinationMarker.isEnabled = false
-            steeringGesture = SteeringGesture(location: SIMD2(Double(origin.x), Double(origin.y)), time: elapsed)
+            steeringGesture = SteeringGesture(location: SIMD2(Double(origin.x), Double(origin.y)), heading: tractorState.heading)
         }
         steeringGesture?.update(SIMD2(Double(point.x), Double(point.y)))
         if cameraMode == .overview && (started || steeringGesture?.moved == true) { chooseGround(at: point) }
@@ -276,10 +276,10 @@ final class FarmController {
     func endSteering() {
         defer { steeringGesture = nil; steeringSuppressed = false }
         guard !steeringSuppressed, let gesture = steeringGesture else { return }
-        if cameraMode == .tractor && !gesture.isDriving(at: elapsed) {
+        if cameraMode == .tractor && !gesture.moved {
             chooseGround(at: CGPoint(x: gesture.location.x, y: gesture.location.y))
         }
-        // The next frame has no drag input: yaw stops immediately, travel coasts.
+        // The next frame has no drag input: yaw stops immediately, travel settles.
     }
 
     func cancelSteering() {
@@ -304,11 +304,11 @@ final class FarmController {
                 cameraUp: vector(transform.columns.1), cameraForward: -vector(transform.columns.2),
                 verticalHalfExtent: Double(projection.scale))
         } else if let projection = camera.components[PerspectiveCameraComponent.self] {
-            destination = PerspectiveGroundProjection.project(
+            destination = PerspectiveGroundProjection.drivable(PerspectiveGroundProjection.project(
                 screenPoint: screenPoint, viewportSize: viewportSize,
                 cameraPosition: vector(transform.columns.3), cameraRight: vector(transform.columns.0),
                 cameraUp: vector(transform.columns.1), cameraForward: -vector(transform.columns.2),
-                verticalFieldOfView: Double(projection.fieldOfViewInDegrees))
+                verticalFieldOfView: Double(projection.fieldOfViewInDegrees)))
         } else { destination = nil }
         guard let destination else { return }
         target = FarmPoint(x: min(39, max(-39, destination.x)), z: min(28, max(-30, destination.z)))
@@ -352,7 +352,7 @@ final class FarmController {
         if !introDismissed { dismissIntro() }
         selectionFeedback()
         persist()
-        showToast(cameraMode == .tractor ? "Hold to roll. Steer gently, then lift to settle." : "A little room to see it all.")
+        showToast(cameraMode == .tractor ? "Drag to roll. Slide sideways to steer, then lift to settle." : "A little room to see it all.")
     }
 
     private func updateFollowCamera(deltaTime: Double = 0, snap: Bool = false) {
@@ -489,8 +489,8 @@ final class FarmController {
             dayTime = Daylight.wrap(dayTime + activeSeconds)
             if abs(dayTime - litDay) >= 0.25 { updateLight() }
         }
-        let input: DriveInput? = cameraMode == .tractor && steeringGesture?.isDriving(at: elapsed) == true
-            ? .drag(steeringGesture!.drag) : nil
+        let input: DriveInput? = cameraMode == .tractor && steeringGesture?.moved == true
+            ? .heading(steeringGesture!.heading) : nil
         let movement = navigation.step(tractorState, deltaTime: dt, tool: tool, obstacles: obstacles,
                                        pace: pace, manual: input, follow: cameraMode == .tractor)
         tractorState = movement.state

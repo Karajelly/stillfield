@@ -1,6 +1,7 @@
 import { advanceTractor, angleDifference, clamp } from "./simulation";
 import type { Obstacle, Point, Tool, TractorState } from "./simulation";
 import { GentleDrive } from "./handling";
+import type { DriveKeys } from "./handling";
 import { attachmentPoint, WorkDestination } from "./work-destination";
 import { alignmentForTap, EndTurn, WorkedRows } from "./row-end";
 import { advanceGridTractor } from "./keyboard-navigation";
@@ -42,7 +43,7 @@ export class TractorNavigation {
     if (this.target && (!this.aligning || tool === "wander")) this.choose(this.target, state, tool, obstacles);
   }
   step(state: TractorState, dt: number, tool: Tool, obstacles: Obstacle[], pace = 0.85,
-    manual: { target: Point } | { drag: number } | { grid: GridInput } | null = null, follow = false) {
+    manual: { target: Point } | { heading: number } | { keys: DriveKeys } | { grid: GridInput } | null = null, follow = false) {
     dt = Number.isFinite(dt) ? clamp(dt, 0, 0.05) : 0;
     const paint: Point[] = [];
     let completed = false, blocked = false;

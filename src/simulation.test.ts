@@ -189,7 +189,7 @@ describe("advanceTractor", () => {
     for (const [pace, limit] of [[0.55, 1.875], [0.85, 3], [1.25, 4.5]]) {
       const iso = drive(stationary, { x: 0, z: 25 }, 120, pace);
       assert.ok(iso.speed > limit - 0.01 && iso.speed <= limit);
-      for (const input of [{ drag: 0 }, { target: { x: 0, z: 25 } }]) {
+      for (const input of [{ heading: 0 }, { keys: { throttle: 1, steer: 0 } }, { target: { x: 0, z: 25 } }]) {
         const driver = new GentleDrive();
         let state = stationary;
         for (let i = 0; i < 120; i++) state = driver.step(state, frame, input, [], 1, pace);

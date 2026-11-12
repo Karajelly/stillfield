@@ -88,11 +88,17 @@ public struct SteeringGesture: Sendable {
     public private(set) var location: SIMD2<Double>
     public let start: Double
     public private(set) var moved = false
+    /// The furthest the touch has been from where it began.
+    public private(set) var travel = 0.0
     public init(location: SIMD2<Double>, time: Double) { origin = location; self.location = location; start = time }
     public mutating func update(_ point: SIMD2<Double>) {
         location = point
-        moved = moved || hypot(point.x - origin.x, point.y - origin.y) > 8
+        travel = max(travel, hypot(point.x - origin.x, point.y - origin.y))
+        moved = moved || travel > 8
     }
     public func isDriving(at time: Double) -> Bool { moved || time - start > 0.22 }
+    /// With tidy rows a tap may wobble under a finger: only a touch that is held
+    /// or carried well away from where it began becomes freehand steering.
+    public func isFreehand(at time: Double) -> Bool { moved && (time - start > 0.16 || travel > 28) }
     public var drag: Double { location.x - origin.x }
 }

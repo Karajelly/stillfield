@@ -21,6 +21,7 @@ function farm(
   tidy = true,
   fps = 60,
   obstacles: Obstacle[] = [],
+  follow = false,
 ) {
   const engine = new FarmingEngine(undefined, FARMING_CONFIG, false);
   const nav = new TractorNavigation();
@@ -35,7 +36,15 @@ function farm(
         ? engine.cells[cell] === Ground.soil
         : engine.cells[cell] === Ground.mature;
   const step = (manual: Parameters<TractorNavigation["step"]>[5] = null) => {
-    const result = nav.step(state, 1 / fps, tool, obstacles, 0.85, manual);
+    const result = nav.step(
+      state,
+      1 / fps,
+      tool,
+      obstacles,
+      0.85,
+      manual,
+      follow,
+    );
     state = result.state;
     result.paint.forEach((p, i, points) =>
       engine.apply(points[Math.max(0, i - 1)], p, tool, "wheat"),
@@ -91,21 +100,29 @@ function farm(
 const laneZ = (lane: number) => laneCentre("x", lane);
 
 it("works one whole lane from the implement to the tap, wherever in the lane the tap lands", () => {
-  for (const offset of [-1.2, -0.4, 0, 0.7, 1.2]) {
-    const meadow = farm({ x: 22, z: laneZ(9), heading: west, speed: 0 });
-    meadow.tap({ x: -18.3, z: laneZ(9) + offset });
-    meadow.settle();
-    // Columns 13 to 89, five cells wide, and nothing else.
-    assert.deepEqual(meadow.count(Ground.soil, [9]), {
-      inside: 77 * 5,
-      outside: 0,
-      all: 77 * 5,
-    });
-    assert.ok(
-      Math.abs(meadow.state.z - laneZ(9)) < 0.05,
-      "the tractor ends on the lane's centre",
-    );
-  }
+  for (const follow of [false, true])
+    for (const fps of [30, 60, 120])
+      for (const offset of [-1.2, -0.4, 0, 0.7, 1.2]) {
+        const meadow = farm(
+          { x: 22, z: laneZ(9), heading: west, speed: 0 },
+          true,
+          fps,
+          [],
+          follow,
+        );
+        meadow.tap({ x: -18.3, z: laneZ(9) + offset });
+        meadow.settle();
+        // Columns 13 to 89, five cells wide, and nothing else.
+        assert.deepEqual(meadow.count(Ground.soil, [9]), {
+          inside: 77 * 5,
+          outside: 0,
+          all: 77 * 5,
+        });
+        assert.ok(
+          Math.abs(meadow.state.z - laneZ(9)) < 0.05,
+          "the tractor ends on the lane's centre",
+        );
+      }
 });
 
 it("lays the next row beside the last with shared ends, no gap and no overlap", () => {
@@ -241,21 +258,30 @@ it("keeps a neighbouring sown row whole when the next lane is cultivated", () =>
 });
 
 it("covers the whole field from one careless tap per row", () => {
-  for (const error of [0.3, 0.6]) {
-    const random = seededRandom(error * 100);
-    const wobble = () => (random() - 0.5) * 2 * error;
-    const meadow = farm({ x: 22, z: laneZ(9), heading: west, speed: 0 });
-    for (let lane = 9; lane >= 0; lane--) {
-      const x = lane % 2 ? FIELD.minX + 0.6 : FIELD.maxX - 0.6;
-      meadow.tap({ x: x + wobble(), z: laneZ(lane) + wobble() });
-      meadow.settle();
+  // Both movement models: the overhead view's, and the gentler one that
+  // follows behind the tractor in the native app.
+  for (const follow of [false, true])
+    for (const error of [0.3, 0.6]) {
+      const random = seededRandom(error * 100);
+      const wobble = () => (random() - 0.5) * 2 * error;
+      const meadow = farm(
+        { x: 22, z: laneZ(9), heading: west, speed: 0 },
+        true,
+        60,
+        [],
+        follow,
+      );
+      for (let lane = 9; lane >= 0; lane--) {
+        const x = lane % 2 ? FIELD.minX + 0.6 : FIELD.maxX - 0.6;
+        meadow.tap({ x: x + wobble(), z: laneZ(lane) + wobble() });
+        meadow.settle();
+      }
+      assert.equal(
+        meadow.count(Ground.soil).all,
+        meadow.engine.cells.length,
+        `tap error ${error} m, follow ${follow}`,
+      );
     }
-    assert.equal(
-      meadow.count(Ground.soil).all,
-      meadow.engine.cells.length,
-      `tap error ${error} m`,
-    );
-  }
 });
 
 it("reads a tap on the edge of a finished lane as the next row over", () => {
@@ -339,28 +365,30 @@ it("travels with the implement up to a tap beyond the field, and steers freehand
 it("bends a row around something standing in its lane and leaves the ground under it alone", () => {
   // The meadow's little mill, standing across two lanes.
   const mill: Obstacle = { x: 10, z: -5, radius: 1.6 };
-  for (const lane of [2, 3]) {
-    const meadow = farm(
-      { x: 22, z: laneZ(lane), heading: west, speed: 0 },
-      true,
-      60,
-      [mill],
-    );
-    meadow.tap({ x: -24, z: laneZ(lane) });
-    meadow.settle();
-    const soil = meadow.count(Ground.soil, [lane]);
-    assert.equal(soil.outside, 0, "the detour works nothing outside the row");
-    assert.ok(
-      soil.inside >= 90 * 5 - 30,
-      `lane ${lane}: ${soil.inside} of 450 cells`,
-    );
-    meadow.engine.cells.forEach((cell, i) => {
-      const x = FIELD.minX + ((i % FIELD_COLUMNS) + 0.5) * FIELD.cell,
-        z = FIELD.minZ + (Math.floor(i / FIELD_COLUMNS) + 0.5) * FIELD.cell;
-      if (Math.hypot(x - mill.x, z - mill.z) < 1.3)
-        assert.equal(cell, Ground.grass);
-    });
-  }
+  for (const follow of [false, true])
+    for (const lane of [2, 3]) {
+      const meadow = farm(
+        { x: 22, z: laneZ(lane), heading: west, speed: 0 },
+        true,
+        60,
+        [mill],
+        follow,
+      );
+      meadow.tap({ x: -24, z: laneZ(lane) });
+      meadow.settle();
+      const soil = meadow.count(Ground.soil, [lane]);
+      assert.equal(soil.outside, 0, "the detour works nothing outside the row");
+      assert.ok(
+        soil.inside >= 90 * 5 - 30,
+        `lane ${lane}: ${soil.inside} of 450 cells`,
+      );
+      meadow.engine.cells.forEach((cell, i) => {
+        const x = FIELD.minX + ((i % FIELD_COLUMNS) + 0.5) * FIELD.cell,
+          z = FIELD.minZ + (Math.floor(i / FIELD_COLUMNS) + 0.5) * FIELD.cell;
+        if (Math.hypot(x - mill.x, z - mill.z) < 1.3)
+          assert.equal(cell, Ground.grass);
+      });
+    }
 });
 
 it("settles keyboard rows onto the same lanes", () => {

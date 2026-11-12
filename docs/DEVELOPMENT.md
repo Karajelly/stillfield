@@ -73,6 +73,20 @@ Version 3 saves use the 50 cm grid. Version 1 and 2 meadows migrate by fitting t
 
 Engine tests exercise all state/action combinations, cultivating through growing and mature crops without harvest rewards, repeated passes, every crop’s four stages and duration, mixed-crop rest, inactive time, continuous coverage including adjacent diagonal passes, full/cleared displays, save round trips, and legacy grid migration with backups.
 
+## Tidy rows
+
+An optional way to make rows, off by default and chosen in Settings in both apps. `src/tidy-rows.ts` and `ios/StillfieldCore/Sources/StillfieldCore/TidyRows.swift` hold the same planner, and `TractorNavigation` drives it in each language. Keep the two in step, as with the engine.
+
+The field is divided into lanes five cells (2.5 m) wide on both axes: 10 along the field's length and 18 across it. The planner turns a tap into rows: the tapped lane, from the cell beside the implement to the tapped cell, running the way the tractor faces unless the tap is well off to one side. Row ends settle onto the field's edge or the previous row's ends when the tap is within 1.5 m of them, and a tap within 70 cm of a lane's edge goes to the neighbouring lane when that is the one with work to do. A second tap on the same spot plans every lane between the implement and the tap, back and forth, skipping lanes the current tool would not change.
+
+`TidyRun` drives one row. Its route is a half circle onto a neighbouring lane, or a straight leg to the lane otherwise, bent around any obstacle on the way, and the existing movement models follow it: the overhead one, and the gentler one behind the tractor in the native app's Tractor view. The implement works only while it is on the lane and inside the row, a full lane width of cells at a time as the deck passes, through the engine's existing call for applying given cells. The engine's rules are untouched, and a row never spills onto its neighbours. Cells under an obstacle are left alone.
+
+Once a row has been asked for, a tap in another lane joins a queue behind it, a tap in its own lane moves its end, and a tap beyond the field drops the queue and travels there. Queued taps are planned from where the row before them will end, which is also what the pale wash on the ground shows. Drags in the overhead view, hand steering in Tractor view, and everything when the setting is off use the original free approach.
+
+In the native app, `FarmController` treats a second tap within 0.4 seconds and 30 points of the first as a fill, and `SteeringGesture.isFreehand` tells a tap that wobbles under a finger from a drag: the touch must be held for 0.16 seconds or carried 28 points. The setting is `MeadowSave.tidyRows`, optional on disk so older meadows load with it off. The wash is drawn in the overhead view only. In the browser, the setting is `tidy` in the saved meadow, a second click within 0.4 seconds is a fill, and keyboard rows ease onto the lane the tractor is in and work the same cells; the native app has no keyboard driving.
+
+`src/tidy-rows.test.ts` and `TidyRowsTests.swift` mirror each other: careless taps, early and queued taps, neighbouring crops, fills, a row bending around the mill, both movement models, and the unchanged original approach. There are no native UI tests for tidy rows yet.
+
 ## Original web prototype
 
 The browser proof of concept remains in `src/` and `public/`. It uses Vite, TypeScript, Three.js, and Web Audio, with generated geometry and ground textures, a compact field grid, and instanced vegetation.
@@ -98,13 +112,11 @@ Changing direction pivots in place through 90° turns before driving, with the i
 
 ### Browser prototypes
 
-These live only in the browser version for now. The native app and `StillfieldCore` do not have them yet.
+These live only in the browser version for now. The native app and `StillfieldCore` do not have them yet. Tidy rows began here and are now in both apps; see above.
 
 **Follow view and working feedback.** The camera button beside the zoom controls, or V, keeps the overview's angle but moves in close and follows the tractor. `src/effects.ts` throws a few matte flecks from the cells the engine reports as changed, `FarmAudio.work` and `FarmAudio.ripen` add a soft sound per tool and a two-note chime as crops ripen, and `src/field.ts` draws plants from the engine's exact progress so they rise within each stage. All of it is presentation: the engine, its events, and saves are unchanged.
 
-**Tidy rows.** `src/tidy-rows.ts` divides the field into lanes five cells (2.5 m) wide on both axes: 10 along the field's length and 18 across it. `planRows` turns a tap into rows: the tapped lane, from the cell beside the implement to the tapped cell, running the way the tractor faces unless the tap is well off to one side. Row ends settle onto the field's edge or the previous row's ends when the tap is within 1.5 m of them, and a tap within 70 cm of a lane's edge goes to the neighbouring lane when that is the one with work to do. A second tap on the same spot plans every lane between the implement and the tap, back and forth, skipping lanes the current tool would not change.
-
-`TidyRun` drives one row. Its route is a half circle onto a neighbouring lane, or a straight leg to the lane otherwise, bent around any obstacle on the way; `TractorNavigation` follows it with the existing movement model. The implement works only while it is on the lane and inside the row, a full lane width of cells at a time as the deck passes, through `FarmingEngine.applyCells`. The engine's rules are untouched, and a row never spills onto its neighbours. Cells under an obstacle are left alone. Once a row has been asked for, a tap in another lane joins a queue behind it, a tap in its own lane moves its end, and a tap beyond the field drops the queue and travels there. Queued taps are planned from where the row before them will end, which is also what the pale wash on the ground shows. Keyboard rows ease onto the lane the tractor is in and work the same cells. Drags, and everything when **Settings → Tidy rows** is off, use the original free approach. `src/tidy-rows.test.ts` covers careless taps, early and queued taps, neighbouring crops, fills, a row bending around the mill, keyboard lanes, and the unchanged original approach.
+**The yard.** `src/harvest-yard.ts` gives harvests a lasting home. The engine keeps an uncapped tally of cells gathered per crop in an optional `gathered` field beside the saturating display, and every 100 cells adds one permanent piece along the lanes or by the barn, the first at 50.
 
 Deploy `dist/` at the root of an HTTPS static host for browser installation and offline caching. Safari → Share → Add to Home Screen opens the prototype as a standalone web app. The HTTP LAN preview cannot register a service worker; browser offline play requires an HTTPS production deployment and one successful initial visit. Fonts, icons, and production assets are bundled locally and precached.
 

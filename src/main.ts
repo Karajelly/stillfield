@@ -75,8 +75,8 @@ let tractorState: TractorState =
 tractorState.x = clamp(tractorState.x, -39, 39);
 tractorState.z = clamp(tractorState.z, -30, 28);
 let target: Point | null = null;
-// Taps ask for whole rows on the field's lanes unless this is switched off.
-let tidy = saved.tidy !== false;
+// Taps ask for whole rows on the field's lanes once this is switched on.
+let tidy = saved.tidy === true;
 let navigation = new TractorNavigation();
 navigation.tidy = tidy;
 const app = document.querySelector<HTMLDivElement>("#app")!;

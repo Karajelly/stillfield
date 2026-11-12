@@ -14,6 +14,8 @@ public struct MeadowSave: Codable, Equatable, Sendable {
     // Optional on disk so meadows saved before camera switching still decode.
     public var cameraMode: FarmCameraMode?
     public var selectedCrop: Crop?
+    // Optional on disk so meadows saved before tidy rows still decode. Off unless chosen.
+    public var tidyRows: Bool?
 
     public init(
         version: Int = 3,
@@ -27,7 +29,8 @@ public struct MeadowSave: Codable, Equatable, Sendable {
         haptics: Bool = true,
         introDismissed: Bool = false,
         cameraMode: FarmCameraMode? = nil,
-        selectedCrop: Crop? = .wheat
+        selectedCrop: Crop? = .wheat,
+        tidyRows: Bool? = nil
     ) {
         self.version = version
         self.field = field
@@ -41,6 +44,7 @@ public struct MeadowSave: Codable, Equatable, Sendable {
         self.introDismissed = introDismissed
         self.cameraMode = cameraMode
         self.selectedCrop = selectedCrop
+        self.tidyRows = tidyRows
     }
 
     public var isValid: Bool {

@@ -245,7 +245,7 @@ struct FarmScreen: View {
         .sheet(item: $game.activeSheet) { sheet in
             switch sheet {
             case .settings: FarmSettingsSheet(game: game)
-            case .help: FarmHelpSheet()
+            case .help: FarmHelpSheet(tidyRows: game.tidyRows)
             }
         }
         .onAppear { game.setActive(scenePhase == .active) }
@@ -636,6 +636,8 @@ private struct FarmSettingsSheet: View {
                         settingToggle("Golden light", subtitle: "A warmer kind of afternoon.", isOn: $game.goldenLight, identifier: "settings.golden")
                         Divider().overlay(MeadowPalette.settingBorder)
                         settingToggle("A little feeling", subtitle: "Gentle haptics when you change tools.", isOn: $game.haptics, identifier: "settings.haptics")
+                        Divider().overlay(MeadowPalette.settingBorder)
+                        settingToggle("Tidy rows", subtitle: "Taps make straight rows, side by side.", isOn: $game.tidyRows, identifier: "settings.tidyRows")
                     }
                     .padding(20)
                     .background(MeadowPalette.dialogSurface, in: RoundedRectangle(cornerRadius: 22))
@@ -736,6 +738,8 @@ private struct FarmSettingsSheet: View {
 
 private struct FarmHelpSheet: View {
     @Environment(\.dismiss) private var dismiss
+    /// The first step reads differently when taps make tidy rows.
+    let tidyRows: Bool
 
     var body: some View {
         NavigationStack {
@@ -749,7 +753,9 @@ private struct FarmHelpSheet: View {
                         Text("There’s nothing to win and nowhere to fall behind. Just a little land to make your own.")
                             .font(.subheadline).foregroundStyle(MeadowPalette.dialogCopy).lineSpacing(4)
                     }
-                    helpRow("hand.draw", title: "Find your way", text: "Tap where mowing or planting should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop. Pinch to look a little closer.")
+                    helpRow("hand.draw", title: "Find your way", text: tidyRows
+                        ? "Tap where a row should end and the tractor works a straight row to it. Tap more rows whenever you like and it works them in turn. Tap twice to fill every row up to that spot. Drag to steer freehand. Pinch to look a little closer."
+                        : "Tap where mowing or planting should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop. Pinch to look a little closer.")
                     helpRow("car.rear", title: "Come along for the ride", text: "Tap the vehicle button beside the zoom controls to follow behind your tractor. Hold to roll, move your finger left or right to steer, and lift to settle. A quick tap chooses where work should finish. Pinch to move closer or farther away. Tap the vehicle button again to see the whole farm.")
                     helpRow("leaf", title: "Make your mark", text: "Cultivate prepares soil and clears any crops. Sow a crop, then harvest when it’s ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests fill the pots and carts by the field.")
                     helpRow("sun.max", title: "Let it grow", text: "Sunflowers take 3 minutes, wheat 6, and pumpkins 9, only while you play. Seeds are unlimited. Nothing withers, and full displays never stop a harvest.")

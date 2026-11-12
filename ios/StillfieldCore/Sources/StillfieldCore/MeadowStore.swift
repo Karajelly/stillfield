@@ -19,6 +19,8 @@ public struct MeadowSave: Codable, Equatable, Sendable {
     public var light: DayHold?
     /// Seconds into the day while it drifts. Use `resolvedDay`.
     public var day: Double?
+    // Optional on disk so meadows saved before tidy rows still decode. Off unless chosen.
+    public var tidyRows: Bool?
 
     /// A meadow saved with golden light switched on keeps its golden hour.
     public var resolvedLight: DayHold { light ?? (goldenLight ? .golden : .flow) }
@@ -41,7 +43,8 @@ public struct MeadowSave: Codable, Equatable, Sendable {
         cameraMode: FarmCameraMode? = nil,
         selectedCrop: Crop? = .wheat,
         light: DayHold? = nil,
-        day: Double? = nil
+        day: Double? = nil,
+        tidyRows: Bool? = nil
     ) {
         self.version = version
         self.field = field
@@ -57,6 +60,7 @@ public struct MeadowSave: Codable, Equatable, Sendable {
         self.selectedCrop = selectedCrop
         self.light = light
         self.day = day
+        self.tidyRows = tidyRows
     }
 
     public var isValid: Bool {

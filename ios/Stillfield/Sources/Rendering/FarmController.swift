@@ -41,6 +41,8 @@ final class FarmController {
     /// True for the moment the controls step aside so a postcard shows the meadow alone.
     private(set) var isCapturing = false
     var haptics: Bool { didSet { persist() } }
+    /// Taps ask for whole rows on the field's lanes. Off keeps the original free approach.
+    var tidyRows: Bool { didSet { navigation.tidy = tidyRows; persist() } }
     var introDismissed: Bool
     private(set) var hasDriven = false
     private(set) var controlsHidden = false
@@ -97,6 +99,11 @@ final class FarmController {
     @ObservationIgnored private var steeringGesture: SteeringGesture?
     @ObservationIgnored private var steeringSuppressed = false
     @ObservationIgnored private var target: FarmPoint?
+    @ObservationIgnored private var rowWashes: [Entity] = []
+    @ObservationIgnored private var steerStartedAt = 0.0
+    @ObservationIgnored private var lastTap: (time: Double, point: CGPoint)?
+    @ObservationIgnored private var changedSinceTap = 0
+    @ObservationIgnored private var lastHint = -Double.infinity
     @ObservationIgnored private var elapsed = 0.0
     @ObservationIgnored private var lastFlush = 0.0
     @ObservationIgnored private var lastSave = 0.0
@@ -150,10 +157,12 @@ final class FarmController {
         light = saved.resolvedLight
         dayTime = saved.resolvedDay
         haptics = saved.haptics
+        tidyRows = saved.tidyRows ?? false
         introDismissed = saved.introDismissed
         pace = saved.pace
         volume = saved.volume
         audio.setVolume(volume)
+        navigation.tidy = tidyRows
         if let preservationError {
             savePreservationPending = true
             hasSaveError = true
@@ -196,6 +205,12 @@ final class FarmController {
             updateDestinationMarkerScale()
             destinationMarker.isEnabled = false
             root.addChild(destinationMarker)
+            for _ in 0..<12 {
+                let wash = try Self.makeRowWash()
+                wash.isEnabled = false
+                root.addChild(wash)
+                rowWashes.append(wash)
+            }
             content.add(root)
             if let mill = world.findEntity(named: "windmill-sails") { sails.append((mill, mill.orientation, 0.075)) }
             if let mill = world.findEntity(named: "meadow-sails") { sails.append((mill, mill.orientation, 0.085)) }
@@ -264,11 +279,21 @@ final class FarmController {
               pinchStartZoom == nil, !steeringSuppressed else { return }
         let started = steeringGesture == nil
         if started {
-            navigation.cancel(); target = nil; destinationMarker.isEnabled = false
+            // Tidy rows wait their turn, so a new touch must not drop them.
+            // Steering by hand still takes over, in the navigation step.
+            if !tidyRows { navigation.cancel(); target = nil; destinationMarker.isEnabled = false }
             steeringGesture = SteeringGesture(location: SIMD2(Double(origin.x), Double(origin.y)), heading: tractorState.heading)
+            steerStartedAt = elapsed
         }
         steeringGesture?.update(SIMD2(Double(point.x), Double(point.y)))
-        if cameraMode == .overview && (started || steeringGesture?.moved == true) { chooseGround(at: point) }
+        if cameraMode == .overview {
+            if started {
+                chooseGround(at: point, fill: isSecondTap(at: point))
+            } else if tidyRows ? steeringGesture?.isFreehand(heldFor: elapsed - steerStartedAt) == true : steeringGesture?.moved == true {
+                // A drag keeps choosing destinations and steers freehand.
+                chooseGround(at: point, freehand: true)
+            }
+        }
         if !introDismissed { dismissIntro() }
         if hasDriven { scheduleControlsHide() }
     }
@@ -277,7 +302,8 @@ final class FarmController {
         defer { steeringGesture = nil; steeringSuppressed = false }
         guard !steeringSuppressed, let gesture = steeringGesture else { return }
         if cameraMode == .tractor && !gesture.moved {
-            chooseGround(at: CGPoint(x: gesture.location.x, y: gesture.location.y))
+            let point = CGPoint(x: gesture.location.x, y: gesture.location.y)
+            chooseGround(at: point, fill: isSecondTap(at: point))
         }
         // The next frame has no drag input: yaw stops immediately, travel settles.
     }
@@ -287,7 +313,28 @@ final class FarmController {
         steeringSuppressed = false
     }
 
-    private func chooseGround(at point: CGPoint) {
+    /// With tidy rows, a second tap on the same spot asks for every row up to it.
+    private func isSecondTap(at point: CGPoint) -> Bool {
+        var again = false
+        if tidyRows, let lastTap {
+            again = elapsed - lastTap.time < 0.4 && hypot(point.x - lastTap.point.x, point.y - lastTap.point.y) < 30
+        }
+        if again { lastTap = nil } else { lastTap = (time: elapsed, point: point) }
+        return again
+    }
+
+    /// Whether the selected tool would change a cell, so a fill can pass over idle lanes.
+    private func wouldChange(_ cell: Int) -> Bool {
+        guard field.cells.indices.contains(cell), let ground = Ground(rawValue: field.cells[cell]) else { return false }
+        switch tool {
+        case .cultivate: return ground != .soil
+        case .sow: return ground == .soil
+        case .harvest: return ground == .mature
+        default: return false
+        }
+    }
+
+    private func chooseGround(at point: CGPoint, freehand: Bool = false, fill: Bool = false) {
         let transform = camera.transformMatrix(relativeTo: nil)
         func vector(_ column: SIMD4<Float>) -> SIMD3<Double> {
             SIMD3(Double(column.x), Double(column.y), Double(column.z))
@@ -311,11 +358,16 @@ final class FarmController {
                 verticalFieldOfView: Double(projection.fieldOfViewInDegrees)))
         } else { destination = nil }
         guard let destination else { return }
-        target = FarmPoint(x: min(39, max(-39, destination.x)), z: min(28, max(-30, destination.z)))
-        navigation.choose(target!, state: tractorState, tool: tool, obstacles: obstacles)
-        destinationMarker.position = [Float(target!.x), 0.10, Float(target!.z)]
-        destinationMarker.isEnabled = true
+        let chosen = FarmPoint(x: min(39, max(-39, destination.x)), z: min(28, max(-30, destination.z)))
+        navigation.choose(chosen, state: tractorState, tool: tool, obstacles: obstacles,
+                          freehand: freehand, fill: fill, workable: { [unowned self] cell in self.wouldChange(cell) })
+        changedSinceTap = 0
+        // A tidy row ends on its lane, not exactly under the finger.
+        target = navigation.target
+        if let target { destinationMarker.position = [Float(target.x), 0.10, Float(target.z)] }
+        destinationMarker.isEnabled = target != nil
         updateDestinationMarkerScale()
+        updateRowWashes()
 #if DEBUG
         if isUITesting { testSteeringCount += 1 }
 #endif
@@ -463,6 +515,7 @@ final class FarmController {
         stop()
         field.reset()
         navigation = TractorNavigation()
+        navigation.tidy = tidyRows
         tractorState = TractorState()
         syncTractor()
         updateFollowCamera(snap: true)
@@ -496,15 +549,23 @@ final class FarmController {
         tractorState = movement.state
         target = navigation.target
         destinationMarker.isEnabled = target != nil
+        if let target { destinationMarker.position = [Float(target.x), 0.10, Float(target.z)] }
+        updateRowWashes()
         var changedCells: [Int] = []
-        for (index, point) in movement.paint.enumerated() {
-            let events = field.apply(from: movement.paint[max(0, index - 1)], to: point, tool: tool, crop: selectedCrop)
+        func worked(_ events: FarmingEvents) {
             changedCells += events.changedCells
             fieldRenderer?.respond(to: events, grid: field)
             if let harvest = events.harvestResults.first, elapsed - lastHarvestSound > 1.2 {
                 audio.harvest(harvest.crop); lastHarvestSound = elapsed
             }
         }
+        for (index, point) in movement.paint.enumerated() {
+            worked(field.apply(from: movement.paint[max(0, index - 1)], to: point, tool: tool, crop: selectedCrop))
+        }
+        // A tidy row works exactly its own cells.
+        if !movement.cells.isEmpty { worked(field.apply(cells: movement.cells, tool: tool, crop: selectedCrop)) }
+        changedSinceTap += changedCells.count
+        if movement.completed && tidyRows && changedSinceTap == 0 { explainIdlePass() }
         if !changedCells.isEmpty {
             dirty = true
 #if DEBUG
@@ -522,7 +583,7 @@ final class FarmController {
             wheelAngle += Float(tractorState.speed * dt / 0.7)
         }
         if let attachment = tractor.findEntity(named: "attachment") {
-            let desired: Float = navigation.turningAtRowEnd ? 0.4 : 0
+            let desired: Float = navigation.turningAtRowEnd || navigation.lifted ? 0.4 : 0
             attachment.position.y += (desired - attachment.position.y) * Float(1 - exp(-8 * dt))
         }
         if elapsed - lastFlush >= 1.0 / 12 {
@@ -571,6 +632,7 @@ final class FarmController {
         target = nil
         tractorState.speed = 0
         destinationMarker.isEnabled = false
+        updateRowWashes()
         audio.setDriving(0)
 #if DEBUG
         updateTestTelemetry(force: true)
@@ -686,7 +748,7 @@ final class FarmController {
                                heading: tractorState.heading, speed: 0), tool: tool, rowAssist: false,
                                pace: pace, goldenLight: light == .golden, volume: volume,
                                haptics: haptics, introDismissed: introDismissed, cameraMode: cameraMode, selectedCrop: selectedCrop,
-                               light: light, day: dayTime)
+                               light: light, day: dayTime, tidyRows: tidyRows)
         do { try MeadowStore.save(saved, to: saveURL); hasSaveError = false; dirty = false }
         catch { hasSaveError = true; logger.error("Save failed: \(String(describing: error), privacy: .public)") }
     }
@@ -704,6 +766,46 @@ final class FarmController {
             try? await Task.sleep(for: .seconds(3))
             if !Task.isCancelled { self?.toast = nil }
         }
+    }
+    /// A pass that changes nothing says why, once, instead of leaving it a puzzle.
+    private func explainIdlePass() {
+        let message: String
+        switch tool {
+        case .sow: message = "Seeds like prepared soil. Cultivate here first."
+        case .harvest: message = "Nothing here is ripe just yet."
+        default: return
+        }
+        guard elapsed - lastHint >= 30 else { return }
+        lastHint = elapsed
+        showToast(message)
+    }
+    /// A pale wash over the rows the tractor has been asked to work, shrinking as
+    /// each is done. It is drawn over the meadow, so it shows in the overhead view only.
+    private func updateRowWashes() {
+        let rows = cameraMode == .overview ? navigation.plannedRows : []
+        for (index, wash) in rowWashes.enumerated() {
+            guard index < rows.count else { wash.isEnabled = false; continue }
+            let row = rows[index], rect = TidyRows.rect(of: row)
+            wash.position = [Float(rect.x), 0.07, Float(rect.z)]
+            // A sliver of meadow between washes keeps neighbouring rows distinct.
+            wash.scale = [Float(rect.width - (row.axis == .z ? 0.3 : 0)), 1, Float(rect.depth - (row.axis == .x ? 0.3 : 0))]
+            wash.isEnabled = true
+        }
+    }
+    private static func makeRowWash() throws -> Entity {
+        var descriptor = MeshDescriptor()
+        let positions: [SIMD3<Float>] = [[-0.5, 0, -0.5], [0.5, 0, -0.5], [-0.5, 0, 0.5], [0.5, 0, 0.5]]
+        let normals: [SIMD3<Float>] = [[0, 1, 0], [0, 1, 0], [0, 1, 0], [0, 1, 0]]
+        let indices: [UInt32] = [0, 2, 1, 1, 2, 3]
+        descriptor.positions = .init(positions)
+        descriptor.normals = .init(normals)
+        // Counter-clockwise from above, like the destination ring.
+        descriptor.primitives = .triangles(indices)
+        var material = UnlitMaterial(color: UIColor(farmHex: "#F9F4D9"))
+        material.blending = .transparent(opacity: .init(floatLiteral: 0.24))
+        material.readsDepth = false
+        material.writesDepth = false
+        return ModelEntity(mesh: try MeshResource.generate(from: [descriptor]), materials: [material])
     }
     private static func makeDestinationMarker(readsDepth: Bool) throws -> Entity {
         var descriptor = MeshDescriptor()

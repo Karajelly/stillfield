@@ -110,13 +110,19 @@ public struct SteeringGesture: Sendable {
     public let startHeading: Double
     public private(set) var location: SIMD2<Double>
     public private(set) var moved = false
+    /// The furthest the touch has been from where it began.
+    public private(set) var travel = 0.0
     public init(location: SIMD2<Double>, heading: Double) {
         origin = location; self.location = location; startHeading = heading
     }
     public mutating func update(_ point: SIMD2<Double>) {
         location = point
-        moved = moved || hypot(point.x - origin.x, point.y - origin.y) > 8
+        travel = max(travel, hypot(point.x - origin.x, point.y - origin.y))
+        moved = moved || travel > 8
     }
+    /// With tidy rows in the overhead view, a tap may wobble under a finger: only a
+    /// touch that has been held or carried well away becomes freehand steering.
+    public func isFreehand(heldFor seconds: Double) -> Bool { moved && (seconds > 0.16 || travel > 28) }
     public var drag: Double { location.x - origin.x }
     /// Drag right to turn right. Heading-positive is screen-left for the +Z forward tractor.
     public var heading: Double { startHeading - GentleDrive.steeringOffset(drag) }

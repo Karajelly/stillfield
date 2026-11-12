@@ -22,6 +22,7 @@ private func withSaveURL(_ body: (URL) throws -> Void) throws {
         save.haptics = false
         save.introDismissed = true
         save.cameraMode = .tractor
+        save.tidyRows = true
         save.light = .dusk
         save.day = 432.5
         try MeadowStore.save(save, to: url)
@@ -39,6 +40,17 @@ private func withSaveURL(_ body: (URL) throws -> Void) throws {
     let restored = try JSONDecoder().decode(MeadowSave.self, from: JSONSerialization.data(withJSONObject: json))
     #expect(restored == original)
     #expect(restored.cameraMode == nil)
+}
+
+@Test func oldMeadowsWithoutATidyRowsChoiceStillLoadWithItOff() throws {
+    var original = MeadowSave()
+    original.tidyRows = true
+    var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(original)) as? [String: Any])
+    #expect(json["tidyRows"] as? Bool == true)
+    json.removeValue(forKey: "tidyRows")
+    let restored = try JSONDecoder().decode(MeadowSave.self, from: JSONSerialization.data(withJSONObject: json))
+    #expect(restored.tidyRows == nil)
+    #expect(MeadowSave().tidyRows == nil)
 }
 
 @Test func missingOrTruncatedSaveIsReadOnly() throws {

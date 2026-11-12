@@ -1,12 +1,13 @@
 import {
   FIELD,
-  FIELD_COLUMNS,
-  FIELD_ROWS,
+  FIELDS,
   angleDifference,
   cellsUnderSweep,
   clamp,
+  fieldColumns,
+  fieldRows,
 } from "./simulation";
-import type { Obstacle, Point, TractorState } from "./simulation";
+import type { FieldBounds, Obstacle, Point, TractorState } from "./simulation";
 import { tuning } from "./handling";
 import { attachmentOffset, attachmentPoint } from "./work-destination";
 
@@ -29,7 +30,14 @@ export interface Row {
   to: number;
   /** +1 toward the field's maximum, -1 toward its minimum. */
   dir: 1 | -1;
+  /** The field the row belongs to. Left out for the home field. */
+  field?: FieldBounds;
 }
+/** Each field has its own lanes; a row or lane without one is in the home field. */
+export const fieldOf = (row: { field?: FieldBounds }) => row.field ?? FIELD;
+/** Tag a row with its field, leaving home-field rows exactly as they were. */
+const inField = <T extends object>(value: T, f: FieldBounds): T =>
+  f === FIELD ? value : { ...value, field: f };
 
 export const LANE_CELLS = Math.round((tuning.brushRadius * 2) / FIELD.cell);
 export const LANE_WIDTH = LANE_CELLS * FIELD.cell;
@@ -41,30 +49,30 @@ const LANE_SLACK = 0.7;
 const other = (axis: Axis): Axis => (axis === "x" ? "z" : "x");
 const alongOf = (axis: Axis, p: Point) => (axis === "x" ? p.x : p.z);
 const acrossOf = (axis: Axis, p: Point) => (axis === "x" ? p.z : p.x);
-const alongMin = (axis: Axis) => (axis === "x" ? FIELD.minX : FIELD.minZ);
-const acrossMin = (axis: Axis) => (axis === "x" ? FIELD.minZ : FIELD.minX);
+const alongMin = (axis: Axis, f = FIELD) => (axis === "x" ? f.minX : f.minZ);
+const acrossMin = (axis: Axis, f = FIELD) => (axis === "x" ? f.minZ : f.minX);
 const pointAt = (axis: Axis, along: number, across: number): Point =>
   axis === "x" ? { x: along, z: across } : { x: across, z: along };
 
-export const alongCells = (axis: Axis) =>
-  axis === "x" ? FIELD_COLUMNS : FIELD_ROWS;
-export const laneCount = (axis: Axis) =>
-  Math.floor((axis === "x" ? FIELD_ROWS : FIELD_COLUMNS) / LANE_CELLS);
-export const laneCentre = (axis: Axis, lane: number) =>
-  acrossMin(axis) + (lane + 0.5) * LANE_WIDTH;
-export const cellCentre = (axis: Axis, cell: number) =>
-  alongMin(axis) + (cell + 0.5) * FIELD.cell;
-export const laneAt = (axis: Axis, p: Point) =>
+export const alongCells = (axis: Axis, f = FIELD) =>
+  axis === "x" ? fieldColumns(f) : fieldRows(f);
+export const laneCount = (axis: Axis, f = FIELD) =>
+  Math.floor((axis === "x" ? fieldRows(f) : fieldColumns(f)) / LANE_CELLS);
+export const laneCentre = (axis: Axis, lane: number, f = FIELD) =>
+  acrossMin(axis, f) + (lane + 0.5) * LANE_WIDTH;
+export const cellCentre = (axis: Axis, cell: number, f = FIELD) =>
+  alongMin(axis, f) + (cell + 0.5) * f.cell;
+export const laneAt = (axis: Axis, p: Point, f = FIELD) =>
   clamp(
-    Math.floor((acrossOf(axis, p) - acrossMin(axis)) / LANE_WIDTH),
+    Math.floor((acrossOf(axis, p) - acrossMin(axis, f)) / LANE_WIDTH),
     0,
-    laneCount(axis) - 1,
+    laneCount(axis, f) - 1,
   );
-export const cellAt = (axis: Axis, p: Point) =>
+export const cellAt = (axis: Axis, p: Point, f = FIELD) =>
   clamp(
-    Math.floor((alongOf(axis, p) - alongMin(axis)) / FIELD.cell),
+    Math.floor((alongOf(axis, p) - alongMin(axis, f)) / f.cell),
     0,
-    alongCells(axis) - 1,
+    alongCells(axis, f) - 1,
   );
 export const rowHeading = (axis: Axis, dir: number) =>
   axis === "x" ? (dir > 0 ? Math.PI / 2 : -Math.PI / 2) : dir > 0 ? 0 : Math.PI;
@@ -72,30 +80,51 @@ export const rowHeading = (axis: Axis, dir: number) =>
 export const rowEnd = (row: Row): Point =>
   pointAt(
     row.axis,
-    cellCentre(row.axis, row.to),
-    laneCentre(row.axis, row.lane),
+    cellCentre(row.axis, row.to, fieldOf(row)),
+    laneCentre(row.axis, row.lane, fieldOf(row)),
   );
 
-export function nearField(p: Point, reach = EDGE_REACH) {
-  return (
-    Number.isFinite(p.x) &&
-    Number.isFinite(p.z) &&
-    p.x >= FIELD.minX - reach &&
-    p.x <= FIELD.maxX + reach &&
-    p.z >= FIELD.minZ - reach &&
-    p.z <= FIELD.maxZ + reach
+/** The field a point is in, or just beside. */
+export function fieldNear(p: Point, reach = EDGE_REACH): FieldBounds | undefined {
+  if (!Number.isFinite(p.x) || !Number.isFinite(p.z)) return undefined;
+  return FIELDS.find(
+    (f) =>
+      p.x >= f.minX - reach &&
+      p.x <= f.maxX + reach &&
+      p.z >= f.minZ - reach &&
+      p.z <= f.maxZ + reach,
   );
+}
+export function nearField(p: Point, reach = EDGE_REACH) {
+  return fieldNear(p, reach) !== undefined;
+}
+/** The closest field to a point, wherever it is. Ties go to the home field. */
+export function nearestField(p: Point): FieldBounds {
+  let best = FIELD,
+    distance = Infinity;
+  for (const f of FIELDS) {
+    const d = Math.hypot(
+      Math.max(f.minX - p.x, 0, p.x - f.maxX),
+      Math.max(f.minZ - p.z, 0, p.z - f.maxZ),
+    );
+    if (d < distance) {
+      best = f;
+      distance = d;
+    }
+  }
+  return best;
 }
 
 /** The ground a row covers from `from` to its end, for drawing it. */
 export function rowRect(row: Row, from = row.from) {
+  const f = fieldOf(row);
   const a = Math.min(from, row.to),
     b = Math.max(from, row.to);
-  const length = (b - a + 1) * FIELD.cell,
+  const length = (b - a + 1) * f.cell,
     centre = pointAt(
       row.axis,
-      alongMin(row.axis) + ((a + b + 1) / 2) * FIELD.cell,
-      laneCentre(row.axis, row.lane),
+      alongMin(row.axis, f) + ((a + b + 1) / 2) * f.cell,
+      laneCentre(row.axis, row.lane, f),
     );
   return {
     ...centre,
@@ -108,13 +137,14 @@ export function rowRect(row: Row, from = row.from) {
 export function rowCells(row: Row, a = row.from, b = row.to): number[] {
   const cells: number[] = [],
     step = b >= a ? 1 : -1,
-    first = row.lane * LANE_CELLS;
+    first = row.lane * LANE_CELLS,
+    columns = fieldColumns(fieldOf(row));
   for (let along = a; along !== b + step; along += step)
     for (let across = first; across < first + LANE_CELLS; across++)
       cells.push(
         row.axis === "x"
-          ? across * FIELD_COLUMNS + along
-          : along * FIELD_COLUMNS + across,
+          ? across * columns + along
+          : along * columns + across,
       );
   return cells;
 }
@@ -142,8 +172,8 @@ export interface PlanOptions {
   fill?: boolean;
   /** The row most recently finished, so new rows can line their ends up with it. */
   last?: Row | null;
-  /** Whether the current tool would change a cell. Lets a fill skip idle lanes. */
-  workable?: (cell: number) => boolean;
+  /** Whether the current tool would change a cell of a field. Lets a fill skip idle lanes. */
+  workable?: (cell: number, field: FieldBounds) => boolean;
 }
 
 /**
@@ -156,10 +186,11 @@ export function planRows(
   tap: Point,
   options: PlanOptions = {},
 ): Row[] {
-  if (!nearField(tap)) return [];
+  const f = fieldNear(tap);
+  if (!f) return [];
   const brush = attachmentPoint(state);
   const axis = chooseAxis(state, brush, tap),
-    cells = alongCells(axis);
+    cells = alongCells(axis, f);
   const nearest = (cell: number, reach: number, anchors: number[]) => {
     let best = cell,
       distance = reach + 1;
@@ -172,21 +203,25 @@ export function planRows(
     }
     return best;
   };
-  const ends =
-    options.last?.axis === axis ? [options.last.from, options.last.to] : [];
-  const to = nearest(cellAt(axis, tap), 3, [0, cells - 1, ...ends]);
-  const from = nearest(cellAt(axis, brush), 2, ends);
+  // Only a row in this same field can line the new one up.
+  const last =
+    options.last && fieldOf(options.last) === f ? options.last : null;
+  const ends = last?.axis === axis ? [last.from, last.to] : [];
+  const to = nearest(cellAt(axis, tap, f), 3, [0, cells - 1, ...ends]);
+  const from = nearest(cellAt(axis, brush, f), 2, ends);
   const facing =
     axis === "x" ? Math.sin(state.heading) : Math.cos(state.heading);
   const dir: 1 | -1 = to > from ? 1 : to < from ? -1 : facing >= 0 ? 1 : -1;
-  const row = (lane: number): Row => ({ axis, lane, from, to, dir });
+  const row = (lane: number): Row => inField({ axis, lane, from, to, dir }, f);
   const hasWork = (lane: number) =>
-    !options.workable || rowCells(row(lane)).some(options.workable);
-  let tapLane = laneAt(axis, tap);
+    !options.workable ||
+    rowCells(row(lane)).some((cell) => options.workable!(cell, f));
+  let tapLane = laneAt(axis, tap, f);
   if (!options.fill) {
     // A tap near a lane's edge may have been meant for its neighbour. Prefer
     // the lane with something to do, then the one beside the last row.
-    const within = acrossOf(axis, tap) - acrossMin(axis) - tapLane * LANE_WIDTH;
+    const within =
+      acrossOf(axis, tap) - acrossMin(axis, f) - tapLane * LANE_WIDTH;
     const beside =
       within < LANE_SLACK
         ? tapLane - 1
@@ -196,18 +231,18 @@ export function planRows(
     if (
       beside !== tapLane &&
       beside >= 0 &&
-      beside < laneCount(axis) &&
+      beside < laneCount(axis, f) &&
       hasWork(beside)
     ) {
       const follows = (lane: number) =>
-        options.last?.axis === axis && Math.abs(lane - options.last.lane) === 1;
+        last?.axis === axis && Math.abs(lane - last.lane) === 1;
       if (!hasWork(tapLane) || (follows(beside) && !follows(tapLane)))
         tapLane = beside;
     }
     return [row(tapLane)];
   }
 
-  const startLane = laneAt(axis, brush),
+  const startLane = laneAt(axis, brush, f),
     step = tapLane >= startLane ? 1 : -1;
   let rows: Row[] = [];
   for (let lane = startLane; lane !== tapLane + step; lane += step)
@@ -295,23 +330,27 @@ export class TidyRun {
   /** Cells under something standing in the field. Nothing grows through a mill. */
   private readonly covered = new Set<number>();
 
+  private readonly field: FieldBounds;
+
   constructor(row: Row, state: TractorState, obstacles: Obstacle[] = []) {
     this.row = { ...row };
     this.obstacles = obstacles;
+    const f = (this.field = fieldOf(row));
     for (const obstacle of obstacles)
       for (const cell of cellsUnderSweep(
         obstacle,
         obstacle,
         obstacle.radius - 0.2,
+        f,
       ))
         this.covered.add(cell);
     const { axis, dir } = row,
       heading = rowHeading(axis, dir),
-      centre = laneCentre(axis, row.lane);
+      centre = laneCentre(axis, row.lane, f);
     const brush = attachmentPoint(state);
     const across = acrossOf(axis, state) - centre,
       turn = angleDifference(state.heading, heading);
-    const first = cellCentre(axis, row.from);
+    const first = cellCentre(axis, row.from, f);
     this.points = [{ x: state.x, z: state.z }];
     this.look = [STRAIGHT_LOOK];
     const aligned =
@@ -387,8 +426,8 @@ export class TidyRun {
     const { axis, dir } = this.row;
     return pointAt(
       axis,
-      cellCentre(axis, this.row.to) + (attachmentOffset + 1.6) * dir,
-      laneCentre(axis, this.row.lane),
+      cellCentre(axis, this.row.to, this.field) + (attachmentOffset + 1.6) * dir,
+      laneCentre(axis, this.row.lane, this.field),
     );
   }
 
@@ -460,7 +499,8 @@ export class TidyRun {
     }
     const { axis, dir } = this.row;
     const toGo =
-      (cellCentre(axis, this.row.to) - alongOf(axis, attachmentPoint(state))) *
+      (cellCentre(axis, this.row.to, this.field) -
+        alongOf(axis, attachmentPoint(state))) *
       dir;
     return { target, paceScale: clamp((toGo + 0.5) / 3, 0.25, 1) };
   }
@@ -480,24 +520,26 @@ export class TidyRun {
     this.lastBrush = brush;
     this.lowered = false;
     if (this.finished) return [];
-    const centre = laneCentre(axis, this.row.lane);
+    const f = this.field;
+    const centre = laneCentre(axis, this.row.lane, f);
     const onLane =
       Math.abs(acrossOf(axis, brush) - centre) <= 1 &&
       Math.abs(angleDifference(state.heading, rowHeading(axis, dir))) <= 0.6;
     const along = alongOf(axis, brush);
     this.lowered =
       (onLane || this.workedTo !== null) &&
-      (along - cellCentre(axis, this.row.from)) * dir >= -0.9 &&
-      (cellCentre(axis, this.row.to) - along) * dir >= -0.6;
+      (along - cellCentre(axis, this.row.from, f)) * dir >= -0.9 &&
+      (cellCentre(axis, this.row.to, f) - along) * dir >= -0.6;
     if (!onLane) {
       // Bending past an obstacle, the deck still works whatever part of the
       // row it actually crosses. Getting to a row, it works nothing.
       if (this.workedTo === null) return [];
       const first = this.row.lane * LANE_CELLS;
-      return cellsUnderSweep(previous, brush, tuning.brushRadius).filter(
+      const columns = fieldColumns(f);
+      return cellsUnderSweep(previous, brush, tuning.brushRadius, f).filter(
         (cell) => {
-          const column = cell % FIELD_COLUMNS,
-            line = Math.floor(cell / FIELD_COLUMNS);
+          const column = cell % columns,
+            line = Math.floor(cell / columns);
           const along = axis === "x" ? column : line,
             across = axis === "x" ? line : column;
           return (
@@ -511,7 +553,7 @@ export class TidyRun {
     }
     // The furthest cell whose centre the deck's leading edge has reached.
     const reach =
-      (alongOf(axis, brush) + DECK_REACH * dir - alongMin(axis)) / FIELD.cell -
+      (alongOf(axis, brush) + DECK_REACH * dir - alongMin(axis, f)) / f.cell -
       0.5;
     const passed = dir > 0 ? Math.floor(reach) : Math.ceil(reach);
     const upTo = (passed - this.row.to) * dir > 0 ? this.row.to : passed;
@@ -526,7 +568,7 @@ export class TidyRun {
     }
     this.finished =
       this.workedTo === this.row.to &&
-      (alongOf(axis, brush) - cellCentre(axis, this.row.to)) * dir >= -0.1;
+      (alongOf(axis, brush) - cellCentre(axis, this.row.to, f)) * dir >= -0.1;
     return cells;
   }
 }
@@ -537,6 +579,8 @@ export interface LaneProgress {
   lane: number;
   dir: 1 | -1;
   cell: number;
+  /** Left out for the home field. */
+  field?: FieldBounds;
 }
 
 /**
@@ -546,23 +590,28 @@ export interface LaneProgress {
  */
 export function laneFor(
   state: TractorState,
-): { axis: Axis; lane: number; dir: 1 | -1 } | null {
+): { axis: Axis; lane: number; dir: 1 | -1; field?: FieldBounds } | null {
+  const f = nearestField(state);
   const axis: Axis = Math.abs(Math.sin(state.heading)) > 0.5 ? "x" : "z";
-  const across = acrossOf(axis, state) - acrossMin(axis);
-  if (across < 0 || across >= laneCount(axis) * LANE_WIDTH) return null;
+  const across = acrossOf(axis, state) - acrossMin(axis, f);
+  if (across < 0 || across >= laneCount(axis, f) * LANE_WIDTH) return null;
   const facing =
     axis === "x" ? Math.sin(state.heading) : Math.cos(state.heading);
-  return {
-    axis,
-    lane: Math.floor(across / LANE_WIDTH),
-    dir: facing >= 0 ? 1 : -1,
-  };
+  return inField(
+    {
+      axis,
+      lane: Math.floor(across / LANE_WIDTH),
+      dir: (facing >= 0 ? 1 : -1) as 1 | -1,
+    },
+    f,
+  );
 }
 
 export function settle(state: TractorState, dt: number): TractorState {
   const lane = laneFor(state);
   if (!lane || state.speed <= 0.1) return state;
-  const offset = laneCentre(lane.axis, lane.lane) - acrossOf(lane.axis, state);
+  const offset =
+    laneCentre(lane.axis, lane.lane, fieldOf(lane)) - acrossOf(lane.axis, state);
   const shift = offset * (1 - Math.exp(-5 * dt));
   return lane.axis === "x"
     ? { ...state, z: state.z + shift }
@@ -572,21 +621,23 @@ export function settle(state: TractorState, dt: number): TractorState {
 export function laneWork(
   state: TractorState,
   progress: LaneProgress | null,
-): { cells: number[]; progress: LaneProgress | null } {
+): { cells: number[]; progress: LaneProgress | null; field: FieldBounds } {
   const lane = laneFor(state);
-  if (!lane) return { cells: [], progress: null };
+  if (!lane) return { cells: [], progress: null, field: nearestField(state) };
+  const f = fieldOf(lane);
   const { axis, dir } = lane,
     brush = attachmentPoint(state),
-    count = alongCells(axis);
+    count = alongCells(axis, f);
   const reach =
-    (alongOf(axis, brush) + DECK_REACH * dir - alongMin(axis)) / FIELD.cell -
+    (alongOf(axis, brush) + DECK_REACH * dir - alongMin(axis, f)) / f.cell -
     0.5;
   const passed = dir > 0 ? Math.floor(reach) : Math.ceil(reach);
   const same =
     progress &&
     progress.axis === axis &&
     progress.lane === lane.lane &&
-    progress.dir === dir;
+    progress.dir === dir &&
+    fieldOf(progress) === f;
   // A fresh lane starts under the deck; nothing behind it is worked.
   const start = same ? progress.cell + dir : passed;
   const row: Row = { ...lane, from: start, to: passed };
@@ -598,6 +649,7 @@ export function laneWork(
       ? passed >= 0 && start <= count - 1
       : passed <= count - 1 && start >= 0);
   return {
+    field: f,
     cells: inside ? rowCells(row, first, last) : [],
     progress: {
       ...lane,

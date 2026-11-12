@@ -3,6 +3,7 @@ import { test } from "node:test";
 import * as THREE from "three";
 import { drivableTarget, FOLLOW_ZOOM, SteeringGesture, TractorFollowCamera } from "./follow-camera";
 import type { TractorState } from "./simulation";
+import { WORLD } from "./simulation";
 
 const tractorAt = (heading: number, x = 0, z = 0): TractorState => ({ x, z, heading, speed: 0 });
 const viewports: [number, number][] = [[402, 874], [874, 402], [744, 1133], [1133, 744], [1440, 900]];
@@ -132,7 +133,9 @@ test("only movement turns a tap into driving; holding still stays a tap", () => 
 
 test("taps beyond the drivable meadow are ignored instead of pulled to its edge", () => {
   assert.deepEqual(drivableTarget({ x: 12, z: -4 }), { x: 12, z: -4 });
-  for (const edge of [{ x: 39, z: 28 }, { x: -39, z: -30 }]) assert.ok(drivableTarget(edge));
-  for (const far of [{ x: 39.01, z: 0 }, { x: -120, z: 0 }, { x: 0, z: 28.5 }, { x: 0, z: -30.5 }, { x: Number.NaN, z: 0 }])
+  for (const edge of [{ x: WORLD.maxX, z: WORLD.maxZ }, { x: WORLD.minX, z: WORLD.minZ }]) assert.ok(drivableTarget(edge));
+  // Foxglove field, out along the lane, is part of the meadow.
+  assert.ok(drivableTarget({ x: -100, z: 0 }));
+  for (const far of [{ x: WORLD.maxX + 0.01, z: 0 }, { x: WORLD.minX - 0.5, z: 0 }, { x: 0, z: WORLD.maxZ + 0.5 }, { x: 0, z: WORLD.minZ - 0.5 }, { x: Number.NaN, z: 0 }])
     assert.equal(drivableTarget(far), null);
 });

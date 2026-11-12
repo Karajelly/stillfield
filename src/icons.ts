@@ -48,6 +48,7 @@ const paths: Record<string, string> = {
   expand: '<path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/>',
   down: '<path d="m7 10 5 5 5-5"/>',
   right: '<path d="m10 7 5 5-5 5"/>',
+  signpost: '<path d="M11 21V3m-5 18h10M5 6h10l3 2.5-3 2.5H5V6Zm14 7H9v5h10l2-2.5-2-2.5Z"/>',
   menu: '<path d="M5 6h14M5 12h14M5 18h14"/>',
   tractor:
     '<path d="M8.5 10V4.5h7V10M6 10h12v6H6Z"/><rect x="2.5" y="11.5" width="4" height="8.5" rx="1.6"/><rect x="17.5" y="11.5" width="4" height="8.5" rx="1.6"/><path d="M10.5 16v3h3v-3"/>',

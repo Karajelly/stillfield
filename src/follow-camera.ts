@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { clamp } from "./simulation";
+import { clamp, WORLD } from "./simulation";
 import { steeringOffset } from "./handling";
 import type { Obstacle, Point, TractorState } from "./simulation";
 
@@ -105,5 +105,6 @@ export class SteeringGesture {
  * pulled to its edge. Matches PerspectiveGroundProjection.drivable in Swift.
  */
 export function drivableTarget(point: Point): Point | null {
-  return point.x >= -39 && point.x <= 39 && point.z >= -30 && point.z <= 28 ? point : null;
+  return point.x >= WORLD.minX && point.x <= WORLD.maxX && point.z >= WORLD.minZ && point.z <= WORLD.maxZ
+    ? point : null;
 }

@@ -7,7 +7,9 @@ import { alignmentForTap, EndTurn, WorkedRows } from "./row-end";
 import { advanceGridTractor } from "./keyboard-navigation";
 import type { GridInput } from "./keyboard-navigation";
 import { constrain } from "./handling";
-import { TidyRun, cellAt, laneAt, laneWork, nearField, planRows, rowEnd, rowHeading, settle } from "./tidy-rows";
+import { TidyRun, cellAt, fieldNear, fieldOf, laneAt, laneWork, nearField, planRows, rowEnd, rowHeading, settle } from "./tidy-rows";
+import { FIELD } from "./simulation";
+import type { FieldBounds } from "./simulation";
 import type { LaneProgress, Row } from "./tidy-rows";
 
 export interface ChooseOptions {
@@ -15,8 +17,8 @@ export interface ChooseOptions {
   freehand?: boolean;
   /** Work every lane up to the tap instead of the tapped lane alone. */
   fill?: boolean;
-  /** Whether the current tool would change a cell, so a fill can skip idle lanes. */
-  workable?: (cell: number) => boolean;
+  /** Whether the current tool would change a cell of a field, so a fill can skip idle lanes. */
+  workable?: (cell: number, field: FieldBounds) => boolean;
 }
 
 /** Destination work and row-end arrivals, independent of rendering and input events. */
@@ -37,7 +39,7 @@ export class TractorNavigation {
   private queue: { point: Point; fill: boolean }[] = [];
   /** The rows those taps are expected to become, for showing what is planned. */
   private preview: Row[] = [];
-  private workable: ((cell: number) => boolean) | undefined;
+  private workable: ((cell: number, field: FieldBounds) => boolean) | undefined;
   private laneProgress: LaneProgress | null = null;
   private aligning = false;
   private painting = true;
@@ -82,13 +84,15 @@ export class TractorNavigation {
     if (this.run && inside) {
       // A row that has been asked for is never dropped by another tap. One in
       // its own lane moves its end; one anywhere else joins the list behind it.
-      const row = this.run.row, lane = laneAt(row.axis, point);
+      const row = this.run.row, field = fieldOf(row);
+      const laneOf = (p: Point) => (fieldNear(p) === field ? laneAt(row.axis, p, field) : -1);
+      const lane = laneOf(point);
       if (lane === row.lane && !fill) {
-        this.run.retarget(cellAt(row.axis, point));
+        this.run.retarget(cellAt(row.axis, point, field));
         this.target = rowEnd(this.run.row);
       } else {
         // Tapping a lane that is already waiting replaces what was asked of it.
-        this.queue = this.queue.filter(waiting => laneAt(row.axis, waiting.point) !== lane);
+        this.queue = this.queue.filter(waiting => lane < 0 || laneOf(waiting.point) !== lane);
         this.queue.push({ point: { ...point }, fill });
         this.target = { ...point };
       }
@@ -160,7 +164,7 @@ export class TractorNavigation {
       this.blockedTime += dt;
       if (this.blockedTime > 1) { this.cancel(); blocked = true; }
     } else this.blockedTime = 0;
-    return { state, paint: [] as Point[], cells, completed, blocked };
+    return { state, paint: [] as Point[], cells, field: fieldOf(run.row), completed, blocked };
   }
   step(state: TractorState, dt: number, tool: Tool, obstacles: Obstacle[], pace = 0.85,
     manual: { target: Point } | { heading: number } | { keys: DriveKeys } | { grid: GridInput } | null = null, follow = false) {
@@ -169,6 +173,8 @@ export class TractorNavigation {
     if (this.run) return this.stepTidy(state, dt, tool, obstacles, pace, follow);
     const paint: Point[] = [];
     let cells: number[] = [];
+    /** The field `cells` index into. Swept paint finds its own fields. */
+    let field: FieldBounds = FIELD;
     let completed = false, blocked = false;
     const sweep = () => {
       if (tool === "wander") { this.lastBrush = null; return; }
@@ -206,7 +212,7 @@ export class TractorNavigation {
         // Rows driven by hand settle onto the same lanes that taps use.
         state = constrain(before, settle(state, dt), dt, obstacles);
         const work = laneWork(state, this.laneProgress);
-        cells = work.cells; this.laneProgress = work.progress;
+        cells = work.cells; field = work.field; this.laneProgress = work.progress;
       } else this.laneProgress = null;
     } else if (follow) {
       state = this.drive.step(state, dt, manual ?? (target ? { target } : null), obstacles, plan?.paceScale ?? 1, pace);
@@ -228,6 +234,6 @@ export class TractorNavigation {
     const lanes = this.tidy && !!manual && "grid" in manual;
     if (this.painting && state.speed > 0.1 && !lanes) sweep();
     if (state.speed === 0) this.lastBrush = null;
-    return { state, paint, cells, completed, blocked };
+    return { state, paint, cells, field, completed, blocked };
   }
 }

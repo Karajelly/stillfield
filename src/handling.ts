@@ -1,4 +1,4 @@
-import { angleDifference, clamp, cruiseSpeed } from "./simulation";
+import { angleDifference, clamp, cruiseSpeed, WORLD } from "./simulation";
 import type { Obstacle, Point, TractorState } from "./simulation";
 
 export const tuning = {
@@ -21,7 +21,7 @@ export function constrain(before: TractorState, after: TractorState, dt: number,
       constrained = true;
     }
   }
-  const boundedX = clamp(x, -39, 39), boundedZ = clamp(z, -30, 28);
+  const boundedX = clamp(x, WORLD.minX, WORLD.maxX), boundedZ = clamp(z, WORLD.minZ, WORLD.maxZ);
   constrained ||= boundedX !== x || boundedZ !== z;
   x = boundedX; z = boundedZ;
   if (constrained && dt > 0) speed = Math.min(speed, Math.hypot(x - before.x, z - before.z) / dt);

@@ -3,6 +3,7 @@ import { CROPS, CROP_NAMES, Ground } from "./farming";
 import type { Crop } from "./farming";
 import { overviewFraming } from "./overview";
 import { FIELD } from "./simulation";
+import type { FieldBounds } from "./simulation";
 
 /**
  * A meadow postcard: a still picture of the farm exactly as it stands, on a
@@ -20,13 +21,21 @@ export const POSTCARD_SIZE = {
   height: PHOTO.height + MARGIN + CAPTION,
 };
 
-/** The whole farm as the game frames it, or a closer look down onto the field. */
-export function postcardCamera(view: PostcardView): THREE.OrthographicCamera {
+/**
+ * The whole farm as the game frames it, or a closer look down onto the field.
+ * `blend` and `field` follow whichever field the player is at.
+ */
+export function postcardCamera(
+  view: PostcardView,
+  blend = 0,
+  field: FieldBounds = FIELD,
+): THREE.OrthographicCamera {
+  const FIELD = field;
   const aspect = PHOTO.width / PHOTO.height;
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 300);
   let vertical: number;
   if (view === "farm") {
-    const framing = overviewFraming(aspect);
+    const framing = overviewFraming(aspect, blend);
     camera.position.copy(framing.position);
     camera.lookAt(framing.focus);
     vertical = framing.vertical;

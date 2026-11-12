@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { CROPS } from "./farming";
 import type { Crop, FarmingEngine, HarvestResult } from "./farming";
-import { FIELD, FIELD_COLUMNS } from "./simulation";
+import { fieldColumns } from "./simulation";
 
 const matte = (color: string) =>
   new THREE.MeshStandardMaterial({ color, roughness: 1 });
@@ -231,6 +231,8 @@ export function createHarvestDisplay(scene: THREE.Scene, farm: FarmingEngine) {
         )
           continue;
         const cell = result.cells[Math.floor(result.cells.length / 2)];
+        const FIELD = farm.bounds,
+          FIELD_COLUMNS = fieldColumns(FIELD);
         const start = new THREE.Vector3(
           FIELD.minX + ((cell % FIELD_COLUMNS) + 0.5) * FIELD.cell,
           0.4,

@@ -1,4 +1,4 @@
-import { angleDifference, clamp, cruiseSpeed } from "./simulation";
+import { angleDifference, clamp, cruiseSpeed, WORLD } from "./simulation";
 import type { Obstacle, Point, TractorState } from "./simulation";
 
 const quarterTurn = Math.PI / 2;
@@ -49,8 +49,8 @@ export class GridKeyboard {
 /** Stop at the first contact along a row; collision response must not slide diagonally. */
 function clearTravel(state: TractorState, direction: Point, distance: number, obstacles: Obstacle[]) {
   let travel = distance;
-  if (direction.x) travel = Math.min(travel, direction.x > 0 ? 39 - state.x : state.x + 39);
-  if (direction.z) travel = Math.min(travel, direction.z > 0 ? 28 - state.z : state.z + 30);
+  if (direction.x) travel = Math.min(travel, direction.x > 0 ? WORLD.maxX - state.x : state.x - WORLD.minX);
+  if (direction.z) travel = Math.min(travel, direction.z > 0 ? WORLD.maxZ - state.z : state.z - WORLD.minZ);
   for (const obstacle of obstacles) {
     const dx = obstacle.x - state.x, dz = obstacle.z - state.z;
     const along = dx * direction.x + dz * direction.z;

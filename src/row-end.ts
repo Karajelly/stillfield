@@ -1,4 +1,4 @@
-import { angleDifference, clamp, FIELD } from "./simulation";
+import { angleDifference, clamp, fieldAt, WORLD } from "./simulation";
 import type { Obstacle, Point, TractorState } from "./simulation";
 import { constrain, tuning } from "./handling";
 import { attachmentOffset, attachmentPoint } from "./work-destination";
@@ -8,8 +8,7 @@ const forward = (heading: number): Point => ({ x: Math.sin(heading), z: Math.cos
 const sideways = (heading: number): Point => ({ x: Math.cos(heading), z: -Math.sin(heading) });
 const dot = (a: Point, b: Point) => a.x * b.x + a.z * b.z;
 const delta = (a: Point, b: Point): Point => ({ x: a.x - b.x, z: a.z - b.z });
-const inField = (p: Point) => Number.isFinite(p.x) && Number.isFinite(p.z)
-  && p.x >= FIELD.minX && p.x <= FIELD.maxX && p.z >= FIELD.minZ && p.z <= FIELD.maxZ;
+const inField = (p: Point) => fieldAt(p) !== undefined;
 
 /** Observe actual straight work, including diagonal rows. Never change steering. */
 export class WorkedRows {
@@ -61,7 +60,8 @@ export function alignmentForTap(last: WorkedRow | null, state: TractorState, poi
   const length = Math.hypot(finish.x - start.x, finish.z - start.z), points = [...turn.path, finish];
   for (let d = 0; d < length; d += 0.2)
     points.push({ x: start.x + (finish.x - start.x) * d / length, z: start.z + (finish.z - start.z) * d / length });
-  if (points.some(p => p.x < -38.8 || p.x > 38.8 || p.z < -29.8 || p.z > 27.8
+  if (points.some(p => p.x < WORLD.minX + 0.2 || p.x > WORLD.maxX - 0.2
+    || p.z < WORLD.minZ + 0.2 || p.z > WORLD.maxZ - 0.2
     || obstacles.some(o => Math.hypot(p.x - o.x, p.z - o.z) < o.radius + 1.05))) return null;
   return alignment;
 }

@@ -1,6 +1,7 @@
 import { Ground } from "./farming";
 import type { Crop } from "./farming";
-import { FIELD, FIELD_COLUMNS, FIELD_ROWS } from "./simulation";
+import { FIELD, FIELD_COLUMNS, FIELD_ROWS, fieldColumns, fieldRows } from "./simulation";
+import type { FieldBounds } from "./simulation";
 
 /**
  * Every so often a gust crosses the field from west to east and plays what is
@@ -21,8 +22,14 @@ export const WIND = {
   threshold: 0.3,
 };
 export const WIND_STEPS = FIELD_COLUMNS / WIND.stepColumns;
+/** Ten pitch lanes in every field: the home field's 2.5 m lanes set the scale. */
 export const WIND_BANDS = FIELD_ROWS / WIND.bandRows;
 export const GUST_SECONDS = WIND_STEPS * WIND.stepSeconds;
+/** A wider field is a longer phrase at the same tempo: one beat per metre. */
+export const windSteps = (bounds: FieldBounds) =>
+  Math.floor(fieldColumns(bounds) / WIND.stepColumns);
+export const gustSeconds = (bounds: FieldBounds) =>
+  windSteps(bounds) * WIND.stepSeconds;
 
 export type WindVoice = Crop | "stubble";
 export interface WindNote {
@@ -34,6 +41,8 @@ export interface WindNote {
 }
 export interface FieldReader {
   cells: ArrayLike<number>;
+  /** Which field the cells cover. Left out for the home field. */
+  bounds?: FieldBounds;
   cropAt(cell: number): Crop | undefined;
   stage(cell: number): number;
 }
@@ -44,18 +53,24 @@ const CROP_VOICES: Crop[] = ["wheat", "sunflowers", "pumpkins"];
 
 /** The notes one beat of a gust sounds as it crosses `step` metres of field. */
 export function sliceNotes(field: FieldReader, step: number): WindNote[] {
-  if (!Number.isInteger(step) || step < 0 || step >= WIND_STEPS) return [];
+  const bounds = field.bounds ?? FIELD,
+    columns = fieldColumns(bounds),
+    rows = fieldRows(bounds);
+  if (!Number.isInteger(step) || step < 0 || step >= windSteps(bounds)) return [];
   const coverage: Record<WindVoice, number[]> = {
     wheat: new Array(WIND_BANDS).fill(0),
     sunflowers: new Array(WIND_BANDS).fill(0),
     pumpkins: new Array(WIND_BANDS).fill(0),
     stubble: new Array(WIND_BANDS).fill(0),
   };
-  const perBand = WIND.stepColumns * WIND.bandRows;
-  for (let row = 0; row < FIELD_ROWS; row++) {
-    const band = Math.floor(row / WIND.bandRows);
+  // Rows spread evenly over the ten lanes; in the home field, five rows each.
+  const bandOf = (row: number) => Math.floor((row * WIND_BANDS) / rows);
+  const perBand = new Array(WIND_BANDS).fill(0);
+  for (let row = 0; row < rows; row++) perBand[bandOf(row)] += WIND.stepColumns;
+  for (let row = 0; row < rows; row++) {
+    const band = bandOf(row);
     for (let offset = 0; offset < WIND.stepColumns; offset++) {
-      const cell = row * FIELD_COLUMNS + step * WIND.stepColumns + offset;
+      const cell = row * columns + step * WIND.stepColumns + offset;
       const state = field.cells[cell];
       if (state === Ground.stubble) coverage.stubble[band] += 1;
       else if (state === Ground.growing || state === Ground.mature) {
@@ -70,7 +85,7 @@ export function sliceNotes(field: FieldReader, step: number): WindNote[] {
     // Pumpkins keep a slower pulse, like a bass under the other two.
     if (voice === "pumpkins" && step % 2) continue;
     const lanes = coverage[voice]
-      .map((sum, band) => ({ band, level: sum / perBand }))
+      .map((sum, band) => ({ band, level: sum / perBand[band] }))
       .filter((lane) => lane.level >= WIND.threshold);
     if (!lanes.length) continue;
     // Walk through the sounding lanes so a full field rolls instead of droning.
@@ -84,7 +99,7 @@ export function sliceNotes(field: FieldReader, step: number): WindNote[] {
   if (step % 2) {
     const level =
       coverage.stubble.reduce((sum, value) => sum + value, 0) /
-      (perBand * WIND_BANDS);
+      (rows * WIND.stepColumns);
     if (level >= 0.08) notes.push({ voice: "stubble", band: 0, level });
   }
   return notes;
@@ -127,9 +142,23 @@ export class Wind {
   private elapsed = -1;
   private step = 0;
   private readonly random: () => number;
+  /** The field this gust crosses. */
+  bounds: FieldBounds = FIELD;
+  private next: FieldBounds = FIELD;
 
   constructor(random: () => number = Math.random) {
     this.random = random;
+  }
+
+  /** Beats in the current gust. */
+  get steps(): number {
+    return windSteps(this.bounds);
+  }
+
+  /** Cross this field from the next gust on. A gust under way finishes where it is. */
+  follow(bounds: FieldBounds): void {
+    this.next = bounds;
+    if (!this.gusting) this.bounds = bounds;
   }
 
   get gusting(): boolean {
@@ -139,6 +168,7 @@ export class Wind {
   /** Begin a gust now, unless one is already crossing. */
   gust(): void {
     if (this.gusting) return;
+    this.bounds = this.next;
     this.elapsed = 0;
     this.step = 0;
   }
@@ -151,22 +181,24 @@ export class Wind {
       this.gust();
     } else this.elapsed += dt;
     const steps: number[] = [];
-    while (this.step < WIND_STEPS && this.step * WIND.stepSeconds <= this.elapsed)
+    while (this.step < this.steps && this.step * WIND.stepSeconds <= this.elapsed)
       steps.push(this.step++);
     // Let the bending trail clear the far edge before the gust ends.
-    if (this.elapsed >= GUST_SECONDS + 3) {
+    const length = gustSeconds(this.bounds);
+    if (this.elapsed >= length + 3) {
       this.elapsed = -1;
+      this.bounds = this.next;
       this.rest =
         WIND.minRest + this.random() * (WIND.maxRest - WIND.minRest);
       return { front: null, steps, strength: 0 };
     }
     const travelled =
-      (this.elapsed / WIND.stepSeconds) * WIND.stepColumns * FIELD.cell;
+      (this.elapsed / WIND.stepSeconds) * WIND.stepColumns * this.bounds.cell;
     return {
-      front: FIELD.minX + travelled,
+      front: this.bounds.minX + travelled,
       steps,
       strength: Math.sin(
-        Math.PI * Math.min(1, this.elapsed / (GUST_SECONDS + 3)),
+        Math.PI * Math.min(1, this.elapsed / (length + 3)),
       ),
     };
   }

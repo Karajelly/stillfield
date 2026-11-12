@@ -487,9 +487,42 @@ p {
   right: 37px;
   bottom: 31px;
   display: flex;
-  justify-content: flex-end;
-  align-items: center;
+  justify-content: space-between;
+  /* The signpost matches the zoom controls' height in every layout. */
+  align-items: stretch;
+  gap: 12px;
   pointer-events: none;
+}
+.travel-button {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 16px 0 13px;
+  border: 1px solid #8b997333;
+  border-radius: 20px;
+  background: #f6f7e99c;
+  backdrop-filter: blur(6px);
+  color: #5f7550;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.travel-button:hover {
+  background: #e2e9d3;
+}
+.travel-button:active {
+  transform: scale(0.97);
+}
+.travel-button .icon {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+.travel-button[aria-pressed="true"] {
+  background: #e2e8d5;
+  color: #3f5b40;
 }
 .zoom-controls {
   display: flex;
@@ -1258,7 +1291,8 @@ dialog.postcard .primary-button {
   background: #f1efdc;
 }
 .after-dark .place-pill,
-.after-dark .zoom-controls {
+.after-dark .zoom-controls,
+.after-dark .travel-button {
   background: #f7f5e9e0;
 }
 .after-dark .pause-veil span {

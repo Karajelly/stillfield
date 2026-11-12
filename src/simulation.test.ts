@@ -5,6 +5,7 @@ import {
   angleDifference,
   cellsUnderBrush,
   FIELD,
+  WORLD,
 } from "./simulation";
 import type { Obstacle, Point, TractorState } from "./simulation";
 import { GentleDrive } from "./handling";
@@ -155,10 +156,10 @@ describe("advanceTractor", () => {
 
   it("keeps the tractor inside the playable world at each outer edge", () => {
     for (const [x, z, heading, target] of [
-      [38.99, 0, Math.PI / 2, { x: 100, z: 0 }],
-      [-38.99, 0, -Math.PI / 2, { x: -100, z: 0 }],
-      [0, 27.99, 0, { x: 0, z: 100 }],
-      [0, -29.99, Math.PI, { x: 0, z: -100 }],
+      [WORLD.maxX - 0.01, 0, Math.PI / 2, { x: 200, z: 0 }],
+      [WORLD.minX + 0.01, 0, -Math.PI / 2, { x: -200, z: 0 }],
+      [0, WORLD.maxZ - 0.01, 0, { x: 0, z: 200 }],
+      [0, WORLD.minZ + 0.01, Math.PI, { x: 0, z: -200 }],
     ] as const) {
       const next = advanceTractor(
         { x, z, heading, speed: 5 },
@@ -167,8 +168,8 @@ describe("advanceTractor", () => {
         [],
         false,
       );
-      assert.ok(next.x >= -39 && next.x <= 39);
-      assert.ok(next.z >= -30 && next.z <= 28);
+      assert.ok(next.x >= WORLD.minX && next.x <= WORLD.maxX);
+      assert.ok(next.z >= WORLD.minZ && next.z <= WORLD.maxZ);
     }
   });
 

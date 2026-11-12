@@ -107,23 +107,15 @@ button:disabled {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* --haze follows the sky through the day; see applyDaylight in main.ts. */
   background: linear-gradient(
     180deg,
-    rgba(244, 245, 227, 0.88) 0%,
-    rgba(244, 245, 227, 0.36) 12%,
+    rgb(var(--haze, 244 245 227) / 0.88) 0%,
+    rgb(var(--haze, 244 245 227) / 0.36) 12%,
     transparent 27%,
     transparent 68%,
-    rgba(237, 240, 217, 0.27) 83%,
-    rgba(237, 240, 217, 0.88) 100%
-  );
-}
-.golden .vignette {
-  background: linear-gradient(
-    180deg,
-    rgba(248, 239, 218, 0.9),
-    transparent 28%,
-    transparent 72%,
-    rgba(243, 232, 206, 0.85)
+    rgb(var(--haze, 244 245 227) / 0.27) 83%,
+    rgb(var(--haze, 244 245 227) / 0.88) 100%
   );
 }
 .topbar {
@@ -711,60 +703,9 @@ dialog .ipad-tip {
 .settings-list {
   margin: 28px 0 24px;
 }
-.setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  margin: 23px 0;
-  gap: 15px;
-}
-.setting-row strong,
 .range-setting strong {
   font-size: 12px;
   font-weight: 500;
-}
-.setting-row small {
-  display: block;
-  font-size: 10px;
-  color: #8a967c;
-  margin-top: 5px;
-}
-.setting-row input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-.switch {
-  width: 35px;
-  height: 21px;
-  border-radius: 20px;
-  background: #d9dfcc;
-  position: relative;
-  flex-shrink: 0;
-  transition: background 0.2s;
-}
-.switch:after {
-  content: "";
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: #fafbf1;
-  box-shadow: 0 1px 3px #0001;
-  transition: transform 0.2s;
-}
-.setting-row input:checked + .switch {
-  background: #80996a;
-}
-.setting-row input:checked + .switch:after {
-  transform: translateX(14px);
-}
-.setting-row input:focus-visible + .switch {
-  outline: 2px solid #52745a;
-  outline-offset: 4px;
 }
 .range-setting {
   display: flex;
@@ -1215,4 +1156,117 @@ dialog .ipad-tip {
     width: 22px;
     height: 22px;
   }
+}
+
+/* Choice chips: the time-of-day setting and the postcard view. */
+.choice-setting {
+  margin: 23px 0;
+}
+.choice-setting strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+.choice-setting small {
+  display: block;
+  font-size: 10px;
+  color: #8a967c;
+  margin: 5px 0 12px;
+}
+.choice-row {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 14px;
+  background: #ecefdf;
+}
+.choice {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  padding: 6px 4px;
+  border-radius: 11px;
+  background: transparent;
+  color: #68765b;
+  font-size: 11px;
+  font-weight: 500;
+}
+.choice:hover {
+  background: #e2e8d3;
+}
+.choice.selected {
+  background: #fafbf1;
+  color: #3f5b40;
+  box-shadow: 0 1px 3px #40503420;
+  font-weight: 600;
+}
+
+/* Meadow postcards. */
+dialog.postcard {
+  width: 560px;
+}
+.postcard-preview {
+  display: block;
+  /* Keep the view choice and the save button on screen in short windows. */
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: max(170px, 100dvh - 440px);
+  margin: 0 auto 14px;
+  border-radius: 6px;
+  background: #ecefdf;
+  box-shadow:
+    0 1px 2px #28391d1f,
+    0 10px 30px #28391d24;
+  rotate: -0.6deg;
+  opacity: 0.55;
+  transition: opacity 0.4s;
+}
+.postcard-preview.ready {
+  opacity: 1;
+}
+dialog.postcard .primary-button {
+  margin-top: 18px;
+}
+
+/* After dark, anything drawn straight onto the scene switches to cream. */
+.after-dark .brand,
+.after-dark .weather,
+.after-dark .drive-hint,
+.after-dark .round-button {
+  color: #f1efdc;
+}
+.after-dark .weather > .icon {
+  color: #e9d9a0;
+}
+.after-dark .weather span span {
+  color: #c5cdc0;
+}
+.after-dark .round-button:hover {
+  background: #f7f5e926;
+}
+.after-dark .round-button[aria-pressed="true"] {
+  background: #f7f5e933;
+}
+.after-dark dialog .round-button {
+  color: #596f55;
+}
+.lamplit .world-label {
+  color: #f1efdc;
+  text-shadow: 0 1px 4px #1f2c3a;
+}
+.lamplit .world-label span {
+  background: #f1efdc;
+}
+.after-dark .place-pill,
+.after-dark .zoom-controls {
+  background: #f7f5e9e0;
+}
+.after-dark .pause-veil span {
+  color: #f1efdc;
+}
+.after-dark .pause-veil > div > .icon {
+  color: #c5cdc0;
+}
+.after-dark .action-group {
+  border-left-color: #f1efdc33;
 }

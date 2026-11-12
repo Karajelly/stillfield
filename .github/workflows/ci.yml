@@ -35,3 +35,16 @@ jobs:
       - uses: actions/checkout@v7
       - run: swift --version
       - run: swift test --package-path ios/StillfieldCore
+
+  ios-app:
+    name: iOS app and UI tests (simulator build)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - run: xcodebuild -version
+      # Compiles the app and its UI tests without running them. Unsigned, and
+      # quiet so the log holds only warnings and errors.
+      - run: >
+          xcodebuild -project ios/Stillfield.xcodeproj -scheme Stillfield
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath ios/.build -quiet build-for-testing CODE_SIGNING_ALLOWED=NO

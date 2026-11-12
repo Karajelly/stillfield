@@ -14,6 +14,18 @@ public struct MeadowSave: Codable, Equatable, Sendable {
     // Optional on disk so meadows saved before camera switching still decode.
     public var cameraMode: FarmCameraMode?
     public var selectedCrop: Crop?
+    // Optional on disk so meadows saved before the day began to move still decode.
+    /// Drifting through the day, or a held time of day. Use `resolvedLight`.
+    public var light: DayHold?
+    /// Seconds into the day while it drifts. Use `resolvedDay`.
+    public var day: Double?
+
+    /// A meadow saved with golden light switched on keeps its golden hour.
+    public var resolvedLight: DayHold { light ?? (goldenLight ? .golden : .flow) }
+    /// A held light sits at its own moment; a drifting day resumes where it stopped.
+    public var resolvedDay: Double {
+        Daylight.holdSeconds(resolvedLight) ?? Daylight.wrap(day ?? 0)
+    }
 
     public init(
         version: Int = 3,
@@ -27,7 +39,9 @@ public struct MeadowSave: Codable, Equatable, Sendable {
         haptics: Bool = true,
         introDismissed: Bool = false,
         cameraMode: FarmCameraMode? = nil,
-        selectedCrop: Crop? = .wheat
+        selectedCrop: Crop? = .wheat,
+        light: DayHold? = nil,
+        day: Double? = nil
     ) {
         self.version = version
         self.field = field
@@ -41,6 +55,8 @@ public struct MeadowSave: Codable, Equatable, Sendable {
         self.introDismissed = introDismissed
         self.cameraMode = cameraMode
         self.selectedCrop = selectedCrop
+        self.light = light
+        self.day = day
     }
 
     public var isValid: Bool {
@@ -49,7 +65,8 @@ public struct MeadowSave: Codable, Equatable, Sendable {
         tractor.z.isFinite && (-30...28).contains(tractor.z) &&
         tractor.heading.isFinite && tractor.speed.isFinite && (0...6.875).contains(tractor.speed) &&
         pace.isFinite && (0.55...1.25).contains(pace) &&
-        volume.isFinite && (0...1).contains(volume)
+        volume.isFinite && (0...1).contains(volume) &&
+        (day?.isFinite ?? true)
     }
 }
 

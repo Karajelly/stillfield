@@ -9,11 +9,13 @@
 /* Begin PBXBuildFile section */
 		01F7FDD741F0BD68005C2A8A /* FarmController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84D4459AF8D8A41901FD95AE /* FarmController.swift */; };
 		1BF5DDFD084E9DC27BEE5488 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B48D270D7DE3033FA136BDC9 /* Assets.xcassets */; };
+		2A6C0D51B7E94F3A8D15C602 /* DuskRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E2B9F04C1A7435D9B80E1F3 /* DuskRenderer.swift */; };
 		2AE89F3569E2BE0DFB68124A /* StillfieldCore in Frameworks */ = {isa = PBXBuildFile; productRef = B34BC02C80CCDF1B1E6EECC7 /* StillfieldCore */; };
 		38275791EC71A6A83554539D /* FarmViewport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2756F70899724DF42E65E832 /* FarmViewport.swift */; };
 		5F3A38B13644BFF23AF9EB68 /* FarmAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41632DB2771CDCDB6D3B2875 /* FarmAudio.swift */; };
 		7C8753FDFECE6FF4090B8E9C /* StillfieldApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C196C075E0CE17BAEE432E73 /* StillfieldApp.swift */; };
 		838671660274EF1F9D8E2457 /* StillfieldUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11FEB246D6EF1C6F2FC56AF7 /* StillfieldUITests.swift */; };
+		8D41F6A29C3B4E07A5D2B719 /* Postcard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F53A1C8E4D04B6289A7C3E5 /* Postcard.swift */; };
 		981F1510515134659672C5E8 /* FarmScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8F2E1F0B1ACD7F2209A5087 /* FarmScreen.swift */; };
 		9A8D73347764BD17B6EE7269 /* HarvestDisplayRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E614C2D0425D1A8A5C9CF19 /* HarvestDisplayRenderer.swift */; };
 		AF246900C3F39786246C4053 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E03E5FB2FBF35854D6C9407D /* PrivacyInfo.xcprivacy */; };
@@ -41,7 +43,9 @@
 		41632DB2771CDCDB6D3B2875 /* FarmAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmAudio.swift; sourceTree = "<group>"; };
 		55BF890D38EA62A229201D5D /* Stillfield.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Stillfield.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		561D543CE55DBB61DF37BF6F /* FarmScene.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FarmScene.json; sourceTree = "<group>"; };
+		6E2B9F04C1A7435D9B80E1F3 /* DuskRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuskRenderer.swift; sourceTree = "<group>"; };
 		84D4459AF8D8A41901FD95AE /* FarmController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarmController.swift; sourceTree = "<group>"; };
+		9F53A1C8E4D04B6289A7C3E5 /* Postcard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Postcard.swift; sourceTree = "<group>"; };
 		A3484D93B0488A3347071975 /* StillfieldUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = StillfieldUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B48D270D7DE3033FA136BDC9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C196C075E0CE17BAEE432E73 /* StillfieldApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillfieldApp.swift; sourceTree = "<group>"; };
@@ -134,11 +138,13 @@
 		AD689F0B8226C7270AF04C69 /* Rendering */ = {
 			isa = PBXGroup;
 			children = (
+				6E2B9F04C1A7435D9B80E1F3 /* DuskRenderer.swift */,
 				84D4459AF8D8A41901FD95AE /* FarmController.swift */,
 				2756F70899724DF42E65E832 /* FarmViewport.swift */,
 				23B0101E891852596BA8EB67 /* FieldRenderer.swift */,
 				3E614C2D0425D1A8A5C9CF19 /* HarvestDisplayRenderer.swift */,
 				361694CE96158ABDD1A1DBA1 /* NativeArtwork.swift */,
+				9F53A1C8E4D04B6289A7C3E5 /* Postcard.swift */,
 			);
 			path = Rendering;
 			sourceTree = "<group>";
@@ -263,6 +269,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2A6C0D51B7E94F3A8D15C602 /* DuskRenderer.swift in Sources */,
 				5F3A38B13644BFF23AF9EB68 /* FarmAudio.swift in Sources */,
 				01F7FDD741F0BD68005C2A8A /* FarmController.swift in Sources */,
 				981F1510515134659672C5E8 /* FarmScreen.swift in Sources */,
@@ -270,6 +277,7 @@
 				EA404C084D565C0660442D98 /* FieldRenderer.swift in Sources */,
 				9A8D73347764BD17B6EE7269 /* HarvestDisplayRenderer.swift in Sources */,
 				AFFCF064E6C16CFB529C6EBE /* NativeArtwork.swift in Sources */,
+				8D41F6A29C3B4E07A5D2B719 /* Postcard.swift in Sources */,
 				7C8753FDFECE6FF4090B8E9C /* StillfieldApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

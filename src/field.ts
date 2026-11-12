@@ -182,6 +182,8 @@ export function createField(
     ],
     dummy = new THREE.Object3D(),
     color = new THREE.Color();
+  dummy.rotation.order = "ZYX";
+  let lean = 0;
   function put(
     mesh: THREE.InstancedMesh,
     i: number,
@@ -193,19 +195,28 @@ export function createField(
     sz = sx,
     angle = 0,
   ) {
-    dummy.position.set(x, y, z);
-    dummy.rotation.set(0, angle, 0);
+    // A gust leans each plant downwind about its foot, after its own turn.
+    const height = y - 0.05;
+    dummy.position.set(
+      x + Math.sin(lean) * height,
+      0.05 + Math.cos(lean) * height,
+      z,
+    );
+    dummy.rotation.set(0, angle, -lean);
     dummy.scale.set(sx, sy, sz);
     dummy.updateMatrix();
     mesh.setMatrixAt(i, dummy.matrix);
   }
-  function updatePoint(i: number) {
+  function updatePoint(i: number, sway = 0) {
     const p = points[i],
       state = grid[p.cell],
       crop = engine.cropAt(p.cell),
       stage = engine.stage(p.cell),
       growing = state === Ground.growing || state === Ground.mature;
+    lean = 0;
     for (const mesh of meshes) put(mesh, i, p.x, 0.05, p.z, 0);
+    // Seeds stay put, and short stubble barely stirs.
+    lean = state === Ground.stubble ? sway * 0.4 : stage === 0 && growing ? 0 : sway;
     if (state === Ground.grass) {
       put(grass, i, p.x, 0.05, p.z, p.height, p.height, p.height, p.angle);
       grass.setColorAt(i, color.set(i % 2 ? "#7e9557" : "#a8b775"));
@@ -296,12 +307,14 @@ export function createField(
       }
     }
     if (crop === "pumpkins" && stage === 3) {
+      // The leaves move; the pumpkins themselves sit where they grew.
+      lean = 0;
       put(pumpkins, i, p.x, 0.28, p.z, 1, 0.85, 1, p.angle);
       put(stems, i, p.x, 0.52, p.z, 1, 0.15, 1);
     }
   }
-  function dirty() {
-    texture.needsUpdate = true;
+  function dirty(ground = true) {
+    if (ground) texture.needsUpdate = true;
     for (const mesh of meshes) {
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
@@ -318,15 +331,51 @@ export function createField(
     const cells = [...events.groundChanges, ...events.cropStages];
     for (const i of cells) {
       drawCell(i);
-      byCell.get(i)?.forEach(updatePoint);
+      byCell.get(i)?.forEach((point) => updatePoint(point));
     }
     if (cells.length) dirty();
     if (events.harvestResults.length) display.harvest(events.harvestResults);
     return events;
   }
+  // Plants within a few metres behind a gust front bend, then settle.
+  const GUST_TRAIL = 6.5;
+  let swaying = new Set<number>();
+  function wind(front: number | null, time: number) {
+    const next = new Set<number>();
+    if (front !== null) {
+      const first = Math.max(
+          0,
+          Math.floor((front - GUST_TRAIL - FIELD.minX) / FIELD.cell),
+        ),
+        last = Math.min(
+          COLUMNS - 1,
+          Math.floor((front - FIELD.minX) / FIELD.cell),
+        );
+      for (let col = first; col <= last; col++)
+        for (let row = 0; row < ROWS; row++)
+          for (const i of byCell.get(row * COLUMNS + col) ?? []) {
+            const p = points[i],
+              u = (front - p.x) / GUST_TRAIL;
+            if (u <= 0 || u >= 1) continue;
+            // A quick push at the front, then a slow, fluttering release.
+            const rise = Math.min(1, u / 0.22),
+              fall = Math.min(1, (1 - u) / 0.78);
+            const bend = rise * rise * (3 - 2 * rise) * fall * fall;
+            updatePoint(
+              i,
+              bend * (0.42 + Math.sin(time * 7 + p.angle * 3) * 0.07),
+            );
+            next.add(i);
+          }
+    }
+    for (const i of swaying) if (!next.has(i)) updatePoint(i);
+    if (next.size || swaying.size) dirty(false);
+    swaying = next;
+  }
   return {
     engine,
     grid,
+    wind,
     paint(
       x: number,
       z: number,

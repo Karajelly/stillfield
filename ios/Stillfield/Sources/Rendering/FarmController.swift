@@ -6,6 +6,26 @@ import SwiftUI
 import UIKit
 import os
 
+/// Colours the interface borrows from the sky, rounded to whole 8-bit steps so
+/// SwiftUI is told about a change a few times a second at most, and only while
+/// the light is actually moving.
+struct SkyTint: Equatable {
+    var sky = SIMD3<Double>(0xe8, 0xec, 0xda) / 255
+    /// A paler shade of the sky by day and the sky itself at night, for the page edges.
+    var haze = SIMD3<Double>(0xf4, 0xf5, 0xe3) / 255
+    /// The page edges are dark enough that text drawn on them should turn cream.
+    var afterDark = false
+
+    init() {}
+
+    init(_ light: Daylight) {
+        func step(_ color: SIMD3<Double>) -> SIMD3<Double> { (color * 255).rounded(.toNearestOrEven) / 255 }
+        sky = step(light.sky)
+        haze = step(light.sky + (SIMD3(repeating: 1) - light.sky) * 0.5 * (1 - light.glow))
+        afterDark = 0.2126 * haze.x + 0.7152 * haze.y + 0.0722 * haze.z < 150.0 / 255
+    }
+}
+
 @MainActor @Observable
 final class FarmController {
     var tool: FarmTool
@@ -13,7 +33,13 @@ final class FarmController {
     private(set) var cameraMode: FarmCameraMode
     var isPaused = false
     var soundEnabled = false
-    var goldenLight: Bool { didSet { updateLight(); persist() } }
+    /// Drifting through the day, or a time of day the player keeps.
+    var light: DayHold { didSet { lightChanged() } }
+    private(set) var tint = SkyTint()
+    private(set) var dayPhase = DayPhase.morning
+    private(set) var postcard: Postcard?
+    /// True for the moment the controls step aside so a postcard shows the meadow alone.
+    private(set) var isCapturing = false
     var haptics: Bool { didSet { persist() } }
     var introDismissed: Bool
     private(set) var hasDriven = false
@@ -32,6 +58,8 @@ final class FarmController {
     @ObservationIgnored private var testSteeringCount = 0
     @ObservationIgnored private var testTouchCount = 0
     @ObservationIgnored private var lastTelemetry = -1.0
+    /// UI tests can hold a gust front in place, to check the lean it gives the field.
+    @ObservationIgnored private var heldGustFront: Double?
 #endif
 
     @ObservationIgnored private var farmingConfiguration = FarmingConfiguration()
@@ -49,6 +77,14 @@ final class FarmController {
     @ObservationIgnored private let fillLight = Entity()
     @ObservationIgnored private var daylight: EnvironmentResource?
     @ObservationIgnored private var goldenDaylight: EnvironmentResource?
+    @ObservationIgnored private var nightDaylight: EnvironmentResource?
+    @ObservationIgnored private var dusk: DuskRenderer?
+    @ObservationIgnored private var wind = Wind()
+    /// Seconds into the day, advanced by the same active-play clock as the crops.
+    @ObservationIgnored private var dayTime = 0.0
+    @ObservationIgnored private var litDay = -1.0
+    @ObservationIgnored private var glow = 0.0
+    @ObservationIgnored private var sailTurn: Float = 0
     @ObservationIgnored private var tractor = Entity()
     @ObservationIgnored private var destinationMarker = Entity()
     @ObservationIgnored private var obstacles: [Obstacle] = []
@@ -101,13 +137,18 @@ final class FarmController {
             // UI tests exercise automatic active-play growth without several-minute waits.
             for crop in Crop.allCases { farmingConfiguration.growthSeconds[crop] = 45 }
         }
+        if testing && ProcessInfo.processInfo.arguments.contains("--still-gust") {
+            // Just past the west edge of the third column of patches, where its lean peaks.
+            heldGustFront = -12.2
+        }
 #endif
         tractorState = saved.tractor
         tractorState.speed = 0
         tool = saved.tool == .mow || saved.tool == .restore ? .wander : saved.tool
         selectedCrop = saved.selectedCrop ?? .wheat
         cameraMode = saved.cameraMode ?? .overview
-        goldenLight = saved.goldenLight
+        light = saved.resolvedLight
+        dayTime = saved.resolvedDay
         haptics = saved.haptics
         introDismissed = saved.introDismissed
         pace = saved.pace
@@ -118,14 +159,20 @@ final class FarmController {
             hasSaveError = true
             logger.error("Previous meadow could not be preserved: \(String(describing: preservationError), privacy: .public)")
         }
+        // The loading card and the first frame already wear the saved hour's colours.
+        let now = Daylight.at(dayTime)
+        tint = SkyTint(now)
+        dayPhase = now.phase
     }
 
-    func load(into content: RealityViewCameraContent, size: CGSize, daylight: EnvironmentResource?, goldenDaylight: EnvironmentResource?) async {
+    func load(into content: RealityViewCameraContent, size: CGSize, daylight: EnvironmentResource?,
+              goldenDaylight: EnvironmentResource?, nightDaylight: EnvironmentResource?) async {
         guard self.content == nil else { return }
         self.content = content
         viewport = size
         self.daylight = daylight
         self.goldenDaylight = goldenDaylight
+        self.nightDaylight = nightDaylight
         do {
             let artwork = try await FarmArtwork.load()
             let world = try await artwork.world.makeEntity()
@@ -135,10 +182,13 @@ final class FarmController {
             root.addChild(world)
             root.addChild(tractor)
             if let fieldRenderer { root.addChild(fieldRenderer.entity) }
+            let dusk = DuskRenderer()
+            root.addChild(dusk.entity)
+            tractor.addChild(dusk.lamps)
+            self.dusk = dusk
             camera.name = "The unhurried camera"
             setViewportSize(size)
             root.addChild(camera)
-            sun.look(at: .zero, from: [-32, 55, 22], relativeTo: nil)
             fillLight.look(at: .zero, from: [40, 38, -45], relativeTo: nil)
             root.addChild(sun)
             root.addChild(fillLight)
@@ -352,6 +402,29 @@ final class FarmController {
         audio.setEnabled(soundEnabled)
         selectionFeedback()
     }
+    /// Photograph the meadow as it is on screen, then show it on its card.
+    func takePostcard() {
+        guard !isCapturing, !isLoading, errorMessage == nil else { return }
+        stop()
+        selectionFeedback()
+        isCapturing = true
+        Task { [weak self] in
+            // One beat for the controls to clear and the scene to draw a frame without them.
+            try? await Task.sleep(for: .milliseconds(150))
+            guard let self else { return }
+            let photo = PostcardMaker.photograph()
+            self.isCapturing = false
+            guard let photo,
+                  let postcard = PostcardMaker.make(photo: photo, title: Daylight.copy(for: self.dayPhase).title,
+                                                    line: PostcardCaption.growing(in: self.field)) else {
+                self.showToast("The camera couldn’t see the meadow just now.")
+                return
+            }
+            self.postcard = postcard
+            self.activeSheet = .postcard
+        }
+    }
+
     func setActive(_ active: Bool) {
         isActive = active
         skipGrowthFrame = true
@@ -411,6 +484,11 @@ final class FarmController {
         fieldRenderer?.animate(seconds: dt)
         if growth.advancedSeconds > 0 { dirty = true }
         elapsed += dt
+        // The day runs on the crops' clock. It rests whenever they do.
+        if light == .flow {
+            dayTime = Daylight.wrap(dayTime + activeSeconds)
+            if abs(dayTime - litDay) >= 0.25 { updateLight() }
+        }
         let input: DriveInput? = cameraMode == .tractor && steeringGesture?.moved == true
             ? .heading(steeringGesture!.heading) : nil
         let movement = navigation.step(tractorState, deltaTime: dt, tool: tool, obstacles: obstacles,
@@ -453,9 +531,28 @@ final class FarmController {
         }
         syncTractor()
         updateFollowCamera(deltaTime: dt)
+        // A gust reads the field as it crosses: each beat sounds what grows there.
+        let gust = wind.advance(seconds: activeSeconds)
+        for step in gust.steps {
+            for note in WindScore.notes(in: field, step: step) {
+                let pitch = note.voice.crop.map { WindScore.frequency($0, band: note.band, night: glow > 0.6) } ?? 0
+                audio.windNote(note.voice, frequency: pitch, level: note.level * WindScore.accent(step: step),
+                               pan: Double(step) / Double(WindScore.steps - 1) * 1.2 - 0.6)
+            }
+        }
+        audio.setGust(gust.strength)
+        let still = UIAccessibility.isReduceMotionEnabled
+        var front = still ? nil : gust.front
+#if DEBUG
+        if let heldGustFront { front = heldGustFront }
+#endif
+        fieldRenderer?.lean(front: front, time: elapsed)
+        dusk?.animate(time: still ? 0 : elapsed)
         for (wheel, original) in wheels { wheel.orientation = original * simd_quatf(angle: wheelAngle, axis: [1, 0, 0]) }
-        if !UIAccessibility.isReduceMotionEnabled {
-            for (sail, original, rate) in sails { sail.orientation = original * simd_quatf(angle: Float(elapsed) * rate, axis: [0, 0, 1]) }
+        if !still {
+            // The windmills pick up while the gust passes.
+            sailTurn += Float(dt * (1 + gust.strength * 2.2))
+            for (sail, original, rate) in sails { sail.orientation = original * simd_quatf(angle: sailTurn * rate, axis: [0, 0, 1]) }
             for (index, bird) in birds.enumerated() {
                 let phase = Float(elapsed) * 0.12 + Float(index) * 0.8
                 bird.0.position = bird.1 + [sin(phase) * 2.0, sin(phase * 1.7) * 0.4, cos(phase) * 1.5]
@@ -493,6 +590,9 @@ final class FarmController {
             + ",tractorView=\(cameraMode == .tractor ? 1 : 0)"
             + String(format: ",heading=%.3f,cameraX=%.3f,cameraY=%.3f,cameraZ=%.3f",
                      tractorState.heading, Double(camera.position.x), Double(camera.position.y), Double(camera.position.z))
+        // The lean is in thousandths, so the tests can read it as a whole number.
+        let lean = Int(((fieldRenderer?.strongestLean ?? 0) * 1000).rounded())
+        testTelemetry += ",gust=\(wind.isGusting ? 1 : 0),lean=\(lean)"
         if let target {
             testTelemetry += String(format: ",targetX=%.3f,targetZ=%.3f", target.x, target.z)
         }
@@ -518,15 +618,50 @@ final class FarmController {
             }
         }
     }
+    private func lightChanged() {
+        // A held light jumps to its moment; drifting carries on from wherever it is.
+        if let held = Daylight.holdSeconds(light) { dayTime = held }
+        updateLight()
+        persist()
+    }
+
+    /// Set the lights, the lamps, the soundscape, and the interface's tint for
+    /// this moment of the day. Called a few times a second while the day drifts.
     private func updateLight() {
+        let now = Daylight.at(dayTime)
+        litDay = dayTime
+        glow = now.glow
+        func color(_ rgb: SIMD3<Double>) -> UIColor {
+            UIColor(red: rgb.x, green: rgb.y, blue: rgb.z, alpha: 1)
+        }
         // Use the web light colors; RealityKit lux are calibrated separately from
         // Three.js intensity to retain the web's bright, softly muted appearance.
-        sun.components.set(DirectionalLightComponent(color: UIColor(farmHex: goldenLight ? "#FFD299" : "#FFF1CE"), intensity: goldenLight ? 2700 : 2500))
-        fillLight.components.set(DirectionalLightComponent(color: UIColor(farmHex: goldenLight ? "#FFE3BB" : "#FFF8DF"), intensity: goldenLight ? 960 : 1200))
-        if let environment = (goldenLight ? goldenDaylight : daylight) ?? daylight ?? goldenDaylight {
-            root.components.set(ImageBasedLightComponent(source: .single(environment), intensityExponent: goldenLight ? 0.68 : 1))
+        // The morning light is 2,500 lux of sun and 1,200 of fill, as before.
+        sun.components.set(DirectionalLightComponent(color: color(now.sun), intensity: Float(now.sunPower * 2500 / 3.1)))
+        sun.look(at: .zero, from: SIMD3<Float>(now.sunFrom * 67.4), relativeTo: nil)
+        fillLight.components.set(DirectionalLightComponent(color: color(now.skyLight), intensity: Float(now.ambient * 480)))
+        // Cream sky by day, gold towards evening, moonlight after dark. Only two
+        // of the three are ever blended, because moonlight follows gold.
+        let source: ImageBasedLightComponent.Source?
+        if now.moon > 0.001, let goldenDaylight, let nightDaylight {
+            source = now.moon > 0.999 ? .single(nightDaylight) : .blend(goldenDaylight, nightDaylight, Float(now.moon))
+        } else if now.warmth > 0.001, let daylight, let goldenDaylight {
+            source = now.warmth > 0.999 ? .single(goldenDaylight) : .blend(daylight, goldenDaylight, Float(now.warmth))
+        } else if let environment = daylight ?? goldenDaylight ?? nightDaylight {
+            source = .single(environment)
+        } else {
+            source = nil
+        }
+        if let source {
+            // Exponent 1 in the morning and 0.68 at golden hour, as before.
+            root.components.set(ImageBasedLightComponent(source: source, intensityExponent: Float(1 + log2(now.ambient / 2.5))))
             root.components.set(ImageBasedLightReceiverComponent(imageBasedLight: root))
         }
+        dusk?.update(glow: now.glow)
+        audio.setAmbience(birdsong: now.birds, crickets: now.glow)
+        let tint = SkyTint(now)
+        if tint != self.tint { self.tint = tint }
+        if now.phase != dayPhase { dayPhase = now.phase }
         var shadows = DirectionalLightComponent.Shadow()
         shadows.shadowProjection = .automatic(maximumDistance: cameraMode == .tractor ? 65 : 160)
         shadows.depthBias = 1.0
@@ -549,8 +684,9 @@ final class FarmController {
         }
         let saved = MeadowSave(field: field, tractor: TractorState(x: tractorState.x, z: tractorState.z,
                                heading: tractorState.heading, speed: 0), tool: tool, rowAssist: false,
-                               pace: pace, goldenLight: goldenLight, volume: volume,
-                               haptics: haptics, introDismissed: introDismissed, cameraMode: cameraMode, selectedCrop: selectedCrop)
+                               pace: pace, goldenLight: light == .golden, volume: volume,
+                               haptics: haptics, introDismissed: introDismissed, cameraMode: cameraMode, selectedCrop: selectedCrop,
+                               light: light, day: dayTime)
         do { try MeadowStore.save(saved, to: saveURL); hasSaveError = false; dirty = false }
         catch { hasSaveError = true; logger.error("Save failed: \(String(describing: error), privacy: .public)") }
     }

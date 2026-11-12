@@ -21,25 +21,45 @@ struct FarmArtwork: Decodable, Sendable {
         }.value
     }
 
-    /// Match the cream sky and olive ground bounce in src/main.ts's hemisphere light.
+    /// The three skies the day blends between. Colours are the hemisphere light's
+    /// sky and ground at the morning, golden, and night keyframes in src/daylight.ts.
+    enum Sky {
+        case day, golden, night
+
+        var colors: [String] {
+            switch self {
+            case .day: ["#FFF8DF", "#7C9060"]
+            case .golden: ["#FFE3BB", "#7C9060"]
+            case .night: ["#7F95C4", "#33424D"]
+            }
+        }
+        var name: String {
+            switch self {
+            case .day: "A soft summer sky"
+            case .golden: "A golden evening sky"
+            case .night: "A bright night sky"
+            }
+        }
+    }
+
+    /// Match the sky and ground bounce of the web's hemisphere light.
     /// Generated locally so the native app needs no remote textures or assets.
     @MainActor
-    static func makeDaylight(golden: Bool = false) async throws -> EnvironmentResource {
+    static func makeDaylight(_ sky: Sky = .day) async throws -> EnvironmentResource {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = true
         format.preferredRange = .standard
         let image = UIGraphicsImageRenderer(size: CGSize(width: 512, height: 256), format: format).image { context in
             let canvas = context.cgContext
-            let colors = [golden ? "#FFE3BB" : "#FFF8DF", "#7C9060"]
-                .map { UIColor(farmHex: $0).cgColor }
+            let colors = sky.colors.map { UIColor(farmHex: $0).cgColor }
             if let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: colors as CFArray,
                                          locations: [0, 1]) {
                 canvas.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: 256), options: [])
             }
         }
         guard let cgImage = image.cgImage else { throw ArtworkError.invalidMesh }
-        return try await EnvironmentResource(equirectangular: cgImage, withName: golden ? "A golden spring sky" : "A soft spring sky")
+        return try await EnvironmentResource(equirectangular: cgImage, withName: sky.name)
     }
 }
 

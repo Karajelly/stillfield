@@ -181,10 +181,9 @@ export function createField(
       seedCenters,
     ],
     dummy = new THREE.Object3D(),
-    color = new THREE.Color(),
-    tint = new THREE.Color();
-  // A ripening plant swells briefly about its base; 1 leaves it at rest.
-  let lift = 1;
+    color = new THREE.Color();
+  dummy.rotation.order = "ZYX";
+  let lean = 0;
   function put(
     mesh: THREE.InstancedMesh,
     i: number,
@@ -196,19 +195,28 @@ export function createField(
     sz = sx,
     angle = 0,
   ) {
-    dummy.position.set(x, y * lift, z);
-    dummy.rotation.set(0, angle, 0);
-    dummy.scale.set(sx * lift, sy * lift, sz * lift);
+    // A gust leans each plant downwind about its foot, after its own turn.
+    const height = y - 0.05;
+    dummy.position.set(
+      x + Math.sin(lean) * height,
+      0.05 + Math.cos(lean) * height,
+      z,
+    );
+    dummy.rotation.set(0, angle, -lean);
+    dummy.scale.set(sx, sy, sz);
     dummy.updateMatrix();
     mesh.setMatrixAt(i, dummy.matrix);
   }
-  function updatePoint(i: number) {
+  function updatePoint(i: number, sway = 0) {
     const p = points[i],
       state = grid[p.cell],
       crop = engine.cropAt(p.cell),
       stage = engine.stage(p.cell),
       growing = state === Ground.growing || state === Ground.mature;
+    lean = 0;
     for (const mesh of meshes) put(mesh, i, p.x, 0.05, p.z, 0);
+    // Seeds stay put, and short stubble barely stirs.
+    lean = state === Ground.stubble ? sway * 0.4 : stage === 0 && growing ? 0 : sway;
     if (state === Ground.grass) {
       put(grass, i, p.x, 0.05, p.z, p.height, p.height, p.height, p.angle);
       grass.setColorAt(i, color.set(i % 2 ? "#7e9557" : "#a8b775"));
@@ -254,67 +262,32 @@ export function createField(
       }
       return;
     }
-    // The engine saves exact progress, so plants rise within each stage
-    // instead of jumping between three heights.
-    const within = stage === 3 ? 1 : engine.progress[p.cell] * 3 - stage,
-      rise = within * within * (3 - 2 * within);
-    const full =
-        crop === "sunflowers" ? 1.15 : crop === "pumpkins" ? 0.22 : 0.85,
-      sprout = Math.min(0.3, full);
     const h =
       stage === 1
-        ? 0.12 + (sprout - 0.12) * rise
-        : stage === 2
-          ? sprout + (full - sprout) * rise
-          : full;
-    const spread =
-      crop === "pumpkins"
-        ? stage === 1
-          ? 0.2 + 0.25 * rise
-          : stage === 2
-            ? 0.45 + 0.75 * rise
-            : 1.2
-        : stage === 1
-          ? 0.45 + 0.25 * rise
-          : 0.7;
+        ? 0.25
+        : crop === "sunflowers"
+          ? 1.15
+          : crop === "pumpkins"
+            ? 0.22
+            : 0.85;
     put(
       grass,
       i,
       p.x,
       0.05,
       p.z,
-      spread,
+      crop === "pumpkins" ? (stage === 1 ? 0.35 : 1.2) : 0.7,
       h,
-      crop === "pumpkins" ? spread : spread * (0.8 / 0.7),
+      crop === "pumpkins" ? (stage === 1 ? 0.35 : 1.2) : 0.8,
       p.angle,
     );
-    // Wheat turns from green toward gold as it nears harvest.
-    const ripening = crop === "wheat" && stage === 2 ? rise * rise * 0.6 : 0;
     grass.setColorAt(
       i,
-      crop === "wheat" && stage === 3
-        ? color.set("#cbb36a")
-        : color.set("#78934e").lerp(tint.set("#cbb36a"), ripening),
+      color.set(crop === "wheat" && stage === 3 ? "#cbb36a" : "#78934e"),
     );
     if (crop === "wheat" && stage >= 2) {
-      const ear = stage === 3 ? 1 : 0.35 + 0.65 * rise;
-      put(
-        heads,
-        i,
-        p.x,
-        0.05 + h * 0.7,
-        p.z,
-        0.75 * ear,
-        2.3 * ear,
-        0.75 * ear,
-        p.angle,
-      );
-      heads.setColorAt(
-        i,
-        stage === 3
-          ? color.set("#ddc176")
-          : color.set("#90a65e").lerp(tint.set("#ddc176"), ripening),
-      );
+      put(heads, i, p.x, 0.05 + h * 0.7, p.z, 0.75, 2.3, 0.75, p.angle);
+      heads.setColorAt(i, color.set(stage === 3 ? "#ddc176" : "#90a65e"));
     }
     if (crop === "sunflowers" && stage >= 2) {
       put(stems, i, p.x, h / 2, p.z, 1, h, 1);
@@ -334,12 +307,14 @@ export function createField(
       }
     }
     if (crop === "pumpkins" && stage === 3) {
+      // The leaves move; the pumpkins themselves sit where they grew.
+      lean = 0;
       put(pumpkins, i, p.x, 0.28, p.z, 1, 0.85, 1, p.angle);
       put(stems, i, p.x, 0.52, p.z, 1, 0.15, 1);
     }
   }
-  function dirty() {
-    texture.needsUpdate = true;
+  function dirty(ground = true) {
+    if (ground) texture.needsUpdate = true;
     for (const mesh of meshes) {
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
@@ -352,72 +327,55 @@ export function createField(
   }
   redraw();
   const display = createHarvestDisplay(scene, engine);
-  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  // Cells that have just ripened, with the seconds since they did.
-  const swells = new Map<number, number>();
-  const SWELL_SECONDS = 0.7,
-    GROWTH_REFRESH_SECONDS = 2,
-    GROWTH_REFRESH_FRAMES = 8;
-  let sinceGrowthRefresh = 0,
-    growCursor = grid.length,
-    growTouched = false;
   function respond(events: FarmingEvents) {
     const cells = [...events.groundChanges, ...events.cropStages];
-    for (const i of events.groundChanges) swells.delete(i);
     for (const i of cells) {
       drawCell(i);
-      byCell.get(i)?.forEach(updatePoint);
+      byCell.get(i)?.forEach((point) => updatePoint(point));
     }
     if (cells.length) dirty();
     if (events.harvestResults.length) display.harvest(events.harvestResults);
-    // A whole field ripening in one step, as after a long frame, stays still.
-    if (!reducedMotion && events.cropMaturities.length <= 400)
-      for (const i of events.cropMaturities) swells.set(i, 0);
     return events;
   }
-  /** Ripening follows the path the seed was sown along, a row at a time. */
-  function swell(seconds: number) {
-    if (!swells.size) return;
-    for (const [cell, age] of swells) {
-      const next = age + seconds;
-      if (next >= SWELL_SECONDS) swells.delete(cell);
-      else {
-        swells.set(cell, next);
-        lift = 1 + 0.24 * Math.sin((next / SWELL_SECONDS) * Math.PI);
-      }
-      byCell.get(cell)?.forEach(updatePoint);
-      lift = 1;
+  // Plants within a few metres behind a gust front bend, then settle.
+  const GUST_TRAIL = 6.5;
+  let swaying = new Set<number>();
+  function wind(front: number | null, time: number) {
+    const next = new Set<number>();
+    if (front !== null) {
+      const first = Math.max(
+          0,
+          Math.floor((front - GUST_TRAIL - FIELD.minX) / FIELD.cell),
+        ),
+        last = Math.min(
+          COLUMNS - 1,
+          Math.floor((front - FIELD.minX) / FIELD.cell),
+        );
+      for (let col = first; col <= last; col++)
+        for (let row = 0; row < ROWS; row++)
+          for (const i of byCell.get(row * COLUMNS + col) ?? []) {
+            const p = points[i],
+              u = (front - p.x) / GUST_TRAIL;
+            if (u <= 0 || u >= 1) continue;
+            // A quick push at the front, then a slow, fluttering release.
+            const rise = Math.min(1, u / 0.22),
+              fall = Math.min(1, (1 - u) / 0.78);
+            const bend = rise * rise * (3 - 2 * rise) * fall * fall;
+            updatePoint(
+              i,
+              bend * (0.42 + Math.sin(time * 7 + p.angle * 3) * 0.07),
+            );
+            next.add(i);
+          }
     }
-    dirty();
-  }
-  /** Redraw growing plants a slice per frame, so a full field never stalls one. */
-  function grow(seconds: number) {
-    sinceGrowthRefresh += seconds;
-    if (growCursor >= grid.length) {
-      if (sinceGrowthRefresh < GROWTH_REFRESH_SECONDS) return;
-      sinceGrowthRefresh = 0;
-      growCursor = 0;
-      growTouched = false;
-    }
-    const end = Math.min(
-      grid.length,
-      growCursor + Math.ceil(grid.length / GROWTH_REFRESH_FRAMES),
-    );
-    for (; growCursor < end; growCursor++) {
-      // Seed beds look the same until the first shoots appear.
-      if (
-        grid[growCursor] !== Ground.growing ||
-        engine.progress[growCursor] < 1 / 3
-      )
-        continue;
-      byCell.get(growCursor)?.forEach(updatePoint);
-      growTouched = true;
-    }
-    if (growCursor >= grid.length && growTouched) dirty();
+    for (const i of swaying) if (!next.has(i)) updatePoint(i);
+    if (next.size || swaying.size) dirty(false);
+    swaying = next;
   }
   return {
     engine,
     grid,
+    wind,
     paint(
       x: number,
       z: number,
@@ -433,15 +391,11 @@ export function createField(
     },
     advance(seconds: number) {
       const event = respond(engine.advance(seconds));
-      grow(event.advancedSeconds);
-      swell(seconds);
       display.update(seconds);
       return event;
     },
     reset() {
       engine.reset();
-      swells.clear();
-      growCursor = grid.length;
       redraw();
       display.clear();
     },

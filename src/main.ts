@@ -5,7 +5,6 @@ import { createField } from "./field";
 import { CROPS, CROP_NAMES, Ground } from "./farming";
 import type { Crop, FarmSnapshot, FarmingEvents } from "./farming";
 import { createTractor } from "./tractor";
-import { createWorkEffects } from "./effects";
 import { FarmAudio } from "./audio";
 import { clamp, FIELD } from "./simulation";
 import { TractorNavigation } from "./tractor-navigation";
@@ -14,7 +13,35 @@ import { rowRect } from "./tidy-rows";
 import type { Point, Tool, TractorState } from "./simulation";
 import { icon, brandMark } from "./icons";
 import { overviewFraming } from "./overview";
-import { GridKeyboard, isDriveKey } from "./keyboard-navigation";
+import { DriveKeyboard, GridKeyboard, isDriveKey } from "./keyboard-navigation";
+import { drivableTarget, FOLLOW_ZOOM, SteeringGesture, TractorFollowCamera } from "./follow-camera";
+import type { CameraMode } from "./follow-camera";
+import {
+  DAY_COPY,
+  DAY_HOLDS,
+  daylightAt,
+  holdSeconds,
+  wrapDay,
+} from "./daylight";
+import type { DayHold, DayPhase } from "./daylight";
+import { createDusk } from "./dusk";
+import {
+  Wind,
+  WIND_STEPS,
+  beatAccent,
+  sliceNotes,
+  windFrequency,
+} from "./wind";
+import {
+  PHOTO,
+  POSTCARD_SIZE,
+  composePostcard,
+  growingLine,
+  photograph,
+  postcardBlob,
+  postcardCamera,
+} from "./postcard";
+import type { PostcardView } from "./postcard";
 
 interface Save {
   version: 1 | 2 | 3;
@@ -25,10 +52,13 @@ interface Save {
   tool: Tool;
   guide: boolean;
   pace: number;
+  /** Kept for saves from before the day began to move. */
   golden: boolean;
+  light?: DayHold;
+  day?: number;
   intro: boolean;
   volume: number;
-  follow?: boolean;
+  cameraMode?: CameraMode;
   tidy?: boolean;
 }
 let saved: Partial<Save> = {};
@@ -44,16 +74,34 @@ try {
   /* A private meadow works even without browser storage. */
 }
 const tools: Tool[] = ["cultivate", "sow", "harvest", "wander"];
+const LIGHT_NAMES: Record<DayHold, string> = {
+  flow: "Drifting",
+  morning: "Morning",
+  golden: "Golden",
+  dusk: "Dusk",
+  night: "Night",
+};
 let selectedTool: Tool = tools.includes(saved.tool!)
   ? saved.tool!
   : saved.tool === "mow" || saved.tool === "restore"
     ? "wander"
     : "harvest";
 let selectedCrop: Crop = CROPS.includes(saved.crop!) ? saved.crop! : "wheat";
+let cameraMode: CameraMode = saved.cameraMode === "tractor" ? "tractor" : "overview";
 let windowActive = document.hasFocus();
 let pace =
-    typeof saved.pace === "number" ? clamp(saved.pace, 0.55, 1.25) : 0.85,
-  golden = saved.golden ?? false;
+    typeof saved.pace === "number" ? clamp(saved.pace, 0.55, 1.25) : 0.85;
+// The day drifts unless the player keeps a favourite light. An older save with
+// golden light switched on keeps its golden hour.
+let light: DayHold = DAY_HOLDS.includes(saved.light!)
+  ? saved.light!
+  : saved.golden
+    ? "golden"
+    : "flow";
+let dayTime =
+  light === "flow"
+    ? wrapDay(typeof saved.day === "number" ? saved.day : 0)
+    : holdSeconds(light);
 let paused = false,
   soundEnabled = false,
   modalOpen = false,
@@ -82,14 +130,14 @@ navigation.tidy = tidy;
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
   <main class="farm-app welcoming">
-    <div id="scene" aria-label="Your pastoral farm. Tap or drag the meadow to drive. WASD or arrow keys follow the field rows, turning in place." role="application" tabindex="0"></div>
+    <div id="scene" aria-label="Your pastoral farm. Tap or drag the meadow to drive. WASD or arrow keys follow the field rows, turning in place; in tractor view, W rolls, A and D steer, and S settles." role="application" tabindex="0"></div>
     <div class="vignette" aria-hidden="true"></div>
     <header class="topbar menu-panel" id="top-controls">
       <a class="brand" href="#" aria-label="Stillfield home">stillfield</a>
       <button class="place-pill" id="place" aria-label="About Stillfield"><span class="live-dot"></span>Your farm ${icon("down")}</button>
       <div class="top-actions">
-        <div class="weather">${icon("sun")}<span id="weather-copy">A slow summer morning<span>76° · a gentle breeze</span></span></div>
-        <div class="action-group"><button class="round-button" id="sound" aria-label="Turn on nature sounds" aria-pressed="false" title="Nature sounds">${icon("muted")}</button><button class="round-button" id="pause" aria-label="Pause" aria-pressed="false" title="Pause (space)">${icon("pause")}</button><button class="round-button" id="settings" aria-label="Open settings" title="Make yourself at home">${icon("settings")}</button></div>
+        <div class="weather" id="weather"></div>
+        <div class="action-group"><button class="round-button" id="postcard" aria-label="Make a postcard of your meadow" title="A postcard">${icon("camera")}</button><button class="round-button" id="sound" aria-label="Turn on nature sounds" aria-pressed="false" title="Nature sounds">${icon("muted")}</button><button class="round-button" id="pause" aria-label="Pause" aria-pressed="false" title="Pause (space)">${icon("pause")}</button><button class="round-button" id="settings" aria-label="Open settings" title="Make yourself at home">${icon("settings")}</button></div>
       </div>
     </header>
     <section class="welcome" id="welcome" aria-labelledby="welcome-title">
@@ -118,10 +166,10 @@ app.innerHTML = `
             `<button class="tool-button ${id === selectedTool ? "selected" : ""}" data-tool="${id}" aria-pressed="${id === selectedTool}" title="${desc} (${i + 1})"><span class="tool-illustration ${id}">${icon(id)}</span><span>${name}</span><kbd>${i + 1}</kbd></button>`,
         )
         .join("")}</nav>
-      <div class="drive-hint" id="drive-hint"><span class="hint-desktop"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to drive <span class="hint-dot">·</span></span> tap or click to roam around</div>
+      <div class="drive-hint" id="drive-hint"></div>
     </section>
     <footer class="bottom-bar menu-panel" id="view-controls">
-      <div class="zoom-controls"><button id="follow" aria-label="Follow the tractor" aria-pressed="false" title="Follow the tractor (V)">${icon("camera")}</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="recenter" aria-label="Center the farm" title="Center the farm">${icon("expand")}</button><button id="zoom-in" aria-label="Zoom in">+</button></div>
+      <div class="zoom-controls"><button class="view-toggle" id="view-mode" aria-pressed="false" aria-label="Drive in tractor view" title="Tractor view (V)">${icon("tractor")}</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="recenter" aria-label="Center the farm" title="Center the farm">${icon("expand")}</button><button id="zoom-in" aria-label="Zoom in">+</button></div>
     </footer>
     <button class="controls-toggle" id="controls-toggle" aria-label="Hide controls" aria-expanded="true" aria-controls="top-controls tool-controls view-controls" title="Hide controls (M)" hidden>${icon("right")}</button>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -206,6 +254,9 @@ try {
   throw new Error("WebGL unavailable");
 }
 const touchDevice = window.matchMedia("(pointer: coarse)").matches;
+const reducedMotion = window.matchMedia(
+  "(prefers-reduced-motion: reduce)",
+).matches;
 renderer.setPixelRatio(
   Math.min(window.devicePixelRatio, touchDevice ? 1.5 : 2),
 );
@@ -217,9 +268,13 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 sceneContainer.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
-scene.background = new THREE.Color("#e8ecda");
+const sky = new THREE.Color("#e8ecda");
+scene.background = sky;
 scene.fog = new THREE.Fog("#e8ecda", 125, 230);
 const camera = new THREE.OrthographicCamera(-55, 55, 35, -35, 0.1, 300);
+const followView = new THREE.PerspectiveCamera(58, 1, 0.1, 300);
+const followCamera = new TractorFollowCamera();
+const viewCamera = () => (cameraMode === "tractor" ? followView : camera);
 const keyboardDown = new THREE.Vector3();
 const hemi = new THREE.HemisphereLight("#fff8df", "#7c9060", 2.5);
 scene.add(hemi);
@@ -241,7 +296,8 @@ const world = createWorld(scene);
 const field = createField(scene, saved.farm ?? saved.grid);
 const tractor = createTractor(scene);
 tractor.setTool(selectedTool);
-const effects = createWorkEffects(scene);
+const dusk = createDusk(scene, tractor.group);
+const wind = new Wind();
 let volume =
   typeof saved.volume === "number" ? clamp(saved.volume, 0, 1) : 0.45;
 const audio = new FarmAudio();
@@ -260,9 +316,9 @@ cursor.position.y = 0.08;
 cursor.visible = false;
 scene.add(cursor);
 // A pale wash over the rows the tractor has been asked to work. It shrinks
-// as each row is done, so what is left to do is always plain to see.
-// Drawn over the meadow rather than under it: at ground level the grass
-// hides it completely.
+// as each row is done, so what is left to do is always plain to see. It is
+// drawn over the meadow, because at ground level the grass hides it, so it
+// shows in the overhead view only.
 const rowWashMaterial = new THREE.MeshBasicMaterial({
   color: "#f9f4d9",
   transparent: true,
@@ -280,7 +336,7 @@ const rowWash = Array.from({ length: 12 }, () => {
   return mesh;
 });
 function updateRowWash() {
-  const rows = navigation.plannedRows,
+  const rows = cameraMode === "overview" ? navigation.plannedRows : [],
     run = navigation.run;
   rowWash.forEach((mesh, index) => {
     const row = rows[index];
@@ -306,17 +362,8 @@ const raycaster = new THREE.Raycaster(),
   pointer = new THREE.Vector2(),
   groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
   intersection = new THREE.Vector3();
-// The overview frames the whole farm. Following keeps the same angle, closer,
-// so the plants and the implement are large enough to enjoy.
-const FOLLOW_ZOOM = { min: 1.9, max: 3.6, default: 2.6 };
-let follow = saved.follow === true,
-  followZoom = FOLLOW_ZOOM.default;
-const cameraBase = new THREE.Vector3(),
-  cameraFocus = new THREE.Vector3(),
-  cameraPan = new THREE.Vector3(),
-  cameraWant = new THREE.Vector3();
 let zoom = 1,
-  cameraZoom = follow ? followZoom : zoom,
+  tractorZoom = FOLLOW_ZOOM.default,
   lastTime = 0,
   time = 0,
   lastSave = 0,
@@ -356,66 +403,59 @@ function resize() {
   renderer.setSize(width, height);
   const aspect = width / height;
   const { position, focus, vertical } = overviewFraming(aspect);
-  cameraBase.copy(position);
-  cameraFocus.copy(focus);
-  // Aim before panning: the view slides over the ground without turning.
   camera.position.copy(position);
   camera.lookAt(focus);
-  camera.position.add(cameraPan);
   camera.updateMatrixWorld();
   keyboardDown.copy(position).sub(focus).setY(0).normalize();
   camera.left = (-vertical * aspect) / 2;
   camera.right = (vertical * aspect) / 2;
   camera.top = vertical / 2;
   camera.bottom = -vertical / 2;
-  camera.zoom = cameraZoom;
+  camera.zoom = zoom;
   camera.updateProjectionMatrix();
+  followView.aspect = aspect;
+  followView.fov = TractorFollowCamera.verticalFieldOfView(aspect);
+  followView.updateProjectionMatrix();
+  updateFollowCamera(0, true);
   positionLabels();
 }
-function setFollow(value: boolean) {
-  follow = value;
-  const button = document.querySelector("#follow")!;
-  button.setAttribute("aria-pressed", String(follow));
-  button.setAttribute(
-    "aria-label",
-    follow ? "Show the whole farm" : "Follow the tractor",
-  );
+function updateFollowCamera(dt: number, snap = false) {
+  if (cameraMode !== "tractor") return;
+  const pose = followCamera.update(tractorState, tractorZoom, dt, world.obstacles, snap || reducedMotion);
+  followView.position.copy(pose.position);
+  followView.lookAt(pose.focus);
+  followView.updateMatrixWorld();
+}
+function setCameraMode(mode: CameraMode, announce = true) {
+  setControlsHidden(false);
+  stop();
+  cameraMode = mode;
+  const tractorView = mode === "tractor";
+  document.querySelector(".farm-app")!.classList.toggle("tractor-view", tractorView);
+  const button = document.querySelector<HTMLButtonElement>("#view-mode")!;
+  button.setAttribute("aria-pressed", String(tractorView));
+  button.setAttribute("aria-label", tractorView ? "Return to farm view" : "Drive in tractor view");
+  button.title = `${tractorView ? "Farm view" : "Tractor view"} (V)`;
+  document.querySelector("#recenter")!.setAttribute("aria-label", tractorView ? "Center behind the tractor" : "Center the farm");
+  document.querySelector("#drive-hint")!.innerHTML = tractorView
+    ? `<span class="hint-desktop"><kbd>W</kbd> to roll <span class="hint-dot">·</span><kbd>A</kbd><kbd>D</kbd> to steer <span class="hint-dot">·</span></span> drag to roll and steer <span class="hint-dot">·</span> tap a spot`
+    : `<span class="hint-desktop"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to drive <span class="hint-dot">·</span></span> tap or click to roam around`;
+  resize();
+  if (!announce) return;
+  dismissIntro();
   persist();
+  toast(tractorView ? "Drag to roll. Slide sideways to steer, then let go to settle." : "A little room to see it all.");
 }
-function changeZoom(direction: number) {
-  if (follow)
-    followZoom = clamp(
-      followZoom + direction * 0.3,
-      FOLLOW_ZOOM.min,
-      FOLLOW_ZOOM.max,
-    );
-  else zoom = clamp(zoom + direction * 0.12, 0.7, 1.65);
+function zoomBy(amount: number) {
+  if (cameraMode === "tractor")
+    tractorZoom = clamp(tractorZoom + amount * 1.25, FOLLOW_ZOOM.min, FOLLOW_ZOOM.max);
+  else zoom = clamp(zoom + amount, 0.7, 1.65);
+  resize();
 }
-/** Ease toward the chosen view. Reduced motion cuts straight to it. */
-function updateCamera(dt: number) {
-  if (follow)
-    cameraWant.set(
-      tractorState.x - cameraFocus.x,
-      0,
-      tractorState.z - cameraFocus.z,
-    );
-  else cameraWant.set(0, 0, 0);
-  const wantZoom = follow ? followZoom : zoom;
-  if (
-    cameraPan.distanceToSquared(cameraWant) < 1e-6 &&
-    Math.abs(cameraZoom - wantZoom) < 1e-4
-  )
-    return;
-  const ease = reducedMotion ? 1 : 1 - Math.exp(-3.2 * dt);
-  cameraPan.lerp(cameraWant, ease);
-  cameraZoom += (wantZoom - cameraZoom) * ease;
-  if (cameraPan.distanceToSquared(cameraWant) < 1e-6) cameraPan.copy(cameraWant);
-  if (Math.abs(cameraZoom - wantZoom) < 1e-4) cameraZoom = wantZoom;
-  camera.position.copy(cameraBase).add(cameraPan);
-  camera.zoom = cameraZoom;
-  camera.updateProjectionMatrix();
-  camera.updateMatrixWorld();
-  if (!hasDriven) positionLabels();
+function recenter() {
+  if (cameraMode === "tractor") tractorZoom = FOLLOW_ZOOM.default;
+  else zoom = 1;
+  resize();
 }
 function positionLabels() {
   camera.updateMatrixWorld();
@@ -455,16 +495,49 @@ function positionLabels() {
   }
 }
 void document.fonts.ready.then(positionLabels);
-function setLight() {
-  sun.color.set(golden ? "#ffd299" : "#fff1ce");
-  sun.intensity = golden ? 3.3 : 3.1;
-  hemi.color.set(golden ? "#ffe3bb" : "#fff8df");
-  hemi.intensity = golden ? 2.0 : 2.5;
-  scene.background = new THREE.Color(golden ? "#eee5ce" : "#e8ecda");
-  scene.fog!.color.set(golden ? "#eee5ce" : "#e8ecda");
-  document.querySelector("#weather-copy")!.innerHTML =
-    `${golden ? "A little golden hour" : "A slow summer morning"}<span>76° · a gentle breeze</span>`;
-  document.body.classList.toggle("golden", golden);
+const SUN_DISTANCE = 67.4;
+let shownPhase: DayPhase | undefined,
+  shownHaze = "";
+/** Set the lights, the sky, and the interface's tint for this moment of the day. */
+function applyDaylight() {
+  const now = daylightAt(dayTime);
+  sun.color.setRGB(...now.sun, THREE.SRGBColorSpace);
+  sun.intensity = now.sunPower;
+  sun.position.set(
+    now.sunFrom[0] * SUN_DISTANCE,
+    now.sunFrom[1] * SUN_DISTANCE,
+    now.sunFrom[2] * SUN_DISTANCE,
+  );
+  sun.shadow.intensity = now.shadow;
+  hemi.color.setRGB(...now.skyLight, THREE.SRGBColorSpace);
+  hemi.groundColor.setRGB(...now.groundLight, THREE.SRGBColorSpace);
+  hemi.intensity = now.ambient;
+  sky.setRGB(...now.sky, THREE.SRGBColorSpace);
+  scene.fog!.color.copy(sky);
+  renderer.toneMappingExposure = now.exposure;
+  // The page edges take a paler shade of the sky by day and the sky itself at night.
+  const haze = now.sky.map((value) =>
+    Math.round(255 * (value + (1 - value) * 0.5 * (1 - now.glow))),
+  );
+  const hazeCss = haze.join(" ");
+  if (hazeCss !== shownHaze) {
+    shownHaze = hazeCss;
+    document.body.style.setProperty("--haze", hazeCss);
+    document.body.classList.toggle(
+      "after-dark",
+      0.2126 * haze[0] + 0.7152 * haze[1] + 0.0722 * haze[2] < 150,
+    );
+  }
+  // The ground darkens before the sky does, so labels on it switch earlier.
+  document.body.classList.toggle("lamplit", now.glow > 0.4);
+  if (now.phase !== shownPhase) {
+    shownPhase = now.phase;
+    const [title, detail] = DAY_COPY[now.phase];
+    const dark = now.phase === "dusk" || now.phase === "night";
+    document.querySelector("#weather")!.innerHTML =
+      `${icon(dark ? "moon" : "sun")}<span id="weather-copy">${title}<span>${detail}</span></span>`;
+  }
+  return now;
 }
 function persist() {
   try {
@@ -476,10 +549,12 @@ function persist() {
       tool: selectedTool,
       guide: false,
       pace,
-      golden,
+      golden: light === "golden",
+      light,
+      day: dayTime,
       intro: introDismissed,
       volume,
-      follow,
+      cameraMode,
       tidy,
     };
     if (legacySaveBackup) {
@@ -502,8 +577,10 @@ function toast(message: string) {
 function stop() {
   navigation.cancel();
   pointerId = null;
+  steering = null;
   target = null;
   keyboard.reset();
+  driveKeys.reset();
   cursor.visible = false;
   updateRowWash();
   tractorState.speed = 0;
@@ -541,16 +618,19 @@ async function toggleSound() {
 }
 const dialog = document.querySelector<HTMLDialogElement>("#dialog")!;
 let modalOpener: HTMLElement | null = null;
+let postcardUrl: string | undefined;
 function closeDialog() {
   dialog.close();
   modalOpen = false;
   modalOpener?.focus();
 }
-function openDialog(content: string) {
+function openDialog(content: string, kind = "") {
   setControlsHidden(false);
   stop();
-  modalOpener = document.activeElement as HTMLElement;
+  // A dialog that replaces another keeps the control that first opened one.
+  if (!dialog.open) modalOpener = document.activeElement as HTMLElement;
   modalOpen = true;
+  dialog.className = kind;
   document.querySelector("#dialog-content")!.innerHTML =
     `<button class="dialog-close round-button" aria-label="Close">${icon("close")}</button>${content}`;
   dialog.showModal();
@@ -558,24 +638,42 @@ function openDialog(content: string) {
 }
 function showHelp() {
   openDialog(
-    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO STILLFIELD</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>${tidy ? "Tap where a row should end and the tractor works a straight row to it. Tap more rows whenever you like and it works them in turn. Tap twice to fill every row up to that spot. Drag to steer freehand." : "Tap where the work should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop."}<br>WASD or arrow keys follow the field rows. Tap a new direction to turn in place; hold to drive. Up follows the view, even when the window is narrow.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Cultivate prepares soil and clears any crops. Sow wheat, sunflowers, or pumpkins, then harvest when they’re ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests gather in pots and carts by the field.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Crops grow only while you’re here: sunflowers in 3 minutes, wheat in 6, pumpkins in 9. Nothing withers. Your meadow saves on this device.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
+    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO STILLFIELD</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>${tidy ? "Tap where a row should end and the tractor works a straight row to it. Tap more rows whenever you like and it works them in turn. Tap twice to fill every row up to that spot. Drag to steer freehand." : "Tap where the work should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop."}<br>WASD or arrow keys follow the field rows. Tap a new direction to turn in place; hold to drive. Up follows the view, even when the window is narrow.<br>The tractor button beside the zoom controls, or V, follows behind your tractor. Drag to roll; slide left or right from where you pressed to choose its direction, and let go to settle. With keys, W rolls, A and D steer, and S settles.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Cultivate prepares soil and clears any crops. Sow wheat, sunflowers, or pumpkins, then harvest when they’re ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests gather in pots and carts by the field.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Crops grow only while you’re here: sunflowers in 3 minutes, wheat in 6, pumpkins in 9. Nothing withers. Your meadow saves on this device.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
   );
   dialog.querySelector("#help-done")!.addEventListener("click", closeDialog);
 }
 function showSettings() {
   openDialog(
-    `<div class="eyebrow">THE WAY YOU LIKE IT</div><h2 id="dialog-title">Settle <em>in.</em></h2><p>A few small comforts for your time outside.</p><div class="settings-list"><label class="setting-row"><span><strong>Golden light</strong><small>A warmer kind of afternoon.</small></span><input type="checkbox" id="golden-setting" ${golden ? "checked" : ""}><span class="switch"></span></label><label class="setting-row"><span><strong>Tidy rows</strong><small>Taps make straight rows, side by side.</small></span><input type="checkbox" id="tidy-setting" ${tidy ? "checked" : ""}><span class="switch"></span></label><label class="range-setting" for="pace-setting"><strong>Your pace</strong><input type="range" id="pace-setting" min="0.55" max="1.25" step="0.05" value="${pace}"><span><small>Unhurried</small><small>A little breezier</small></span></label><label class="range-setting" for="volume-setting"><strong>Nature sounds</strong><input type="range" id="volume-setting" min="0" max="1" step="0.05" value="${volume}"><span><small>A whisper</small><small>All around you</small></span></label></div><button class="reset-button" id="fresh">${icon("reset")} A fresh meadow</button><p class="settings-footnote">${storageAvailable ? "Your meadow is saved automatically on this device." : "Browser storage is unavailable. This meadow lasts for this visit."}</p>`,
+    `<div class="eyebrow">THE WAY YOU LIKE IT</div><h2 id="dialog-title">Settle <em>in.</em></h2><p>A few small comforts for your time outside.</p><div class="settings-list"><div class="choice-setting"><span id="light-label"><strong>Time of day</strong><small>Let the day drift by, or keep the light you like.</small></span><div class="choice-row" role="group" aria-labelledby="light-label">${DAY_HOLDS.map((hold) => `<button class="choice ${hold === light ? "selected" : ""}" data-light="${hold}" aria-pressed="${hold === light}">${LIGHT_NAMES[hold]}</button>`).join("")}</div></div><div class="choice-setting"><span id="rows-label"><strong>Making rows</strong><small>Drive them your own way, or let taps lay them straight, side by side.</small></span><div class="choice-row" role="group" aria-labelledby="rows-label">${[false, true].map((on) => `<button class="choice ${on === tidy ? "selected" : ""}" data-tidy="${on}" aria-pressed="${on === tidy}">${on ? "Tidy rows" : "Freehand"}</button>`).join("")}</div></div><label class="range-setting" for="pace-setting"><strong>Your pace</strong><input type="range" id="pace-setting" min="0.55" max="1.25" step="0.05" value="${pace}"><span><small>Unhurried</small><small>A little breezier</small></span></label><label class="range-setting" for="volume-setting"><strong>Nature sounds</strong><input type="range" id="volume-setting" min="0" max="1" step="0.05" value="${volume}"><span><small>A whisper</small><small>All around you</small></span></label></div><button class="reset-button" id="fresh">${icon("reset")} A fresh meadow</button><p class="settings-footnote">${storageAvailable ? "Your meadow is saved automatically on this device." : "Browser storage is unavailable. This meadow lasts for this visit."}</p>`,
   );
-  dialog.querySelector("#tidy-setting")!.addEventListener("change", (e) => {
-    tidy = (e.target as HTMLInputElement).checked;
-    navigation.tidy = tidy;
-    persist();
-  });
-  dialog.querySelector("#golden-setting")!.addEventListener("change", (e) => {
-    golden = (e.target as HTMLInputElement).checked;
-    setLight();
-    persist();
-  });
+  const lightChoices =
+    dialog.querySelectorAll<HTMLButtonElement>("[data-light]");
+  lightChoices.forEach((choice) =>
+    choice.addEventListener("click", () => {
+      light = choice.dataset.light as DayHold;
+      // A held light jumps to its moment; drifting carries on from wherever it is.
+      if (light !== "flow") dayTime = holdSeconds(light);
+      lightChoices.forEach((other) => {
+        const selected = other === choice;
+        other.classList.toggle("selected", selected);
+        other.setAttribute("aria-pressed", String(selected));
+      });
+      persist();
+    }),
+  );
+  const rowChoices = dialog.querySelectorAll<HTMLButtonElement>("[data-tidy]");
+  rowChoices.forEach((choice) =>
+    choice.addEventListener("click", () => {
+      tidy = choice.dataset.tidy === "true";
+      navigation.tidy = tidy;
+      rowChoices.forEach((other) => {
+        const selected = other === choice;
+        other.classList.toggle("selected", selected);
+        other.setAttribute("aria-pressed", String(selected));
+      });
+      persist();
+    }),
+  );
   dialog.querySelector("#pace-setting")!.addEventListener("input", (e) => {
     pace = Number((e.target as HTMLInputElement).value);
     persist();
@@ -590,13 +688,99 @@ function showSettings() {
     });
   dialog.querySelector("#fresh")!.addEventListener("click", showReset);
 }
+async function showPostcard(view: PostcardView = "farm") {
+  openDialog(
+    `<div class="eyebrow">A KEEPSAKE</div><h2 id="dialog-title">Wish you <em>were here.</em></h2><p>Your meadow, just as it is right now. It stays on this device unless you send it somewhere.</p><img class="postcard-preview" id="postcard-preview" width="${POSTCARD_SIZE.width}" height="${POSTCARD_SIZE.height}" alt="A postcard of your meadow"><div class="choice-row" role="group" aria-label="What the postcard shows">${(
+      [
+        ["farm", "The whole farm"],
+        ["field", "Just the field"],
+      ] as const
+    )
+      .map(
+        ([id, name]) =>
+          `<button class="choice ${id === view ? "selected" : ""}" data-view="${id}" aria-pressed="${id === view}">${name}</button>`,
+      )
+      .join(
+        "",
+      )}</div><button class="primary-button" id="postcard-save" disabled>Save the postcard ${icon("arrow")}</button><button class="text-button" id="postcard-share" hidden>Send it to someone</button>`,
+    "postcard",
+  );
+  const preview = dialog.querySelector<HTMLImageElement>("#postcard-preview")!;
+  dialog
+    .querySelectorAll<HTMLButtonElement>("[data-view]")
+    .forEach((choice) =>
+      choice.addEventListener("click", () => {
+        if (choice.dataset.view !== view)
+          void showPostcard(choice.dataset.view as PostcardView);
+      }),
+    );
+  dialog
+    .querySelector<HTMLButtonElement>(`[data-view="${view}"]`)!
+    .focus({ preventScroll: true });
+  // The caption uses the interface fonts, so wait for them before drawing.
+  await Promise.all([
+    document.fonts.load('italic 400 62px "Lora Variable"'),
+    document.fonts.load('500 72px "Lora Variable"'),
+    document.fonts.load('400 30px "DM Sans Variable"'),
+  ]).catch(() => {});
+  if (!preview.isConnected) return;
+  const shot = postcardCamera(view);
+  const cursorShown = cursor.visible;
+  cursor.visible = false;
+  rowWash.forEach((mesh) => (mesh.visible = false));
+  // Fireflies are sized in screen pixels, so scale them to the larger picture.
+  dusk.setPointScale(
+    PHOTO.height /
+      (shot.top - shot.bottom) /
+      ((innerHeight * zoom) / (camera.top - camera.bottom)),
+  );
+  let photo: HTMLCanvasElement;
+  try {
+    photo = photograph(renderer, scene, shot);
+  } finally {
+    cursor.visible = cursorShown;
+    updateRowWash();
+    dusk.setPointScale(1);
+    renderer.render(scene, viewCamera());
+  }
+  const card = composePostcard(
+    photo,
+    DAY_COPY[daylightAt(dayTime).phase][0],
+    growingLine(field.engine.cells, (cell) => field.engine.cropAt(cell)),
+  );
+  const blob = await postcardBlob(card);
+  if (!blob || !preview.isConnected) return;
+  if (postcardUrl) URL.revokeObjectURL(postcardUrl);
+  postcardUrl = URL.createObjectURL(blob);
+  preview.src = postcardUrl;
+  preview.classList.add("ready");
+  const save = dialog.querySelector<HTMLButtonElement>("#postcard-save")!;
+  save.disabled = false;
+  save.addEventListener("click", () => {
+    const link = document.createElement("a");
+    link.href = postcardUrl!;
+    link.download = "stillfield-postcard.png";
+    link.click();
+    toast("Saved. A little meadow to keep.");
+  });
+  const file = new File([blob], "stillfield-postcard.png", {
+    type: "image/png",
+  });
+  const share = dialog.querySelector<HTMLButtonElement>("#postcard-share")!;
+  if (navigator.canShare?.({ files: [file] })) {
+    share.hidden = false;
+    share.addEventListener("click", () => {
+      // Closing the share sheet is not an error worth mentioning.
+      void navigator.share({ files: [file] }).catch(() => {});
+    });
+  }
+}
 function showReset() {
   openDialog(
     `<div class="dialog-symbol">${icon("sow")}</div><div class="eyebrow">BEGIN AGAIN, GENTLY</div><h2 id="dialog-title">A fresh <em>meadow.</em></h2><p>Return your paths, crops, and harvest displays to an empty meadow. A blank canvas for another quiet afternoon.</p><button class="primary-button" id="confirm-reset">Let it grow ${icon("sow")}</button><button class="text-button" id="cancel-reset">Keep my little corner</button>`,
   );
   dialog.querySelector("#confirm-reset")!.addEventListener("click", () => {
     field.reset();
-    effects.clear();
     navigation = new TractorNavigation();
     navigation.tidy = tidy;
     tractorState = { ...defaultTractor };
@@ -616,14 +800,34 @@ function workable(cell: number) {
       ? ground === Ground.soil
       : selectedTool === "harvest" && ground === Ground.mature;
 }
-function pointerTarget(event: PointerEvent, options: ChooseOptions = {}) {
+// A pass that changes nothing says why, once, instead of leaving it a puzzle.
+let changedSinceTap = 0,
+  lastHint = -Infinity;
+function explainIdlePass() {
+  const message =
+    selectedTool === "sow"
+      ? "Seeds like prepared soil. Cultivate here first."
+      : selectedTool === "harvest"
+        ? "Nothing here is ripe just yet."
+        : "";
+  if (!message || time - lastHint < 30) return;
+  lastHint = time;
+  toast(message);
+}
+function pointerTarget(
+  event: { clientX: number; clientY: number },
+  options: ChooseOptions = {},
+) {
   const rect = renderer.domElement.getBoundingClientRect();
   pointer.set(
     ((event.clientX - rect.left) / rect.width) * 2 - 1,
     (-(event.clientY - rect.top) / rect.height) * 2 + 1,
   );
-  raycaster.setFromCamera(pointer, camera);
+  const view = viewCamera();
+  raycaster.setFromCamera(pointer, view);
   if (raycaster.ray.intersectPlane(groundPlane, intersection)) {
+    // Sky and far-scenery taps behind the tractor must never send it to a far edge.
+    if (view === followView && !drivableTarget(intersection)) return;
     keyboard.reset();
     navigation.choose(
       {
@@ -640,29 +844,29 @@ function pointerTarget(event: PointerEvent, options: ChooseOptions = {}) {
     target = navigation.target;
     if (target) cursor.position.set(target.x, 0.09, target.z);
     cursor.visible = target !== null;
+    updateRowWash();
     dismissIntro();
     scheduleControlsHide();
   }
-}
-// A pass that changes nothing says why, once, instead of leaving it a puzzle.
-let changedSinceTap = 0,
-  lastHint = -Infinity;
-function explainIdlePass() {
-  const message =
-    selectedTool === "sow"
-      ? "Seeds like prepared soil. Cultivate here first."
-      : selectedTool === "harvest"
-        ? "Nothing here is ripe just yet."
-        : "";
-  if (!message || time - lastHint < 30) return;
-  lastHint = time;
-  toast(message);
 }
 let pointerId: number | null = null;
 let pointerOrigin = { x: 0, y: 0 },
   pointerMoved = false,
   pointerDownAt = 0,
   lastTap = { time: -Infinity, x: 0, y: 0 };
+/** With tidy rows, a second tap on the same spot asks for every row up to it. */
+function secondTap(x: number, y: number) {
+  const now = performance.now();
+  const again =
+    tidy &&
+    now - lastTap.time < 400 &&
+    Math.hypot(x - lastTap.x, y - lastTap.y) < 30;
+  lastTap = { time: again ? -Infinity : now, x, y };
+  return again;
+}
+/** Tractor view: drag to roll and steer from where you pressed; a tap that stays put chooses a destination. */
+let steering: SteeringGesture | null = null;
+const driveKeys = new DriveKeyboard();
 sceneContainer.addEventListener("pointerdown", (e) => {
   if (
     paused ||
@@ -676,18 +880,29 @@ sceneContainer.addEventListener("pointerdown", (e) => {
   pointerOrigin = { x: e.clientX, y: e.clientY };
   pointerMoved = false;
   pointerDownAt = performance.now();
-  // A second tap on the same spot asks for every row up to it.
-  const again =
-    tidy &&
-    pointerDownAt - lastTap.time < 400 &&
-    Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30;
-  lastTap = { time: again ? -Infinity : pointerDownAt, x: e.clientX, y: e.clientY };
   sceneContainer.setPointerCapture(e.pointerId);
-  pointerTarget(e, { fill: again });
+  if (cameraMode === "tractor") {
+    // Tidy rows wait their turn, so a new touch must not drop them. Steering
+    // by hand still takes over, in the navigation step.
+    if (!tidy) {
+      navigation.cancel();
+      target = null;
+      cursor.visible = false;
+    }
+    keyboard.reset();
+    driveKeys.reset();
+    steering = new SteeringGesture(e.clientX, e.clientY, tractorState.heading);
+    dismissIntro();
+    scheduleControlsHide();
+  } else pointerTarget(e, { fill: secondTap(e.clientX, e.clientY) });
   sceneContainer.focus({ preventScroll: true });
 });
 sceneContainer.addEventListener("pointermove", (e) => {
   if (e.pointerId !== pointerId || paused || modalOpen) return;
+  if (steering) {
+    steering.update(e.clientX, e.clientY);
+    return;
+  }
   const moved = Math.hypot(
     e.clientX - pointerOrigin.x,
     e.clientY - pointerOrigin.y,
@@ -701,6 +916,13 @@ sceneContainer.addEventListener("pointermove", (e) => {
 });
 sceneContainer.addEventListener("pointerup", (e) => {
   if (e.pointerId === pointerId) {
+    // The next frame has no drag input: yaw stops immediately, travel settles.
+    if (steering && !steering.moved)
+      pointerTarget(
+        { clientX: steering.location.x, clientY: steering.location.y },
+        { fill: secondTap(steering.location.x, steering.location.y) },
+      );
+    steering = null;
     pointerId = null;
     if (sceneContainer.hasPointerCapture(e.pointerId))
       sceneContainer.releasePointerCapture(e.pointerId);
@@ -733,7 +955,14 @@ window.addEventListener("keydown", (e) => {
   }
   if (isDriveKey(e.code)) {
     e.preventDefault();
-    if (!paused && !e.repeat) {
+    if (!paused && !e.repeat && cameraMode === "tractor") {
+      // Behind the tractor, keys drive it like a vehicle instead of following the rows.
+      navigation.cancel();
+      target = null;
+      driveKeys.press(e.code);
+      dismissIntro();
+      scheduleControlsHide();
+    } else if (!paused && !e.repeat) {
       keyboard.press(e.code, keyboardDown);
       dismissIntro();
       scheduleControlsHide();
@@ -745,9 +974,9 @@ window.addEventListener("keydown", (e) => {
     updateTool(
       (["cultivate", "sow", "harvest", "wander"] as Tool[])[Number(e.key) - 1],
     );
-  } else if (e.key.toLowerCase() === "v" && !e.repeat) {
+  } else if (e.key.toLowerCase() === "v" && !paused && !e.repeat) {
     e.preventDefault();
-    setFollow(!follow);
+    setCameraMode(cameraMode === "tractor" ? "overview" : "tractor");
   } else if (e.key.toLowerCase() === "m" && hasDriven && !paused && !e.repeat) {
     e.preventDefault();
     setControlsHidden(!controlsHidden);
@@ -758,6 +987,7 @@ window.addEventListener("keydown", (e) => {
 });
 window.addEventListener("keyup", (e) => {
   keyboard.release(e.code);
+  driveKeys.release(e.code);
 });
 window.addEventListener("focus", () => {
   windowActive = true;
@@ -808,7 +1038,7 @@ welcome.addEventListener("click", dismissIntro);
 document.querySelector(".brand")!.addEventListener("click", (e) => {
   e.preventDefault();
   zoom = 1;
-  setFollow(false);
+  resize();
 });
 document.querySelector("#sound")!.addEventListener("click", toggleSound);
 document
@@ -818,41 +1048,28 @@ document
   .querySelector("#resume")!
   .addEventListener("click", () => setPaused(false));
 document.querySelector("#settings")!.addEventListener("click", showSettings);
+document
+  .querySelector("#postcard")!
+  .addEventListener("click", () => void showPostcard());
 document.querySelector("#place")!.addEventListener("click", showHelp);
-document
-  .querySelector("#zoom-in")!
-  .addEventListener("click", () => changeZoom(1));
-document
-  .querySelector("#zoom-out")!
-  .addEventListener("click", () => changeZoom(-1));
-document.querySelector("#recenter")!.addEventListener("click", () => {
-  zoom = 1;
-  setFollow(false);
-});
-document
-  .querySelector("#follow")!
-  .addEventListener("click", () => setFollow(!follow));
+document.querySelector("#zoom-in")!.addEventListener("click", () => zoomBy(0.12));
+document.querySelector("#zoom-out")!.addEventListener("click", () => zoomBy(-0.12));
+document.querySelector("#recenter")!.addEventListener("click", recenter);
+document.querySelector("#view-mode")!.addEventListener("click", () =>
+  setCameraMode(cameraMode === "tractor" ? "overview" : "tractor"),
+);
 dialog.addEventListener("click", (e) => {
   if (e.target === dialog) closeDialog();
 });
 dialog.addEventListener("cancel", () => {
   modalOpen = false;
 });
-const reducedMotion = window.matchMedia(
-  "(prefers-reduced-motion: reduce)",
-).matches;
-setLight();
-resize();
-if (follow) {
-  // A saved close view opens on the tractor instead of sweeping in.
-  cameraPan.set(
-    tractorState.x - cameraFocus.x,
-    0,
-    tractorState.z - cameraFocus.z,
-  );
-  resize();
-}
-setFollow(follow);
+dialog.addEventListener("close", () => {
+  if (postcardUrl) URL.revokeObjectURL(postcardUrl);
+  postcardUrl = undefined;
+});
+applyDaylight();
+setCameraMode(cameraMode, false);
 updateTool(selectedTool);
 let changedSinceSave = false;
 const attachment = tractor.group.getObjectByName("attachment")!;
@@ -867,14 +1084,13 @@ function animate(now: number) {
     introSeconds += Math.min(activeSeconds, 0.25);
     if (introSeconds >= 5) dismissIntro();
   }
+  const daylight = applyDaylight();
+  dusk.update(daylight.glow, reducedMotion ? 0 : time);
   if (!paused && !modalOpen && windowActive) {
     time += dt;
+    if (light === "flow") dayTime = wrapDay(dayTime + activeSeconds);
     const growth = field.advance(activeSeconds);
     changedSinceSave ||= growth.advancedSeconds > 0;
-    if (growth.cropMaturities.length) {
-      const ripened = field.engine.cropAt(growth.cropMaturities[0]);
-      if (ripened) audio.ripen(ripened);
-    }
     const gridInput = keyboard.input;
     const previousHeading = tractorState.heading;
     const movement = navigation.step(
@@ -883,7 +1099,14 @@ function animate(now: number) {
       selectedTool,
       world.obstacles,
       pace,
-      gridInput ? { grid: gridInput } : null,
+      steering?.moved
+        ? { heading: steering.heading }
+        : cameraMode === "tractor" && driveKeys.input
+          ? { keys: driveKeys.input }
+          : gridInput
+            ? { grid: gridInput }
+            : null,
+      cameraMode === "tractor",
     );
     tractorState = movement.state;
     changedSinceSave ||= tractorState.heading !== previousHeading;
@@ -896,31 +1119,6 @@ function animate(now: number) {
       changedSinceTap += event.groundChanges.length;
       if (event.harvestResults.length)
         audio.harvest(event.harvestResults[0].crop);
-      // Feedback follows the ground that really changed, so a pass over
-      // finished work stays as quiet as it is ineffective.
-      if (
-        event.groundChanges.length &&
-        (selectedTool === "cultivate" ||
-          selectedTool === "sow" ||
-          selectedTool === "harvest")
-      ) {
-        audio.work(selectedTool);
-        if (selectedTool === "harvest")
-          for (const result of event.harvestResults)
-            effects.emit(
-              "harvest",
-              result.cells,
-              tractorState.heading,
-              result.crop,
-            );
-        else
-          effects.emit(
-            selectedTool,
-            event.groundChanges,
-            tractorState.heading,
-            selectedCrop,
-          );
-      }
     };
     movement.paint.forEach((point, index, points) =>
       worked(
@@ -933,10 +1131,10 @@ function animate(now: number) {
         ),
       ),
     );
+    // A tidy row works exactly its own cells.
     if (movement.cells.length)
       worked(field.paintCells(movement.cells, selectedTool, selectedCrop));
     if (movement.completed && tidy && changedSinceTap === 0) explainIdlePass();
-    effects.update(dt);
     if (tractorState.speed > 0.1) {
       if (!hasDriven) {
         hasDriven = true;
@@ -959,7 +1157,27 @@ function animate(now: number) {
       ((navigation.turn || navigation.gridTurning || navigation.lifted ? 0.4 : 0) -
         attachment.position.y) *
       (1 - Math.exp(-8 * dt));
-    world.update(reducedMotion ? 0 : time, reducedMotion ? 0 : dt);
+    // A gust reads the field as it crosses: each beat sounds what grows there.
+    const gust = wind.advance(activeSeconds);
+    for (const step of gust.steps)
+      for (const note of sliceNotes(field.engine, step))
+        audio.windNote(
+          note.voice,
+          note.voice === "stubble"
+            ? 0
+            : windFrequency(note.voice, note.band, daylight.glow > 0.6),
+          note.level * beatAccent(step),
+          (step / (WIND_STEPS - 1)) * 1.2 - 0.6,
+        );
+    field.wind(reducedMotion ? null : gust.front, time);
+    audio.setGust(gust.strength);
+    audio.setAmbience(daylight.birds, daylight.glow);
+    // The windmills pick up while the gust passes.
+    world.update(
+      reducedMotion ? 0 : time,
+      reducedMotion ? 0 : dt * (1 + gust.strength * 2.2),
+    );
+    updateFollowCamera(dt);
     audio.setDriving(tractorState.speed / 6);
     cursor.scale.setScalar(1 + Math.sin(time * 3) * 0.08);
     if (time - lastSave > 3 && changedSinceSave) {
@@ -968,8 +1186,7 @@ function animate(now: number) {
       lastSave = time;
     }
   }
-  updateCamera(dt);
-  renderer.render(scene, camera);
+  renderer.render(scene, viewCamera());
 }
 requestAnimationFrame(animate);
 // A read-only inspection surface for development and browser verification.
@@ -981,15 +1198,29 @@ if (import.meta.env.DEV)
       paused,
       guide: false,
       pace,
-      golden,
+      golden: light === "golden",
+      light,
+      day: dayTime,
+      phase: daylightAt(dayTime).phase,
+      gusting: wind.gusting,
+      // Development helpers for checking the day and the wind without waiting.
+      setDay(seconds: number) {
+        dayTime = wrapDay(seconds);
+      },
+      gust() {
+        wind.gust();
+      },
       hasDriven,
       controlsHidden,
       introDismissed,
-      follow,
-      zoom: cameraZoom,
       grid: Array.from(field.grid),
       farm: field.engine.snapshot(),
       crop: selectedCrop,
+      cameraMode,
+      tractorZoom,
+      followHeading: followCamera.heading,
+      steering: steering?.moved ? steering.heading : null,
+      driveKeys: driveKeys.input,
       drawCalls: renderer.info.render.calls,
       camera: {
         left: camera.left,

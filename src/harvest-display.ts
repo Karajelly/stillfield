@@ -2,7 +2,6 @@ import * as THREE from "three";
 import { CROPS } from "./farming";
 import type { Crop, FarmingEngine, HarvestResult } from "./farming";
 import { FIELD, FIELD_COLUMNS } from "./simulation";
-import { createHarvestYard } from "./harvest-yard";
 
 const matte = (color: string) =>
   new THREE.MeshStandardMaterial({ color, roughness: 1 });
@@ -204,35 +203,8 @@ export function createHarvestDisplay(scene: THREE.Scene, farm: FarmingEngine) {
     end: THREE.Vector3;
     age: number;
     crop: Crop;
-    /** The yard piece this delivery stands up when it lands. */
-    piece?: number;
   }[] = [];
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  // The displays above fill within the first plot. The yard goes on filling.
-  const yard = createHarvestYard(scene, farm);
-  /** Yard pieces earned while their crop already had produce in the air. */
-  const deliveries: { crop: Crop; piece: number; start: THREE.Vector3 }[] = [];
-  function launch(
-    crop: Crop,
-    start: THREE.Vector3,
-    end: THREE.Vector3,
-    piece?: number,
-  ) {
-    const mesh = produce(crop);
-    mesh.position.copy(start);
-    mesh.scale.setScalar(0.8);
-    scene.add(mesh);
-    flights.push({ mesh, start, end, age: 0, crop, piece });
-  }
-  /** One delivery per crop at a time, in the order the pieces were earned. */
-  function deliver() {
-    for (let i = 0; i < deliveries.length; i++) {
-      const { crop, piece, start } = deliveries[i];
-      if (flights.some((f) => f.crop === crop)) continue;
-      launch(crop, start, yard.landing(crop, piece), piece);
-      deliveries.splice(i--, 1);
-    }
-  }
   function sync() {
     for (const crop of CROPS) {
       const section = sections.get(crop)!,
@@ -252,29 +224,27 @@ export function createHarvestDisplay(scene: THREE.Scene, farm: FarmingEngine) {
       for (const result of results) {
         const section = sections.get(result.crop)!;
         section.pulse = 0.8;
-        const cell = result.cells[Math.floor(result.cells.length / 2)];
-        const start = new THREE.Vector3(
-          FIELD.minX + ((cell % FIELD_COLUMNS) + 0.5) * FIELD.cell,
-          0.4,
-          FIELD.minZ + (Math.floor(cell / FIELD_COLUMNS) + 0.5) * FIELD.cell,
-        );
-        for (const piece of yard.claim(result.crop)) {
-          // Without motion, a new piece is simply there.
-          if (reduced) yard.reveal(result.crop, piece, false);
-          else deliveries.push({ crop: result.crop, piece, start });
-        }
-        deliver();
         if (
           reduced ||
           flights.some((f) => f.crop === result.crop) ||
           flights.length >= 3
         )
           continue;
+        const cell = result.cells[Math.floor(result.cells.length / 2)];
+        const start = new THREE.Vector3(
+          FIELD.minX + ((cell % FIELD_COLUMNS) + 0.5) * FIELD.cell,
+          0.4,
+          FIELD.minZ + (Math.floor(cell / FIELD_COLUMNS) + 0.5) * FIELD.cell,
+        );
+        const mesh = produce(result.crop);
+        mesh.position.copy(start);
+        mesh.scale.setScalar(0.8);
+        scene.add(mesh);
         const end = root.position
           .clone()
           .add(section.group.position)
           .add(new THREE.Vector3(0, 0.9, 0));
-        launch(result.crop, start.clone(), end);
+        flights.push({ mesh, start, end, age: 0, crop: result.crop });
       }
     },
     update(dt: number) {
@@ -303,11 +273,8 @@ export function createHarvestDisplay(scene: THREE.Scene, farm: FarmingEngine) {
             if (o instanceof THREE.Mesh) o.geometry.dispose();
           });
           flights.splice(i, 1);
-          if (f.piece !== undefined) yard.reveal(f.crop, f.piece);
         }
       }
-      deliver();
-      yard.update(dt);
     },
     clear() {
       for (const f of flights) {
@@ -317,9 +284,7 @@ export function createHarvestDisplay(scene: THREE.Scene, farm: FarmingEngine) {
         });
       }
       flights.length = 0;
-      deliveries.length = 0;
       sync();
-      yard.sync();
     },
   };
 }

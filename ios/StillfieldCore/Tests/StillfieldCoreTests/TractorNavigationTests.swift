@@ -126,33 +126,67 @@ private final class TestMeadow {
         let point = FarmPoint(x: 12, z: 0.125)
         farm.choose(point); try farm.settle(); #expect(farm.value(at: point) == 0)
     }
+    var swings: [TractorState] = []
     for fps in [30.0, 60, 120] {
+        // Position control: a held drag swings to its direction and keeps it, never circling.
         var drive = GentleDrive(), state = TractorState(x: 0, z: 0, heading: 0, speed: 3)
-        for _ in 0..<Int(fps * 6) {
-            if abs(state.heading) >= .pi { break }
-            state = drive.step(state, deltaTime: 1 / fps, input: .drag(110))
-        }
-        #expect(abs(state.x) > 2 && abs(state.x) < 2.5)
+        for _ in 0..<Int(fps * 4) { state = drive.step(state, deltaTime: 1 / fps, input: .heading(-.pi / 2)) }
+        #expect(abs(state.heading + .pi / 2) < 0.01)
+        #expect(state.speed > 2.9)
         let heading = state.heading
-        state = drive.step(state, deltaTime: 1 / fps, input: .drag(5))
-        #expect(state.heading == heading)
         for _ in 0..<Int(fps) { state = drive.step(state, deltaTime: 1 / fps, input: nil) }
         #expect(state.heading == heading); #expect(state.speed == 0)
+        swings.append(state)
+    }
+    for swing in swings.dropFirst() { #expect(hypot(swing.x - swings[0].x, swing.z - swings[0].z) < 0.15) }
+}
+
+@Test func tractorViewKeysRollSteerGentlyStraightenAndSettle() {
+    for fps in [30.0, 60, 120] {
+        var drive = GentleDrive(), state = TractorState(x: 0, z: 0, heading: 0, speed: 0)
+        for _ in 0..<Int(fps * 2) { state = drive.step(state, deltaTime: 1 / fps, input: .keys(throttle: 1, steer: 0)) }
+        #expect(state.speed > 2.9 && state.heading == 0 && state.z > 3)
+        // A quick press of D only nudges the heading to the right.
+        for _ in 0..<Int(fps / 10) { state = drive.step(state, deltaTime: 1 / fps, input: .keys(throttle: 1, steer: 1)) }
+        #expect(state.heading < 0 && state.heading > -0.05)
+        let nudged = state.heading
+        state = drive.step(state, deltaTime: 1 / fps, input: .keys(throttle: 1, steer: 0))
+        #expect(state.heading == nudged)
+        // A alone rolls slowly around a gentle left turn.
+        for _ in 0..<Int(fps * 2) { state = drive.step(state, deltaTime: 1 / fps, input: .keys(throttle: 0, steer: -1)) }
+        #expect(state.heading > nudged + 1 && abs(state.speed - 1.29) < 0.05)
+        // S settles to a stop without pivoting, even with a steering key held.
+        let before = state.heading
+        for _ in 0..<Int(fps) { state = drive.step(state, deltaTime: 1 / fps, input: .keys(throttle: -1, steer: 1)) }
+        #expect(state.speed == 0); #expect(state.heading == before)
     }
 }
 
-@Test func touchTremorStaysATapAndAHoldStartsWithoutAdditionalEvents() {
-    var gesture = SteeringGesture(location: [100, 200], time: 3)
-    gesture.update([103, 204])
-    #expect(!gesture.isDriving(at: 3.1))
-    #expect(gesture.isDriving(at: 3.3))
-    #expect(GentleDrive.dragAmount(gesture.drag) == 0)
-    gesture.update([150, 201])
-    #expect(gesture.isDriving(at: 3.1))
-    #expect(GentleDrive.dragAmount(gesture.drag) > 0)
-    gesture.update([100, 200])
-    #expect(gesture.isDriving(at: 3.1)) // Returning to center remains a drive, never a tap.
-    #expect(GentleDrive.dragAmount(gesture.drag) == 0)
+@Test func heldTractorViewDragPaintsLikeAnyOtherPass() {
+    let farm = TestMeadow(TractorState(x: -10, z: 0, heading: .pi / 2), follow: true)
+    for _ in 0..<(60 * 3) { farm.step(.heading(.pi / 2)) }
+    #expect(farm.state.x > -3)
+    #expect(farm.field.cells.filter { $0 != 0 }.count > 40)
+    #expect(farm.navigation.target == nil)
+}
+
+@Test func onlyMovementTurnsATapIntoDriving() {
+    var tap = SteeringGesture(location: [100, 200], heading: 1)
+    tap.update([104, 203])
+    #expect(!tap.moved) // Tremor and long presses stay taps.
+    var drag = SteeringGesture(location: [100, 200], heading: 1)
+    drag.update([100, 170])
+    #expect(drag.moved) // A small push upward starts rolling straight.
+    #expect(drag.heading == 1)
+    drag.update([105, 170])
+    #expect(drag.heading == 1) // The dead zone absorbs wobble.
+    drag.update([210, 170])
+    #expect(abs(drag.heading - (1 - .pi / 4)) < 1e-9)
+    drag.update([-1000, 170])
+    #expect(abs(drag.heading - (1 + .pi)) < 1e-9) // Capped at an about-face.
+    drag.update([100, 200])
+    #expect(drag.moved) // Returning to center remains a drive, never a tap.
+    #expect(drag.heading == 1)
 }
 
 @Test func rowEndRecognitionIgnoresUnrelatedAndBlockedTaps() {

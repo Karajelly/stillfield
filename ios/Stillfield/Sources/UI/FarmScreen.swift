@@ -2,7 +2,7 @@ import SwiftUI
 import StillfieldCore
 
 enum FarmSheet: String, Identifiable {
-    case settings, help
+    case settings, help, postcard
     var id: String { rawValue }
 }
 
@@ -14,7 +14,12 @@ private enum MeadowPalette {
     static let cream = color(0xf7f5e9)
     static let green = color(0x52745a)
     static let background = color(0xe8ecda)
-    static let goldenBackground = color(0xeee5ce) // src/main.ts golden scene background
+    // After dark, anything drawn straight onto the scene switches to these.
+    static let nightInk = color(0xf1efdc)
+    static let nightDetail = color(0xc5cdc0)
+    static let nightGold = color(0xe9d9a0)
+    static let nightSelected = color(0xf7f5e9, opacity: 0.2)
+    static let nightSurface = color(0xf7f5e9, opacity: 0xe0 / 255.0)
 
     static let tagline = color(0x78836f)
     static let placeSurface = color(0xf9f8ec, opacity: 0.58)
@@ -76,24 +81,24 @@ private enum MeadowPalette {
     static let settingBorder = color(0x899676, opacity: 0x40 / 255.0)
     static let settingFootnote = color(0xa1aa95)
 
-    // Match every stop in .vignette and .golden .vignette, including opacity.
-    static func vignette(golden: Bool) -> [Gradient.Stop] {
-        if golden {
-            return [
-                .init(color: color(0xf8efda, opacity: 0.9), location: 0),
-                .init(color: .clear, location: 0.28),
-                .init(color: .clear, location: 0.72),
-                .init(color: color(0xf3e8ce, opacity: 0.85), location: 1),
-            ]
+    // Match every stop in .vignette, including opacity. The haze follows the
+    // sky through the day, like the web's --haze variable.
+    static func vignette(haze: SIMD3<Double>) -> [Gradient.Stop] {
+        func tone(_ opacity: Double) -> Color {
+            Color(.sRGB, red: haze.x, green: haze.y, blue: haze.z, opacity: opacity)
         }
         return [
-            .init(color: color(0xf4f5e3, opacity: 0.88), location: 0),
-            .init(color: color(0xf4f5e3, opacity: 0.36), location: 0.12),
-            .init(color: .clear, location: 0.27),
-            .init(color: .clear, location: 0.68),
-            .init(color: color(0xedf0d9, opacity: 0.27), location: 0.83),
-            .init(color: color(0xedf0d9, opacity: 0.88), location: 1),
+            .init(color: tone(0.88), location: 0),
+            .init(color: tone(0.36), location: 0.12),
+            .init(color: tone(0), location: 0.27),
+            .init(color: tone(0), location: 0.68),
+            .init(color: tone(0.27), location: 0.83),
+            .init(color: tone(0.88), location: 1),
         ]
+    }
+
+    static func sky(_ rgb: SIMD3<Double>) -> Color {
+        Color(.sRGB, red: rgb.x, green: rgb.y, blue: rgb.z)
     }
 
     private static func color(_ hex: UInt32, opacity: Double = 1) -> Color {
@@ -132,11 +137,13 @@ struct FarmScreen: View {
                     .zIndex(-2)
 
                 LinearGradient(
-                    stops: MeadowPalette.vignette(golden: game.goldenLight),
+                    stops: MeadowPalette.vignette(haze: game.tint.haze),
                     startPoint: .top, endPoint: .bottom
                 )
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
+                // A postcard photographs the meadow alone.
+                .opacity(game.isCapturing ? 0 : 1)
                 // Keep departing overlays above the opaque scene for their entire transition.
                 .zIndex(-1)
 
@@ -145,6 +152,7 @@ struct FarmScreen: View {
                 } else if game.errorMessage != nil && !game.hasSaveError {
                     errorCard
                 } else {
+                  Group {
                     if !game.controlsHidden {
                         VStack(spacing: 0) {
                             header(width: geometry.size.width, compact: compactHeight)
@@ -229,6 +237,8 @@ struct FarmScreen: View {
                         pauseOverlay
                             .transition(.opacity)
                     }
+                  }
+                  .opacity(game.isCapturing ? 0 : 1)
                 }
             }
             .foregroundStyle(MeadowPalette.ink)
@@ -240,35 +250,44 @@ struct FarmScreen: View {
                 value: game.controlsHidden
             )
         }
-        .background(game.goldenLight ? MeadowPalette.goldenBackground : MeadowPalette.background)
+        .background(MeadowPalette.sky(game.tint.sky))
         .preferredColorScheme(.light)
         .sheet(item: $game.activeSheet) { sheet in
             switch sheet {
             case .settings: FarmSettingsSheet(game: game)
             case .help: FarmHelpSheet(tidyRows: game.tidyRows)
+            case .postcard: PostcardSheet(game: game)
             }
         }
         .onAppear { game.setActive(scenePhase == .active) }
         .onChange(of: scenePhase) { _, phase in game.setActive(phase == .active) }
     }
 
+    /// Text and symbols drawn straight onto the scene, which is dark after dusk.
+    private var onScene: Color { game.tint.afterDark ? MeadowPalette.nightInk : MeadowPalette.ink }
+
     private func header(width: CGFloat, compact: Bool) -> some View {
-        HStack(spacing: 12) {
+        let dark = game.tint.afterDark
+        let weather = Daylight.copy(for: game.dayPhase)
+        return HStack(spacing: 12) {
             HStack(spacing: 9) {
-                StillfieldMark()
+                StillfieldMark(color: onScene)
                     .frame(width: compact ? 32 : 38, height: compact ? 32 : 38)
                 VStack(alignment: .leading, spacing: 0) {
                     Text("stillfield")
                         .font(.system(size: compact ? 27 : 30, weight: .regular, design: .serif))
                         .tracking(-1)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                     if width >= 600 && !compact {
                         Text("a little farm. a little peace.")
                             .font(.system(size: 10))
-                            .foregroundStyle(MeadowPalette.tagline)
+                            .foregroundStyle(dark ? MeadowPalette.nightDetail : MeadowPalette.tagline)
                             .tracking(0.8)
                     }
                 }
             }
+            .foregroundStyle(onScene)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Stillfield. A little farm, a little peace.")
             .modifier(AmbientCopy(hidden: game.hasDriven))
@@ -288,23 +307,25 @@ struct FarmScreen: View {
 
             if width >= 850 && !compact {
                 HStack(spacing: 10) {
-                    Image(systemName: "sun.max")
+                    Image(systemName: game.dayPhase == .dusk || game.dayPhase == .night ? "moon" : "sun.max")
                         .font(.system(size: 23, weight: .light))
-                        .foregroundStyle(MeadowPalette.gold)
+                        .foregroundStyle(dark ? MeadowPalette.nightGold : MeadowPalette.gold)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(game.goldenLight ? "A little golden hour" : "A slow spring afternoon")
+                        Text(weather.title)
                             .font(.system(size: 12, weight: .medium))
-                        Text("A gentle breeze. Nowhere to be.")
+                        Text(weather.detail)
                             .font(.system(size: 10))
-                            .foregroundStyle(MeadowPalette.weatherDetail)
+                            .foregroundStyle(dark ? MeadowPalette.nightDetail : MeadowPalette.weatherDetail)
                     }
                 }
+                .foregroundStyle(onScene)
                 .padding(.trailing, 14)
                 .accessibilityElement(children: .combine)
                 .modifier(AmbientCopy(hidden: game.hasDriven))
             }
 
             HStack(spacing: 4) {
+                roundButton("camera", label: "Make a postcard of your meadow", identifier: "action.postcard") { game.takePostcard() }
                 roundButton(game.soundEnabled ? "speaker.wave.2" : "speaker.slash", label: game.soundEnabled ? "Turn nature sounds off" : "Turn nature sounds on", identifier: "action.sound", selected: game.soundEnabled) { game.toggleSound() }
                 roundButton("pause", label: "Pause the meadow", identifier: "action.pause") { game.togglePause() }
                 roundButton("slider.horizontal.3", label: "Open settings", identifier: "action.settings") { game.activeSheet = .settings }
@@ -406,7 +427,7 @@ struct FarmScreen: View {
                             .frame(minHeight: 44)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(MeadowPalette.driveHint)
+                    .foregroundStyle(game.tint.afterDark ? MeadowPalette.nightDetail : MeadowPalette.driveHint)
                     .accessibilityLabel("Learn to drive. Tap or drag to find your way.")
                     .modifier(AmbientCopy(hidden: game.hasDriven))
                 }
@@ -531,7 +552,7 @@ struct FarmScreen: View {
             zoomButton("plus", label: "Zoom in", action: game.zoomIn)
         }
         .foregroundStyle(MeadowPalette.zoom)
-        .background(MeadowPalette.zoomSurface, in: Capsule())
+        .background(game.tint.afterDark ? MeadowPalette.nightSurface : MeadowPalette.zoomSurface, in: Capsule())
         .overlay(Capsule().strokeBorder(MeadowPalette.zoomBorder, lineWidth: 1))
         .padding(.trailing, game.hasDriven ? 52 : 0)
     }
@@ -552,8 +573,8 @@ struct FarmScreen: View {
             Image(systemName: symbol)
                 .font(.system(size: 17, weight: .regular))
                 .frame(width: 44, height: 44)
-                .foregroundStyle(MeadowPalette.roundButton)
-                .background(selected ? MeadowPalette.roundButtonSelected : .clear, in: Circle())
+                .foregroundStyle(game.tint.afterDark ? MeadowPalette.nightInk : MeadowPalette.roundButton)
+                .background(!selected ? .clear : game.tint.afterDark ? MeadowPalette.nightSelected : MeadowPalette.roundButtonSelected, in: Circle())
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -567,13 +588,13 @@ struct FarmScreen: View {
             VStack(spacing: 22) {
                 Image(systemName: "leaf")
                     .font(.system(size: 35, weight: .ultraLight))
-                    .foregroundStyle(MeadowPalette.pauseSymbol)
+                    .foregroundStyle(game.tint.afterDark ? MeadowPalette.nightDetail : MeadowPalette.pauseSymbol)
                 Text("A moment to breathe.")
                     .font(.system(.title, design: .serif))
-                    .foregroundStyle(MeadowPalette.pauseTitle)
+                    .foregroundStyle(game.tint.afterDark ? MeadowPalette.nightInk : MeadowPalette.pauseTitle)
                 Text("The meadow will wait.")
                     .font(.subheadline)
-                    .foregroundStyle(MeadowPalette.muted)
+                    .foregroundStyle(game.tint.afterDark ? MeadowPalette.nightDetail : MeadowPalette.muted)
                 Button(action: game.togglePause) {
                     Label("Back to the meadow", systemImage: "play.fill")
                         .font(.subheadline.weight(.medium))
@@ -633,7 +654,21 @@ private struct FarmSettingsSheet: View {
                             .font(.subheadline).foregroundStyle(MeadowPalette.dialogCopy)
                     }
                     VStack(spacing: 20) {
-                        settingToggle("Golden light", subtitle: "A warmer kind of afternoon.", isOn: $game.goldenLight, identifier: "settings.golden")
+                        VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("Time of day").font(.subheadline.weight(.semibold))
+                                Text("Let the day drift by, or keep the light you like.")
+                                    .font(.caption).foregroundStyle(MeadowPalette.settingDetail)
+                            }
+                            Picker("Time of day", selection: $game.light) {
+                                ForEach(DayHold.allCases, id: \.self) { hold in
+                                    Text(hold.title).tag(hold)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .accessibilityIdentifier("settings.light")
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         Divider().overlay(MeadowPalette.settingBorder)
                         settingToggle("A little feeling", subtitle: "Gentle haptics when you change tools.", isOn: $game.haptics, identifier: "settings.haptics")
                         Divider().overlay(MeadowPalette.settingBorder)
@@ -736,6 +771,77 @@ private struct FarmSettingsSheet: View {
     }
 }
 
+private struct PostcardSheet: View {
+    let game: FarmController
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("A KEEPSAKE").font(.caption2.weight(.medium)).tracking(2)
+                            .foregroundStyle(MeadowPalette.dialogEyebrow)
+                        Text("Wish you were here.").font(.system(size: 38, design: .serif))
+                        Text("Your meadow, just as it is right now. It stays on this device unless you send it somewhere.")
+                            .font(.subheadline).foregroundStyle(MeadowPalette.dialogCopy).lineSpacing(4)
+                    }
+                    if let postcard = game.postcard {
+                        let picture = Image(uiImage: postcard.card)
+                        picture
+                            .resizable()
+                            .scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .shadow(color: MeadowPalette.dockShadow, radius: 14, y: 6)
+                            .frame(maxHeight: 440)
+                            .frame(maxWidth: .infinity)
+                            .accessibilityLabel("A postcard of your meadow")
+                            .accessibilityIdentifier("postcard.picture")
+                        ShareLink(item: postcard.file,
+                                  preview: SharePreview("A postcard from Stillfield", image: picture)) {
+                            HStack {
+                                Text("Save or send the postcard")
+                                Spacer()
+                                Image(systemName: "square.and.arrow.up")
+                            }
+                            .font(.subheadline.weight(.medium))
+                            .padding(.horizontal, 22)
+                            .frame(minHeight: 52)
+                            .foregroundStyle(MeadowPalette.primaryButtonLabel)
+                            .background(MeadowPalette.primaryButton, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("postcard.share")
+                    }
+                }
+                .padding(26)
+                .frame(maxWidth: 600)
+                .frame(maxWidth: .infinity)
+            }
+            .background(MeadowPalette.dialogSurface)
+            .foregroundStyle(MeadowPalette.ink)
+            .toolbarBackground(MeadowPalette.dialogSurface, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark").font(.system(size: 13, weight: .medium)).frame(width: 44, height: 44)
+                    }
+                    .foregroundStyle(MeadowPalette.roundButton)
+                    .accessibilityLabel("Close the postcard")
+                    .accessibilityIdentifier("sheet.close")
+                }
+            }
+        }
+        .tint(MeadowPalette.green)
+        .presentationBackground(MeadowPalette.dialogSurface)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .presentationCornerRadius(30)
+    }
+}
+
 private struct FarmHelpSheet: View {
     @Environment(\.dismiss) private var dismiss
     /// The first step reads differently when taps make tidy rows.
@@ -756,9 +862,10 @@ private struct FarmHelpSheet: View {
                     helpRow("hand.draw", title: "Find your way", text: tidyRows
                         ? "Tap where a row should end and the tractor works a straight row to it. Tap more rows whenever you like and it works them in turn. Tap twice to fill every row up to that spot. Drag to steer freehand. Pinch to look a little closer."
                         : "Tap where mowing or planting should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop. Pinch to look a little closer.")
-                    helpRow("car.rear", title: "Come along for the ride", text: "Tap the vehicle button beside the zoom controls to follow behind your tractor. Hold to roll, move your finger left or right to steer, and lift to settle. A quick tap chooses where work should finish. Pinch to move closer or farther away. Tap the vehicle button again to see the whole farm.")
+                    helpRow("car.rear", title: "Come along for the ride", text: "Tap the vehicle button beside the zoom controls to follow behind your tractor. Drag to roll, slide your finger left or right to choose its direction, and lift to settle. A quick tap chooses where work should finish. Pinch to move closer or farther away. Tap the vehicle button again to see the whole farm.")
                     helpRow("leaf", title: "Make your mark", text: "Cultivate prepares soil and clears any crops. Sow a crop, then harvest when it’s ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests fill the pots and carts by the field.")
                     helpRow("sun.max", title: "Let it grow", text: "Sunflowers take 3 minutes, wheat 6, and pumpkins 9, only while you play. Seeds are unlimited. Nothing withers, and full displays never stop a harvest.")
+                    helpRow("moon.stars", title: "Watch the day go by", text: "Morning turns to golden hour, dusk, and a short bright night as you play, and never while you’re away. Every so often the wind crosses the field and plays what’s growing. Keep a favourite light in settings, or tap the camera for a postcard.")
                     helpRow("wind", title: "Stay for a while", text: "Set your own pace, turn on the birdsong, and take a breath. Your meadow saves on this device. Nothing changes while you’re away.")
                     Button(action: { dismiss() }) {
                         HStack {
@@ -875,6 +982,12 @@ private struct CropGlyph: Shape {
         }
         return path.applying(CGAffineTransform(scaleX: rect.width / 24, y: rect.height / 24)
             .concatenating(CGAffineTransform(translationX: rect.minX, y: rect.minY)))
+    }
+}
+
+private extension DayHold {
+    var title: String {
+        switch self { case .flow: "Drifting"; case .morning: "Morning"; case .golden: "Golden"; case .dusk: "Dusk"; case .night: "Night" }
     }
 }
 

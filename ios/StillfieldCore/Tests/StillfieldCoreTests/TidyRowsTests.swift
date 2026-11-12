@@ -281,7 +281,7 @@ private final class TidyMeadow {
     steered.tap(FarmPoint(x: -20, z: laneZ(8)))
     steered.tap(FarmPoint(x: 19, z: laneZ(7)))
     steered.run(4)
-    steered.step(.drag(60))
+    steered.step(.heading(0.4))
     #expect(steered.navigation.plannedRows.isEmpty && !steered.navigation.hasQueued)
 }
 
@@ -313,17 +313,17 @@ private final class TidyMeadow {
 }
 
 @Test func aWobblyTapStaysATapAndAHeldOrCarriedTouchSteersFreehand() {
-    var tap = SteeringGesture(location: [100, 200], time: 3)
+    var tap = SteeringGesture(location: [100, 200], heading: 0)
     tap.update([109, 206])
     #expect(tap.moved)
-    #expect(!tap.isFreehand(at: 3.1)) // a quick, slightly smeared tap
-    #expect(tap.isFreehand(at: 3.2)) // the same touch, still down and moved
-    var flick = SteeringGesture(location: [100, 200], time: 3)
+    #expect(!tap.isFreehand(heldFor: 0.1)) // a quick, slightly smeared tap
+    #expect(tap.isFreehand(heldFor: 0.2)) // the same touch, still down and moved
+    var flick = SteeringGesture(location: [100, 200], heading: 0)
     flick.update([140, 200])
-    #expect(flick.isFreehand(at: 3.05)) // carried well away at once
+    #expect(flick.isFreehand(heldFor: 0.05)) // carried well away at once
     flick.update([101, 200])
-    #expect(flick.isFreehand(at: 3.05)) // coming back does not turn it into a tap
-    var still = SteeringGesture(location: [100, 200], time: 3)
+    #expect(flick.isFreehand(heldFor: 0.05)) // coming back does not turn it into a tap
+    var still = SteeringGesture(location: [100, 200], heading: 0)
     still.update([103, 202])
-    #expect(!still.isFreehand(at: 9)) // a long press that never moves is not steering
+    #expect(!still.isFreehand(heldFor: 6)) // a long press that never moves is not steering
 }

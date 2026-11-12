@@ -9,7 +9,7 @@ import { WorkDestination } from "./work-destination";
 function meadow(initial: TractorState, follow = false, fps = 60, pace = 0.85) {
   const nav = new TractorNavigation(), cells = new Map<number, number>();
   let state = initial, tool: Tool = "mow", obstacles: Obstacle[] = [];
-  const step = (manual: { drag: number } | null = null) => {
+  const step = (manual: Parameters<TractorNavigation["step"]>[5] = null) => {
     const result = nav.step(state, 1 / fps, tool, obstacles, pace, manual, follow);
     state = result.state;
     result.paint.forEach((p, i, points) => {
@@ -122,15 +122,18 @@ it("blocked work cannot remotely paint its target and neutral steering has no an
     farm.obstacles([{ x: 8, z: 0, radius: 2 }]); farm.choose({ x: 12, z: 0.125 }); farm.settle();
     assert.equal(farm.cells.has(WorkDestination.create({ x: 12, z: 0.125 }, farm.state, "mow")!.cell), false);
   }
-  for (const fps of [30, 60, 120]) {
+  const swings = [30, 60, 120].map((fps) => {
+    // Position control: a held drag swings to its direction and keeps it, never circling.
     const drive = new GentleDrive(); let state = { x: 0, z: 0, heading: 0, speed: 3 };
-    for (let i = 0; i < fps * 6 && Math.abs(state.heading) < Math.PI; i++) state = drive.step(state, 1 / fps, { drag: 110 });
-    assert.ok(Math.abs(state.x) > 2 && Math.abs(state.x) < 2.5);
+    for (let i = 0; i < fps * 4; i++) state = drive.step(state, 1 / fps, { heading: -Math.PI / 2 });
+    assert.ok(Math.abs(state.heading + Math.PI / 2) < 0.01, `${fps} Hz settles on the chosen heading`);
+    assert.ok(state.speed > 2.9, "straight again, back to cruise");
     const heading = state.heading;
-    state = drive.step(state, 1 / fps, { drag: 5 }); assert.equal(state.heading, heading);
     for (let i = 0; i < fps; i++) state = drive.step(state, 1 / fps, null);
     assert.equal(state.heading, heading); assert.equal(state.speed, 0);
-  }
+    return state;
+  });
+  for (const swing of swings.slice(1)) assert.ok(Math.hypot(swing.x - swings[0].x, swing.z - swings[0].z) < 0.15);
 });
 
 it("repeated drag destinations preserve the attachment sweep between frames", () => {
@@ -143,4 +146,32 @@ it("repeated drag destinations preserve the attachment sweep between frames", ()
   const second = nav.step(state, 1 / 30, "mow", []);
   assert.deepEqual(second.paint[0], first.paint.at(-1));
   assert.notDeepEqual(second.paint[0], second.paint.at(-1));
+});
+
+it("tractor-view keys roll, steer gently, straighten on release, and settle on S", () => {
+  for (const fps of [30, 60, 120]) {
+    const drive = new GentleDrive(); let state = { x: 0, z: 0, heading: 0, speed: 0 };
+    for (let i = 0; i < fps * 2; i++) state = drive.step(state, 1 / fps, { keys: { throttle: 1, steer: 0 } });
+    assert.ok(state.speed > 2.9 && state.heading === 0 && state.z > 3);
+    // A quick press of D only nudges the heading to the right.
+    for (let i = 0; i < fps / 10; i++) state = drive.step(state, 1 / fps, { keys: { throttle: 1, steer: 1 } });
+    assert.ok(state.heading < 0 && state.heading > -0.05, `nudge ${state.heading}`);
+    const nudged = state.heading;
+    state = drive.step(state, 1 / fps, { keys: { throttle: 1, steer: 0 } });
+    assert.equal(state.heading, nudged, "letting go straightens at once");
+    // A alone rolls slowly around a gentle left turn.
+    for (let i = 0; i < fps * 2; i++) state = drive.step(state, 1 / fps, { keys: { throttle: 0, steer: -1 } });
+    assert.ok(state.heading > nudged + 1 && Math.abs(state.speed - tuning.tightTurnSpeed) < 0.05);
+    // S settles to a stop without pivoting, even with a steering key held.
+    const before = state.heading;
+    for (let i = 0; i < fps; i++) state = drive.step(state, 1 / fps, { keys: { throttle: -1, steer: 1 } });
+    assert.equal(state.speed, 0); assert.equal(state.heading, before);
+  }
+});
+
+it("a held tractor-view drag works and paints like any other pass", () => {
+  const farm = meadow({ x: -10, z: 0, heading: Math.PI / 2, speed: 0 }, true);
+  for (let i = 0; i < 60 * 3; i++) farm.step({ heading: Math.PI / 2 });
+  assert.ok(farm.state.x > -3 && farm.cells.size > 40);
+  assert.equal(farm.nav.target, null);
 });

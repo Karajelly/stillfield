@@ -27,6 +27,14 @@ public enum PerspectiveGroundProjection {
         return FarmPoint(x: ground.x, z: ground.z)
     }
 
+    /// Behind the tractor, taps on scenery beyond the drivable meadow are ignored rather than
+    /// pulled to its edge, so a near-horizon tap never sends the tractor to a far corner.
+    /// Matches `drivableTarget` in src/follow-camera.ts.
+    public static func drivable(_ point: FarmPoint?) -> FarmPoint? {
+        guard let point, (-39...39).contains(point.x), (-30...28).contains(point.z) else { return nil }
+        return point
+    }
+
     private static func isFinite(_ vector: SIMD3<Double>) -> Bool {
         vector.x.isFinite && vector.y.isFinite && vector.z.isFinite
     }

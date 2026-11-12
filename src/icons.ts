@@ -50,6 +50,9 @@ const paths: Record<string, string> = {
   right: '<path d="m10 7 5 5-5 5"/>',
   signpost: '<path d="M11 21V3m-5 18h10M5 6h10l3 2.5-3 2.5H5V6Zm14 7H9v5h10l2-2.5-2-2.5Z"/>',
   menu: '<path d="M5 6h14M5 12h14M5 18h14"/>',
+  tractor:
+    '<path d="M8.5 10V4.5h7V10M6 10h12v6H6Z"/><rect x="2.5" y="11.5" width="4" height="8.5" rx="1.6"/><rect x="17.5" y="11.5" width="4" height="8.5" rx="1.6"/><path d="M10.5 16v3h3v-3"/>',
+  moon: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/>',
   camera:
     '<path d="M8 5h8l2 3h3v12H3V8h3l2-3Z"/><circle cx="12" cy="13" r="4"/>',
 };

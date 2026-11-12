@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as THREE from "three";
-import { advanceGridTractor, GridKeyboard, gridHeading } from "./keyboard-navigation";
+import { advanceGridTractor, DriveKeyboard, GridKeyboard, gridHeading } from "./keyboard-navigation";
 import { overviewFraming } from "./overview";
 import { angleDifference, cruiseSpeed, WORLD } from "./simulation";
 import type { TractorState } from "./simulation";
@@ -167,4 +167,21 @@ test("keyboard takes over destinations, lifts the implement through pivots, and 
   assert.deepEqual(nav.step(stopped, 1 / 60, "wander", []).state, stopped);
   nav.choose({ x: 12, z: 6 }, stopped, "wander", []);
   assert.ok(nav.step(stopped, 1 / 60, "wander", []).state.speed > 0);
+});
+
+test("tractor-view keys combine throttle and steering, and the latest key wins each axis", () => {
+  const keys = new DriveKeyboard();
+  const input = () => keys.input;
+  assert.equal(input(), null);
+  keys.press("KeyW"); keys.press("KeyD");
+  assert.deepEqual(keys.input, { throttle: 1, steer: 1 });
+  keys.press("ArrowLeft");
+  assert.deepEqual(keys.input, { throttle: 1, steer: -1 });
+  keys.release("ArrowLeft");
+  assert.deepEqual(keys.input, { throttle: 1, steer: 1 });
+  keys.press("KeyS");
+  assert.equal(input()?.throttle, -1);
+  keys.press("KeyQ");
+  keys.reset();
+  assert.equal(input(), null);
 });

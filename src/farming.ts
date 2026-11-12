@@ -242,7 +242,7 @@ export class FarmingEngine {
     )
       throw new Error("Invalid farming configuration");
     this.config = structuredClone(config);
-    this.bounds = { ...site.bounds };
+    this.bounds = site.bounds;
     const count = cellCount(site.bounds);
     this.cells = new Uint8Array(count);
     this.crops = new Uint8Array(count);

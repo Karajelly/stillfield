@@ -8,6 +8,8 @@ import { FAR_FIELD, FIELD, fieldAt, WORLD } from "./simulation";
 import type { Point, TractorState } from "./simulation";
 import { TractorNavigation } from "./tractor-navigation";
 import { WorkDestination } from "./work-destination";
+import { laneWork, planRows, rowCells, rowEnd } from "./tidy-rows";
+import { sliceNotes, Wind, WIND_BANDS, windSteps } from "./wind";
 import { createWorld } from "./world";
 
 const obstacles = createWorld(new THREE.Scene()).obstacles;
@@ -97,20 +99,22 @@ test("a ride down the lane reaches the other field with the implement lifted", (
     { x: 15, z: 10, heading: Math.PI, speed: 0 },
     { x: -24, z: -11, heading: 0, speed: 0 },
   ];
-  for (const start of starts) {
+  // Both the farm view and tractor view, whose steering eases toward targets.
+  for (const follow of [false, true]) for (const start of starts) {
     let state = start;
     const navigation = new TractorNavigation();
+    navigation.tidy = follow;
     for (const destination of [FAR_SITE, HOME_SITE]) {
       const ride = new LaneRide(destination, state, navigation, obstacles);
       let result = "riding", seconds = 0;
       while (result === "riding" && seconds < 90) {
-        const step = navigation.step(state, 1 / 30, "wander", obstacles);
+        const step = navigation.step(state, 1 / 30, "wander", obstacles, 0.85, null, follow);
         assert.equal(step.paint.length, 0);
         state = step.state;
         result = ride.update(state, step.blocked);
         seconds += 1 / 30;
       }
-      assert.equal(result, "arrived", `from ${start.x},${start.z} to ${destination.id}`);
+      assert.equal(result, "arrived", `from ${start.x},${start.z} to ${destination.id}${follow ? " in tractor view" : ""}`);
       assert.equal(fieldAt(state), destination.bounds);
       assert.equal(laneDestination(state).id === destination.id, false);
       assert.ok(seconds < 45, "the ride is unhurried, not endless");
@@ -164,4 +168,86 @@ test("taps in Foxglove field snap to its own grid", () => {
   assert.equal(destination.field, FAR_FIELD);
   assert.deepEqual(destination.center, { x: -70.25, z: 2.25 });
   assert.equal(WorkDestination.create({ x: -40, z: -1 }, home, "cultivate"), null);
+});
+
+test("tidy rows in Foxglove field use its own lanes and cells", () => {
+  const start: TractorState = { x: -60, z: 2, heading: -Math.PI / 2, speed: 0 };
+  const rows = planRows(start, { x: -100, z: 2 });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].field, FAR_FIELD);
+  // Home-field rows are exactly as they always were.
+  assert.equal("field" in planRows(home, { x: -15, z: 4.8 })[0], false);
+  const end = rowEnd(rows[0]);
+  assert.ok(Math.abs(end.x - -100) < 0.5 && fieldAt(end) === FAR_FIELD);
+  for (const cell of rowCells(rows[0])) assert.ok(cell >= 0 && cell < cellCount(FAR_FIELD));
+
+  // Drive it for real: the navigation reports Foxglove cells, and they land there.
+  const far = new FarmingEngine(undefined, FARMING_CONFIG, true, FAR_SITE);
+  const navigation = new TractorNavigation();
+  navigation.tidy = true;
+  let state = start;
+  navigation.choose({ x: -100, z: 2 }, state, "cultivate", obstacles);
+  let worked = 0;
+  for (let i = 0; i < 30 * 60 && navigation.run; i++) {
+    const step = navigation.step(state, 1 / 30, "cultivate", obstacles);
+    state = step.state;
+    if (step.cells.length) {
+      assert.equal(step.field, FAR_FIELD);
+      worked += far.applyCells(step.cells, "cultivate").groundChanges.length;
+    }
+  }
+  assert.equal(navigation.run, null, "the row finishes");
+  assert.ok(worked > 300, `worked ${worked} cells`);
+  // Only cells along the tapped lane changed.
+  far.cells.forEach((ground, i) => {
+    if (ground !== Ground.soil) return;
+    const z = FAR_FIELD.minZ + (Math.floor(i / 120) + 0.5) * FAR_FIELD.cell;
+    assert.ok(Math.abs(z - rowEnd(rows[0]).z) < 1.3);
+  });
+});
+
+test("a tap in the other field never retargets a row under way", () => {
+  const navigation = new TractorNavigation();
+  navigation.tidy = true;
+  navigation.choose({ x: 10, z: 4.8 }, home, "cultivate", obstacles);
+  const row = { ...navigation.run!.row };
+  navigation.choose({ x: -100, z: 2 }, home, "cultivate", obstacles);
+  assert.deepEqual(navigation.run!.row, row);
+  assert.ok(navigation.hasQueued);
+});
+
+test("hand-driven lanes in Foxglove field report Foxglove cells", () => {
+  const state: TractorState = { x: -80, z: 1, heading: Math.PI / 2, speed: 3 };
+  const first = laneWork(state, null);
+  assert.equal(first.field, FAR_FIELD);
+  const next = laneWork({ ...state, x: -78 }, first.progress);
+  assert.ok(next.cells.length > 0);
+  for (const cell of next.cells) assert.ok(cell < cellCount(FAR_FIELD));
+  assert.equal(laneWork({ ...state, x: 0 }, null).field, FIELD);
+});
+
+test("wind plays Foxglove field's ten lanes over its longer width", () => {
+  const far = new FarmingEngine(undefined, FARMING_CONFIG, true, FAR_SITE);
+  far.apply({ x: -117, z: 0 }, { x: -57, z: 0 }, "cultivate", "wheat", 40);
+  far.apply({ x: -117, z: 0 }, { x: -57, z: 0 }, "sow", "wheat", 40);
+  far.rest();
+  assert.equal(windSteps(FAR_FIELD), 60);
+  const bands = new Set<number>();
+  for (let step = 0; step < windSteps(FAR_FIELD); step++)
+    for (const note of sliceNotes(far, step)) bands.add(note.band);
+  assert.equal(bands.size, WIND_BANDS);
+  assert.equal(sliceNotes(far, 60).length, 0);
+
+  const wind = new Wind(() => 0);
+  wind.gust();
+  assert.equal(wind.advance(0).front, FIELD.minX);
+  // A gust under way finishes crossing its own field.
+  wind.follow(FAR_FIELD);
+  assert.equal(wind.bounds, FIELD);
+  let frame = wind.advance(0.1);
+  while (frame.front !== null) frame = wind.advance(0.5);
+  assert.equal(wind.bounds, FAR_FIELD);
+  wind.gust();
+  assert.equal(wind.advance(0).front, FAR_FIELD.minX);
+  assert.equal(wind.steps, 60);
 });

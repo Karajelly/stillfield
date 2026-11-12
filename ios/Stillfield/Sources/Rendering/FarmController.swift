@@ -6,6 +6,26 @@ import SwiftUI
 import UIKit
 import os
 
+/// Colours the interface borrows from the sky, rounded to whole 8-bit steps so
+/// SwiftUI is told about a change a few times a second at most, and only while
+/// the light is actually moving.
+struct SkyTint: Equatable {
+    var sky = SIMD3<Double>(0xe8, 0xec, 0xda) / 255
+    /// A paler shade of the sky by day and the sky itself at night, for the page edges.
+    var haze = SIMD3<Double>(0xf4, 0xf5, 0xe3) / 255
+    /// The page edges are dark enough that text drawn on them should turn cream.
+    var afterDark = false
+
+    init() {}
+
+    init(_ light: Daylight) {
+        func step(_ color: SIMD3<Double>) -> SIMD3<Double> { (color * 255).rounded(.toNearestOrEven) / 255 }
+        sky = step(light.sky)
+        haze = step(light.sky + (SIMD3(repeating: 1) - light.sky) * 0.5 * (1 - light.glow))
+        afterDark = 0.2126 * haze.x + 0.7152 * haze.y + 0.0722 * haze.z < 150.0 / 255
+    }
+}
+
 @MainActor @Observable
 final class FarmController {
     var tool: FarmTool
@@ -13,8 +33,16 @@ final class FarmController {
     private(set) var cameraMode: FarmCameraMode
     var isPaused = false
     var soundEnabled = false
-    var goldenLight: Bool { didSet { updateLight(); persist() } }
+    /// Drifting through the day, or a time of day the player keeps.
+    var light: DayHold { didSet { lightChanged() } }
+    private(set) var tint = SkyTint()
+    private(set) var dayPhase = DayPhase.morning
+    private(set) var postcard: Postcard?
+    /// True for the moment the controls step aside so a postcard shows the meadow alone.
+    private(set) var isCapturing = false
     var haptics: Bool { didSet { persist() } }
+    /// Taps ask for whole rows on the field's lanes. Off keeps the original free approach.
+    var tidyRows: Bool { didSet { navigation.tidy = tidyRows; persist() } }
     var introDismissed: Bool
     private(set) var hasDriven = false
     private(set) var controlsHidden = false
@@ -32,6 +60,8 @@ final class FarmController {
     @ObservationIgnored private var testSteeringCount = 0
     @ObservationIgnored private var testTouchCount = 0
     @ObservationIgnored private var lastTelemetry = -1.0
+    /// UI tests can hold a gust front in place, to check the lean it gives the field.
+    @ObservationIgnored private var heldGustFront: Double?
 #endif
 
     @ObservationIgnored private var farmingConfiguration = FarmingConfiguration()
@@ -49,6 +79,14 @@ final class FarmController {
     @ObservationIgnored private let fillLight = Entity()
     @ObservationIgnored private var daylight: EnvironmentResource?
     @ObservationIgnored private var goldenDaylight: EnvironmentResource?
+    @ObservationIgnored private var nightDaylight: EnvironmentResource?
+    @ObservationIgnored private var dusk: DuskRenderer?
+    @ObservationIgnored private var wind = Wind()
+    /// Seconds into the day, advanced by the same active-play clock as the crops.
+    @ObservationIgnored private var dayTime = 0.0
+    @ObservationIgnored private var litDay = -1.0
+    @ObservationIgnored private var glow = 0.0
+    @ObservationIgnored private var sailTurn: Float = 0
     @ObservationIgnored private var tractor = Entity()
     @ObservationIgnored private var destinationMarker = Entity()
     @ObservationIgnored private var obstacles: [Obstacle] = []
@@ -61,6 +99,11 @@ final class FarmController {
     @ObservationIgnored private var steeringGesture: SteeringGesture?
     @ObservationIgnored private var steeringSuppressed = false
     @ObservationIgnored private var target: FarmPoint?
+    @ObservationIgnored private var rowWashes: [Entity] = []
+    @ObservationIgnored private var steerStartedAt = 0.0
+    @ObservationIgnored private var lastTap: (time: Double, point: CGPoint)?
+    @ObservationIgnored private var changedSinceTap = 0
+    @ObservationIgnored private var lastHint = -Double.infinity
     @ObservationIgnored private var elapsed = 0.0
     @ObservationIgnored private var lastFlush = 0.0
     @ObservationIgnored private var lastSave = 0.0
@@ -101,31 +144,44 @@ final class FarmController {
             // UI tests exercise automatic active-play growth without several-minute waits.
             for crop in Crop.allCases { farmingConfiguration.growthSeconds[crop] = 45 }
         }
+        if testing && ProcessInfo.processInfo.arguments.contains("--still-gust") {
+            // Just past the west edge of the third column of patches, where its lean peaks.
+            heldGustFront = -12.2
+        }
 #endif
         tractorState = saved.tractor
         tractorState.speed = 0
         tool = saved.tool == .mow || saved.tool == .restore ? .wander : saved.tool
         selectedCrop = saved.selectedCrop ?? .wheat
         cameraMode = saved.cameraMode ?? .overview
-        goldenLight = saved.goldenLight
+        light = saved.resolvedLight
+        dayTime = saved.resolvedDay
         haptics = saved.haptics
+        tidyRows = saved.tidyRows ?? false
         introDismissed = saved.introDismissed
         pace = saved.pace
         volume = saved.volume
         audio.setVolume(volume)
+        navigation.tidy = tidyRows
         if let preservationError {
             savePreservationPending = true
             hasSaveError = true
             logger.error("Previous meadow could not be preserved: \(String(describing: preservationError), privacy: .public)")
         }
+        // The loading card and the first frame already wear the saved hour's colours.
+        let now = Daylight.at(dayTime)
+        tint = SkyTint(now)
+        dayPhase = now.phase
     }
 
-    func load(into content: RealityViewCameraContent, size: CGSize, daylight: EnvironmentResource?, goldenDaylight: EnvironmentResource?) async {
+    func load(into content: RealityViewCameraContent, size: CGSize, daylight: EnvironmentResource?,
+              goldenDaylight: EnvironmentResource?, nightDaylight: EnvironmentResource?) async {
         guard self.content == nil else { return }
         self.content = content
         viewport = size
         self.daylight = daylight
         self.goldenDaylight = goldenDaylight
+        self.nightDaylight = nightDaylight
         do {
             let artwork = try await FarmArtwork.load()
             let world = try await artwork.world.makeEntity()
@@ -135,10 +191,13 @@ final class FarmController {
             root.addChild(world)
             root.addChild(tractor)
             if let fieldRenderer { root.addChild(fieldRenderer.entity) }
+            let dusk = DuskRenderer()
+            root.addChild(dusk.entity)
+            tractor.addChild(dusk.lamps)
+            self.dusk = dusk
             camera.name = "The unhurried camera"
             setViewportSize(size)
             root.addChild(camera)
-            sun.look(at: .zero, from: [-32, 55, 22], relativeTo: nil)
             fillLight.look(at: .zero, from: [40, 38, -45], relativeTo: nil)
             root.addChild(sun)
             root.addChild(fillLight)
@@ -146,6 +205,12 @@ final class FarmController {
             updateDestinationMarkerScale()
             destinationMarker.isEnabled = false
             root.addChild(destinationMarker)
+            for _ in 0..<12 {
+                let wash = try Self.makeRowWash()
+                wash.isEnabled = false
+                root.addChild(wash)
+                rowWashes.append(wash)
+            }
             content.add(root)
             if let mill = world.findEntity(named: "windmill-sails") { sails.append((mill, mill.orientation, 0.075)) }
             if let mill = world.findEntity(named: "meadow-sails") { sails.append((mill, mill.orientation, 0.085)) }
@@ -214,11 +279,21 @@ final class FarmController {
               pinchStartZoom == nil, !steeringSuppressed else { return }
         let started = steeringGesture == nil
         if started {
-            navigation.cancel(); target = nil; destinationMarker.isEnabled = false
-            steeringGesture = SteeringGesture(location: SIMD2(Double(origin.x), Double(origin.y)), time: elapsed)
+            // Tidy rows wait their turn, so a new touch must not drop them.
+            // Steering by hand still takes over, in the navigation step.
+            if !tidyRows { navigation.cancel(); target = nil; destinationMarker.isEnabled = false }
+            steeringGesture = SteeringGesture(location: SIMD2(Double(origin.x), Double(origin.y)), heading: tractorState.heading)
+            steerStartedAt = elapsed
         }
         steeringGesture?.update(SIMD2(Double(point.x), Double(point.y)))
-        if cameraMode == .overview && (started || steeringGesture?.moved == true) { chooseGround(at: point) }
+        if cameraMode == .overview {
+            if started {
+                chooseGround(at: point, fill: isSecondTap(at: point))
+            } else if tidyRows ? steeringGesture?.isFreehand(heldFor: elapsed - steerStartedAt) == true : steeringGesture?.moved == true {
+                // A drag keeps choosing destinations and steers freehand.
+                chooseGround(at: point, freehand: true)
+            }
+        }
         if !introDismissed { dismissIntro() }
         if hasDriven { scheduleControlsHide() }
     }
@@ -226,10 +301,11 @@ final class FarmController {
     func endSteering() {
         defer { steeringGesture = nil; steeringSuppressed = false }
         guard !steeringSuppressed, let gesture = steeringGesture else { return }
-        if cameraMode == .tractor && !gesture.isDriving(at: elapsed) {
-            chooseGround(at: CGPoint(x: gesture.location.x, y: gesture.location.y))
+        if cameraMode == .tractor && !gesture.moved {
+            let point = CGPoint(x: gesture.location.x, y: gesture.location.y)
+            chooseGround(at: point, fill: isSecondTap(at: point))
         }
-        // The next frame has no drag input: yaw stops immediately, travel coasts.
+        // The next frame has no drag input: yaw stops immediately, travel settles.
     }
 
     func cancelSteering() {
@@ -237,7 +313,28 @@ final class FarmController {
         steeringSuppressed = false
     }
 
-    private func chooseGround(at point: CGPoint) {
+    /// With tidy rows, a second tap on the same spot asks for every row up to it.
+    private func isSecondTap(at point: CGPoint) -> Bool {
+        var again = false
+        if tidyRows, let lastTap {
+            again = elapsed - lastTap.time < 0.4 && hypot(point.x - lastTap.point.x, point.y - lastTap.point.y) < 30
+        }
+        if again { lastTap = nil } else { lastTap = (time: elapsed, point: point) }
+        return again
+    }
+
+    /// Whether the selected tool would change a cell, so a fill can pass over idle lanes.
+    private func wouldChange(_ cell: Int) -> Bool {
+        guard field.cells.indices.contains(cell), let ground = Ground(rawValue: field.cells[cell]) else { return false }
+        switch tool {
+        case .cultivate: return ground != .soil
+        case .sow: return ground == .soil
+        case .harvest: return ground == .mature
+        default: return false
+        }
+    }
+
+    private func chooseGround(at point: CGPoint, freehand: Bool = false, fill: Bool = false) {
         let transform = camera.transformMatrix(relativeTo: nil)
         func vector(_ column: SIMD4<Float>) -> SIMD3<Double> {
             SIMD3(Double(column.x), Double(column.y), Double(column.z))
@@ -254,18 +351,23 @@ final class FarmController {
                 cameraUp: vector(transform.columns.1), cameraForward: -vector(transform.columns.2),
                 verticalHalfExtent: Double(projection.scale))
         } else if let projection = camera.components[PerspectiveCameraComponent.self] {
-            destination = PerspectiveGroundProjection.project(
+            destination = PerspectiveGroundProjection.drivable(PerspectiveGroundProjection.project(
                 screenPoint: screenPoint, viewportSize: viewportSize,
                 cameraPosition: vector(transform.columns.3), cameraRight: vector(transform.columns.0),
                 cameraUp: vector(transform.columns.1), cameraForward: -vector(transform.columns.2),
-                verticalFieldOfView: Double(projection.fieldOfViewInDegrees))
+                verticalFieldOfView: Double(projection.fieldOfViewInDegrees)))
         } else { destination = nil }
         guard let destination else { return }
-        target = FarmPoint(x: min(39, max(-39, destination.x)), z: min(28, max(-30, destination.z)))
-        navigation.choose(target!, state: tractorState, tool: tool, obstacles: obstacles)
-        destinationMarker.position = [Float(target!.x), 0.10, Float(target!.z)]
-        destinationMarker.isEnabled = true
+        let chosen = FarmPoint(x: min(39, max(-39, destination.x)), z: min(28, max(-30, destination.z)))
+        navigation.choose(chosen, state: tractorState, tool: tool, obstacles: obstacles,
+                          freehand: freehand, fill: fill, workable: { [unowned self] cell in self.wouldChange(cell) })
+        changedSinceTap = 0
+        // A tidy row ends on its lane, not exactly under the finger.
+        target = navigation.target
+        if let target { destinationMarker.position = [Float(target.x), 0.10, Float(target.z)] }
+        destinationMarker.isEnabled = target != nil
         updateDestinationMarkerScale()
+        updateRowWashes()
 #if DEBUG
         if isUITesting { testSteeringCount += 1 }
 #endif
@@ -302,7 +404,7 @@ final class FarmController {
         if !introDismissed { dismissIntro() }
         selectionFeedback()
         persist()
-        showToast(cameraMode == .tractor ? "Hold to roll. Steer gently, then lift to settle." : "A little room to see it all.")
+        showToast(cameraMode == .tractor ? "Drag to roll. Slide sideways to steer, then lift to settle." : "A little room to see it all.")
     }
 
     private func updateFollowCamera(deltaTime: Double = 0, snap: Bool = false) {
@@ -352,6 +454,29 @@ final class FarmController {
         audio.setEnabled(soundEnabled)
         selectionFeedback()
     }
+    /// Photograph the meadow as it is on screen, then show it on its card.
+    func takePostcard() {
+        guard !isCapturing, !isLoading, errorMessage == nil else { return }
+        stop()
+        selectionFeedback()
+        isCapturing = true
+        Task { [weak self] in
+            // One beat for the controls to clear and the scene to draw a frame without them.
+            try? await Task.sleep(for: .milliseconds(150))
+            guard let self else { return }
+            let photo = PostcardMaker.photograph()
+            self.isCapturing = false
+            guard let photo,
+                  let postcard = PostcardMaker.make(photo: photo, title: Daylight.copy(for: self.dayPhase).title,
+                                                    line: PostcardCaption.growing(in: self.field)) else {
+                self.showToast("The camera couldn’t see the meadow just now.")
+                return
+            }
+            self.postcard = postcard
+            self.activeSheet = .postcard
+        }
+    }
+
     func setActive(_ active: Bool) {
         isActive = active
         skipGrowthFrame = true
@@ -390,6 +515,7 @@ final class FarmController {
         stop()
         field.reset()
         navigation = TractorNavigation()
+        navigation.tidy = tidyRows
         tractorState = TractorState()
         syncTractor()
         updateFollowCamera(snap: true)
@@ -411,22 +537,35 @@ final class FarmController {
         fieldRenderer?.animate(seconds: dt)
         if growth.advancedSeconds > 0 { dirty = true }
         elapsed += dt
-        let input: DriveInput? = cameraMode == .tractor && steeringGesture?.isDriving(at: elapsed) == true
-            ? .drag(steeringGesture!.drag) : nil
+        // The day runs on the crops' clock. It rests whenever they do.
+        if light == .flow {
+            dayTime = Daylight.wrap(dayTime + activeSeconds)
+            if abs(dayTime - litDay) >= 0.25 { updateLight() }
+        }
+        let input: DriveInput? = cameraMode == .tractor && steeringGesture?.moved == true
+            ? .heading(steeringGesture!.heading) : nil
         let movement = navigation.step(tractorState, deltaTime: dt, tool: tool, obstacles: obstacles,
                                        pace: pace, manual: input, follow: cameraMode == .tractor)
         tractorState = movement.state
         target = navigation.target
         destinationMarker.isEnabled = target != nil
+        if let target { destinationMarker.position = [Float(target.x), 0.10, Float(target.z)] }
+        updateRowWashes()
         var changedCells: [Int] = []
-        for (index, point) in movement.paint.enumerated() {
-            let events = field.apply(from: movement.paint[max(0, index - 1)], to: point, tool: tool, crop: selectedCrop)
+        func worked(_ events: FarmingEvents) {
             changedCells += events.changedCells
             fieldRenderer?.respond(to: events, grid: field)
             if let harvest = events.harvestResults.first, elapsed - lastHarvestSound > 1.2 {
                 audio.harvest(harvest.crop); lastHarvestSound = elapsed
             }
         }
+        for (index, point) in movement.paint.enumerated() {
+            worked(field.apply(from: movement.paint[max(0, index - 1)], to: point, tool: tool, crop: selectedCrop))
+        }
+        // A tidy row works exactly its own cells.
+        if !movement.cells.isEmpty { worked(field.apply(cells: movement.cells, tool: tool, crop: selectedCrop)) }
+        changedSinceTap += changedCells.count
+        if movement.completed && tidyRows && changedSinceTap == 0 { explainIdlePass() }
         if !changedCells.isEmpty {
             dirty = true
 #if DEBUG
@@ -444,7 +583,7 @@ final class FarmController {
             wheelAngle += Float(tractorState.speed * dt / 0.7)
         }
         if let attachment = tractor.findEntity(named: "attachment") {
-            let desired: Float = navigation.turningAtRowEnd ? 0.4 : 0
+            let desired: Float = navigation.turningAtRowEnd || navigation.lifted ? 0.4 : 0
             attachment.position.y += (desired - attachment.position.y) * Float(1 - exp(-8 * dt))
         }
         if elapsed - lastFlush >= 1.0 / 12 {
@@ -453,9 +592,28 @@ final class FarmController {
         }
         syncTractor()
         updateFollowCamera(deltaTime: dt)
+        // A gust reads the field as it crosses: each beat sounds what grows there.
+        let gust = wind.advance(seconds: activeSeconds)
+        for step in gust.steps {
+            for note in WindScore.notes(in: field, step: step) {
+                let pitch = note.voice.crop.map { WindScore.frequency($0, band: note.band, night: glow > 0.6) } ?? 0
+                audio.windNote(note.voice, frequency: pitch, level: note.level * WindScore.accent(step: step),
+                               pan: Double(step) / Double(WindScore.steps - 1) * 1.2 - 0.6)
+            }
+        }
+        audio.setGust(gust.strength)
+        let still = UIAccessibility.isReduceMotionEnabled
+        var front = still ? nil : gust.front
+#if DEBUG
+        if let heldGustFront { front = heldGustFront }
+#endif
+        fieldRenderer?.lean(front: front, time: elapsed)
+        dusk?.animate(time: still ? 0 : elapsed)
         for (wheel, original) in wheels { wheel.orientation = original * simd_quatf(angle: wheelAngle, axis: [1, 0, 0]) }
-        if !UIAccessibility.isReduceMotionEnabled {
-            for (sail, original, rate) in sails { sail.orientation = original * simd_quatf(angle: Float(elapsed) * rate, axis: [0, 0, 1]) }
+        if !still {
+            // The windmills pick up while the gust passes.
+            sailTurn += Float(dt * (1 + gust.strength * 2.2))
+            for (sail, original, rate) in sails { sail.orientation = original * simd_quatf(angle: sailTurn * rate, axis: [0, 0, 1]) }
             for (index, bird) in birds.enumerated() {
                 let phase = Float(elapsed) * 0.12 + Float(index) * 0.8
                 bird.0.position = bird.1 + [sin(phase) * 2.0, sin(phase * 1.7) * 0.4, cos(phase) * 1.5]
@@ -474,6 +632,7 @@ final class FarmController {
         target = nil
         tractorState.speed = 0
         destinationMarker.isEnabled = false
+        updateRowWashes()
         audio.setDriving(0)
 #if DEBUG
         updateTestTelemetry(force: true)
@@ -493,6 +652,9 @@ final class FarmController {
             + ",tractorView=\(cameraMode == .tractor ? 1 : 0)"
             + String(format: ",heading=%.3f,cameraX=%.3f,cameraY=%.3f,cameraZ=%.3f",
                      tractorState.heading, Double(camera.position.x), Double(camera.position.y), Double(camera.position.z))
+        // The lean is in thousandths, so the tests can read it as a whole number.
+        let lean = Int(((fieldRenderer?.strongestLean ?? 0) * 1000).rounded())
+        testTelemetry += ",gust=\(wind.isGusting ? 1 : 0),lean=\(lean)"
         if let target {
             testTelemetry += String(format: ",targetX=%.3f,targetZ=%.3f", target.x, target.z)
         }
@@ -518,15 +680,50 @@ final class FarmController {
             }
         }
     }
+    private func lightChanged() {
+        // A held light jumps to its moment; drifting carries on from wherever it is.
+        if let held = Daylight.holdSeconds(light) { dayTime = held }
+        updateLight()
+        persist()
+    }
+
+    /// Set the lights, the lamps, the soundscape, and the interface's tint for
+    /// this moment of the day. Called a few times a second while the day drifts.
     private func updateLight() {
+        let now = Daylight.at(dayTime)
+        litDay = dayTime
+        glow = now.glow
+        func color(_ rgb: SIMD3<Double>) -> UIColor {
+            UIColor(red: rgb.x, green: rgb.y, blue: rgb.z, alpha: 1)
+        }
         // Use the web light colors; RealityKit lux are calibrated separately from
         // Three.js intensity to retain the web's bright, softly muted appearance.
-        sun.components.set(DirectionalLightComponent(color: UIColor(farmHex: goldenLight ? "#FFD299" : "#FFF1CE"), intensity: goldenLight ? 2700 : 2500))
-        fillLight.components.set(DirectionalLightComponent(color: UIColor(farmHex: goldenLight ? "#FFE3BB" : "#FFF8DF"), intensity: goldenLight ? 960 : 1200))
-        if let environment = (goldenLight ? goldenDaylight : daylight) ?? daylight ?? goldenDaylight {
-            root.components.set(ImageBasedLightComponent(source: .single(environment), intensityExponent: goldenLight ? 0.68 : 1))
+        // The morning light is 2,500 lux of sun and 1,200 of fill, as before.
+        sun.components.set(DirectionalLightComponent(color: color(now.sun), intensity: Float(now.sunPower * 2500 / 3.1)))
+        sun.look(at: .zero, from: SIMD3<Float>(now.sunFrom * 67.4), relativeTo: nil)
+        fillLight.components.set(DirectionalLightComponent(color: color(now.skyLight), intensity: Float(now.ambient * 480)))
+        // Cream sky by day, gold towards evening, moonlight after dark. Only two
+        // of the three are ever blended, because moonlight follows gold.
+        let source: ImageBasedLightComponent.Source?
+        if now.moon > 0.001, let goldenDaylight, let nightDaylight {
+            source = now.moon > 0.999 ? .single(nightDaylight) : .blend(goldenDaylight, nightDaylight, Float(now.moon))
+        } else if now.warmth > 0.001, let daylight, let goldenDaylight {
+            source = now.warmth > 0.999 ? .single(goldenDaylight) : .blend(daylight, goldenDaylight, Float(now.warmth))
+        } else if let environment = daylight ?? goldenDaylight ?? nightDaylight {
+            source = .single(environment)
+        } else {
+            source = nil
+        }
+        if let source {
+            // Exponent 1 in the morning and 0.68 at golden hour, as before.
+            root.components.set(ImageBasedLightComponent(source: source, intensityExponent: Float(1 + log2(now.ambient / 2.5))))
             root.components.set(ImageBasedLightReceiverComponent(imageBasedLight: root))
         }
+        dusk?.update(glow: now.glow)
+        audio.setAmbience(birdsong: now.birds, crickets: now.glow)
+        let tint = SkyTint(now)
+        if tint != self.tint { self.tint = tint }
+        if now.phase != dayPhase { dayPhase = now.phase }
         var shadows = DirectionalLightComponent.Shadow()
         shadows.shadowProjection = .automatic(maximumDistance: cameraMode == .tractor ? 65 : 160)
         shadows.depthBias = 1.0
@@ -549,8 +746,9 @@ final class FarmController {
         }
         let saved = MeadowSave(field: field, tractor: TractorState(x: tractorState.x, z: tractorState.z,
                                heading: tractorState.heading, speed: 0), tool: tool, rowAssist: false,
-                               pace: pace, goldenLight: goldenLight, volume: volume,
-                               haptics: haptics, introDismissed: introDismissed, cameraMode: cameraMode, selectedCrop: selectedCrop)
+                               pace: pace, goldenLight: light == .golden, volume: volume,
+                               haptics: haptics, introDismissed: introDismissed, cameraMode: cameraMode, selectedCrop: selectedCrop,
+                               light: light, day: dayTime, tidyRows: tidyRows)
         do { try MeadowStore.save(saved, to: saveURL); hasSaveError = false; dirty = false }
         catch { hasSaveError = true; logger.error("Save failed: \(String(describing: error), privacy: .public)") }
     }
@@ -568,6 +766,46 @@ final class FarmController {
             try? await Task.sleep(for: .seconds(3))
             if !Task.isCancelled { self?.toast = nil }
         }
+    }
+    /// A pass that changes nothing says why, once, instead of leaving it a puzzle.
+    private func explainIdlePass() {
+        let message: String
+        switch tool {
+        case .sow: message = "Seeds like prepared soil. Cultivate here first."
+        case .harvest: message = "Nothing here is ripe just yet."
+        default: return
+        }
+        guard elapsed - lastHint >= 30 else { return }
+        lastHint = elapsed
+        showToast(message)
+    }
+    /// A pale wash over the rows the tractor has been asked to work, shrinking as
+    /// each is done. It is drawn over the meadow, so it shows in the overhead view only.
+    private func updateRowWashes() {
+        let rows = cameraMode == .overview ? navigation.plannedRows : []
+        for (index, wash) in rowWashes.enumerated() {
+            guard index < rows.count else { wash.isEnabled = false; continue }
+            let row = rows[index], rect = TidyRows.rect(of: row)
+            wash.position = [Float(rect.x), 0.07, Float(rect.z)]
+            // A sliver of meadow between washes keeps neighbouring rows distinct.
+            wash.scale = [Float(rect.width - (row.axis == .z ? 0.3 : 0)), 1, Float(rect.depth - (row.axis == .x ? 0.3 : 0))]
+            wash.isEnabled = true
+        }
+    }
+    private static func makeRowWash() throws -> Entity {
+        var descriptor = MeshDescriptor()
+        let positions: [SIMD3<Float>] = [[-0.5, 0, -0.5], [0.5, 0, -0.5], [-0.5, 0, 0.5], [0.5, 0, 0.5]]
+        let normals: [SIMD3<Float>] = [[0, 1, 0], [0, 1, 0], [0, 1, 0], [0, 1, 0]]
+        let indices: [UInt32] = [0, 2, 1, 1, 2, 3]
+        descriptor.positions = .init(positions)
+        descriptor.normals = .init(normals)
+        // Counter-clockwise from above, like the destination ring.
+        descriptor.primitives = .triangles(indices)
+        var material = UnlitMaterial(color: UIColor(farmHex: "#F9F4D9"))
+        material.blending = .transparent(opacity: .init(floatLiteral: 0.24))
+        material.readsDepth = false
+        material.writesDepth = false
+        return ModelEntity(mesh: try MeshResource.generate(from: [descriptor]), materials: [material])
     }
     private static func makeDestinationMarker(readsDepth: Bool) throws -> Entity {
         var descriptor = MeshDescriptor()

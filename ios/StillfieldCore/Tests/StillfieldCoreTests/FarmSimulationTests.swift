@@ -169,7 +169,7 @@ private func drive(
     for (pace, limit) in [(0.55, 1.875), (MeadowSave().pace, 3.0), (1.25, 4.5)] {
         let iso = drive(toward: FarmPoint(x: 0, z: 25), frames: 120, pace: pace)
         #expect(iso.speed > limit - 0.01 && iso.speed <= limit)
-        for input in [DriveInput.drag(0), .target(FarmPoint(x: 0, z: 25))] {
+        for input in [DriveInput.heading(0), .keys(throttle: 1, steer: 0), .target(FarmPoint(x: 0, z: 25))] {
             var driver = GentleDrive(), state = stationary
             for _ in 0..<120 { state = driver.step(state, deltaTime: frame, input: input, pace: pace) }
             #expect(state.speed > limit - 0.01 && state.speed <= limit)

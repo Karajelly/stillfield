@@ -51,6 +51,9 @@ final class FieldRenderer {
     private let harvestDisplay: HarvestDisplayRenderer
     private var plants: [[Plant]]
     private var tiles: [ModelEntity]
+    // Each patch sits inside a parent, so the pair can shear it as a gust passes.
+    private var leaners: [Entity] = []
+    private var leaning: [Float] = []
     private var dirtyTiles = Set<Int>()
     private var textureDirty = false
 
@@ -123,7 +126,12 @@ final class FieldRenderer {
             let tile = ModelEntity()
             tile.name = "Meadow patch \(index)"
             tiles.append(tile)
-            entity.addChild(tile)
+            let leaner = Entity()
+            leaner.name = "Leaning patch \(index)"
+            leaner.addChild(tile)
+            leaners.append(leaner)
+            leaning.append(0)
+            entity.addChild(leaner)
             try rebuildTile(index)
         }
     }
@@ -148,6 +156,38 @@ final class FieldRenderer {
         harvestDisplay.harvest(events.harvestResults, grid: grid)
     }
     func animate(seconds: Double) { harvestDisplay.update(seconds: seconds) }
+
+    /// The lean of the most bent patch, 0 when the field is at rest.
+    var strongestLean: Float { leaning.max() ?? 0 }
+
+    /// Lean the patches a gust front has just crossed, then let them settle.
+    /// The web bends each plant; here a whole patch leans together, because a
+    /// patch is one mesh and rebuilding meshes every frame would stutter.
+    /// Pass nil between gusts, or to keep the field still for reduced motion.
+    func lean(front: Double?, time: Double) {
+        let patchWidth = (FieldGrid.maxX - FieldGrid.minX) / Double(Self.tileColumns)
+        for index in tiles.indices {
+            var lean = 0.0
+            if let front {
+                let westEdge = FieldGrid.minX + Double(index % Self.tileColumns) * patchWidth
+                let bend = WindScore.bend(behind: front - westEdge)
+                if bend > 0 { lean = bend * (0.42 + sin(time * 7 + Double(index)) * 0.05) }
+            }
+            guard Float(lean) != leaning[index] else { continue }
+            leaning[index] = Float(lean)
+            guard lean != 0 else {
+                leaners[index].transform = .identity
+                tiles[index].transform = .identity
+                continue
+            }
+            // Plants stand in world coordinates on the ground, so shearing x by
+            // height about the origin leans each one about its own foot.
+            let shape = LeanTransform(lean: lean)
+            leaners[index].orientation = simd_quatf(angle: Float(shape.outerAngle), axis: [0, 0, 1])
+            leaners[index].scale = [Float(shape.stretch), Float(1 / shape.stretch), 1]
+            tiles[index].orientation = simd_quatf(angle: Float(shape.innerAngle), axis: [0, 0, 1])
+        }
+    }
     func clearDisplay(grid: FieldGrid) { harvestDisplay.clear(grid: grid) }
 
     /// Called at a modest rate by the scene loop, and once after a reset.

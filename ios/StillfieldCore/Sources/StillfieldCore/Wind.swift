@@ -52,9 +52,14 @@ public enum WindScore {
     public static let maxRest = 70.0
     /// A lane sounds once about a third of its slice is grown.
     public static let threshold = 0.3
+    /// Beats across the home field.
     public static let steps = FieldGrid.columns / stepColumns
+    /// Ten pitch lanes in every field: the home field's 2.5 m lanes set the scale.
     public static let bands = FieldGrid.rows / bandRows
     public static let gustSeconds = Double(steps) * stepSeconds
+    /// A wider field is a longer phrase at the same tempo: one beat per metre.
+    public static func beats(in field: FieldBounds) -> Int { field.columns / stepColumns }
+    public static func gustDuration(in field: FieldBounds) -> Double { Double(beats(in: field)) * stepSeconds }
     /// Plants within this many metres behind a gust front bend, then settle.
     public static let gustTrail = 6.5
 
@@ -63,14 +68,18 @@ public enum WindScore {
 
     /// The notes one beat of a gust sounds as it crosses `step` metres of field.
     public static func notes(in field: FieldGrid, step: Int) -> [WindNote] {
-        guard (0..<steps).contains(step) else { return [] }
+        let bounds = field.bounds, rows = bounds.rows, columns = bounds.columns
+        guard (0..<beats(in: bounds)).contains(step) else { return [] }
         var coverage = [WindVoice: [Double]]()
         for voice in WindVoice.allCases { coverage[voice] = Array(repeating: 0, count: bands) }
-        let perBand = Double(stepColumns * bandRows)
-        for row in 0..<FieldGrid.rows {
-            let band = row / bandRows
+        // Rows spread evenly over the ten lanes; in the home field, five rows each.
+        func bandOf(_ row: Int) -> Int { row * bands / rows }
+        var perBand = Array(repeating: 0.0, count: bands)
+        for row in 0..<rows { perBand[bandOf(row)] += Double(stepColumns) }
+        for row in 0..<rows {
+            let band = bandOf(row)
             for offset in 0..<stepColumns {
-                let cell = row * FieldGrid.columns + step * stepColumns + offset
+                let cell = row * columns + step * stepColumns + offset
                 let state = field.cells[cell]
                 if state == Ground.stubble.rawValue {
                     coverage[.stubble]?[band] += 1
@@ -86,7 +95,7 @@ public enum WindScore {
             if crop == .pumpkins && !step.isMultiple(of: 2) { continue }
             let voice = WindVoice(crop)
             let lanes = (coverage[voice] ?? []).enumerated()
-                .map { (band: $0.offset, level: $0.element / perBand) }
+                .map { (band: $0.offset, level: $0.element / perBand[$0.offset]) }
                 .filter { $0.level >= threshold }
             guard !lanes.isEmpty else { continue }
             // Walk through the sounding lanes so a full field rolls instead of droning.
@@ -101,7 +110,7 @@ public enum WindScore {
         }
         // Stubble is a soft brush on the off-beat, one stroke for the whole slice.
         if !step.isMultiple(of: 2) {
-            let level = (coverage[.stubble] ?? []).reduce(0, +) / (perBand * Double(bands))
+            let level = (coverage[.stubble] ?? []).reduce(0, +) / Double(rows * stepColumns)
             if level >= 0.08 { notes.append(WindNote(voice: .stubble, band: 0, level: level)) }
         }
         return notes
@@ -155,16 +164,28 @@ public struct Wind {
     private var elapsed = -1.0
     private var step = 0
     private let random: () -> Double
+    /// The field this gust crosses.
+    public private(set) var field = FieldBounds.home
+    private var next = FieldBounds.home
 
     public init(random: @escaping () -> Double = { Double.random(in: 0..<1) }) {
         self.random = random
     }
 
     public var isGusting: Bool { elapsed >= 0 }
+    /// Beats in the current gust.
+    public var steps: Int { WindScore.beats(in: field) }
+
+    /// Cross this field from the next gust on. A gust under way finishes where it is.
+    public mutating func follow(_ field: FieldBounds) {
+        next = field
+        if !isGusting { self.field = field }
+    }
 
     /// Begin a gust now, unless one is already crossing.
     public mutating func gust() {
         guard !isGusting else { return }
+        field = next
         elapsed = 0
         step = 0
     }
@@ -179,19 +200,20 @@ public struct Wind {
             elapsed += dt
         }
         var steps: [Int] = []
-        while step < WindScore.steps && Double(step) * WindScore.stepSeconds <= elapsed {
+        while step < self.steps && Double(step) * WindScore.stepSeconds <= elapsed {
             steps.append(step)
             step += 1
         }
         // Let the bending trail clear the far edge before the gust ends.
-        let total = WindScore.gustSeconds + 3
+        let total = WindScore.gustDuration(in: field) + 3
         if elapsed >= total {
             elapsed = -1
+            field = next
             rest = WindScore.minRest + random() * (WindScore.maxRest - WindScore.minRest)
             return WindFrame(front: nil, steps: steps, strength: 0)
         }
-        let travelled = elapsed / WindScore.stepSeconds * Double(WindScore.stepColumns) * FieldGrid.cellSize
-        return WindFrame(front: FieldGrid.minX + travelled, steps: steps,
+        let travelled = elapsed / WindScore.stepSeconds * Double(WindScore.stepColumns) * field.cellSize
+        return WindFrame(front: field.minX + travelled, steps: steps,
                          strength: sin(.pi * min(1, elapsed / total)))
     }
 }

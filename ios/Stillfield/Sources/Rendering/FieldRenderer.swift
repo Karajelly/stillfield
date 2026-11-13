@@ -12,8 +12,12 @@ final class FieldRenderer {
     let entity = Entity()
 
     private static let pixelsPerCell = 5
-    private static let tileColumns = 8
-    private static let tileRows = 6
+    /// Patches per field, at the home field's density: 8 by 6 there, more in a larger field.
+    private static func tiles(_ bounds: FieldBounds) -> (columns: Int, rows: Int) {
+        (max(1, Int((Double(bounds.columns) * 8 / 90).rounded())), max(1, Int((Double(bounds.rows) * 6 / 50).rounded())))
+    }
+    /// The field this renderer draws.
+    let bounds: FieldBounds
     // sRGB swatches shared with src/field.ts: meadow flowers, foliage, and harvest colors.
     nonisolated private static let vegetationPalette: [UInt32] = [
         0x9AAB68, 0x7E9557, 0xA8B775,
@@ -58,8 +62,11 @@ final class FieldRenderer {
     private var textureDirty = false
 
     init(grid: FieldGrid) async throws {
-        let width = FieldGrid.columns * Self.pixelsPerCell
-        let height = FieldGrid.rows * Self.pixelsPerCell
+        // A local copy: a class can't read its own properties until all are set.
+        let bounds = grid.bounds
+        self.bounds = bounds
+        let width = bounds.columns * Self.pixelsPerCell
+        let height = bounds.rows * Self.pixelsPerCell
         guard let bitmap = CGContext(
             data: nil,
             width: width,
@@ -76,7 +83,8 @@ final class FieldRenderer {
         self.crops = grid.crops
         self.stages = grid.cells.indices.map { grid.stage(at: $0) }
         self.harvestDisplay = HarvestDisplayRenderer(grid: grid)
-        self.plants = Self.makePlants()
+        // The original field keeps its established planting; others get their own.
+        self.plants = Self.makePlants(bounds, seed: grid.bounds == .home ? 22 : 61)
         self.tiles = []
         // A shared swatch atlas keeps every patch to one draw, even in a field
         // full of multicolored flowers. All vertices sample a swatch's center.
@@ -101,7 +109,8 @@ final class FieldRenderer {
         // ground UVs below keep painted cells and their plants in agreement.
         bitmap.setShouldAntialias(false)
         for index in grid.cells.indices {
-            Self.drawCell(index, state: grid.cells[index], crop: grid.crop(at: index), stage: grid.stage(at: index), in: bitmap)
+            Self.drawCell(index, columns: bounds.columns, state: grid.cells[index], crop: grid.crop(at: index),
+                          stage: grid.stage(at: index), in: bitmap)
         }
         guard let image = bitmap.makeImage() else {
             throw RenderingError.bitmapUnavailable
@@ -116,7 +125,7 @@ final class FieldRenderer {
         var groundMaterial = Self.matteMaterial(0xFFFFFF)
         groundMaterial.baseColor.texture = .init(texture)
         let ground = ModelEntity(
-            mesh: try Self.makeGround(),
+            mesh: try Self.makeGround(bounds),
             materials: [groundMaterial]
         )
         ground.name = "Painted field surface"
@@ -145,8 +154,8 @@ final class FieldRenderer {
             let stage = grid.stage(at: index)
             guard cells[index] != state || crops[index] != grid.crops[index] || stages[index] != stage else { continue }
             cells[index] = state; crops[index] = grid.crops[index]; stages[index] = stage
-            Self.drawCell(index, state: state, crop: grid.crop(at: index), stage: stage, in: bitmap)
-            dirtyTiles.insert(Self.tileIndex(forCell: index))
+            Self.drawCell(index, columns: bounds.columns, state: state, crop: grid.crop(at: index), stage: stage, in: bitmap)
+            dirtyTiles.insert(Self.tileIndex(forCell: index, in: bounds))
             textureDirty = true
         }
     }
@@ -165,11 +174,12 @@ final class FieldRenderer {
     /// patch is one mesh and rebuilding meshes every frame would stutter.
     /// Pass nil between gusts, or to keep the field still for reduced motion.
     func lean(front: Double?, time: Double) {
-        let patchWidth = (FieldGrid.maxX - FieldGrid.minX) / Double(Self.tileColumns)
+        let tileColumns = Self.tiles(bounds).columns
+        let patchWidth = (bounds.maxX - bounds.minX) / Double(tileColumns)
         for index in tiles.indices {
             var lean = 0.0
             if let front {
-                let westEdge = FieldGrid.minX + Double(index % Self.tileColumns) * patchWidth
+                let westEdge = bounds.minX + Double(index % tileColumns) * patchWidth
                 let bend = WindScore.bend(behind: front - westEdge)
                 if bend > 0 { lean = bend * (0.42 + sin(time * 7 + Double(index)) * 0.05) }
             }
@@ -210,15 +220,16 @@ final class FieldRenderer {
         stages = grid.cells.indices.map { grid.stage(at: $0) }
         harvestDisplay.clear(grid: grid)
         for index in cells.indices {
-            Self.drawCell(index, state: cells[index], crop: grid.crop(at: index), stage: stages[index], in: bitmap)
+            Self.drawCell(index, columns: bounds.columns, state: cells[index], crop: grid.crop(at: index),
+                          stage: stages[index], in: bitmap)
         }
         dirtyTiles = Set(plants.indices)
         textureDirty = true
     }
 
-    private static func drawCell(_ index: Int, state: UInt8, crop: Crop?, stage: Int, in bitmap: CGContext) {
-        let column = index % FieldGrid.columns
-        let row = index / FieldGrid.columns
+    private static func drawCell(_ index: Int, columns: Int, state: UInt8, crop: Crop?, stage: Int, in bitmap: CGContext) {
+        let column = index % columns
+        let row = index / columns
         let size = CGFloat(pixelsPerCell)
         let x = CGFloat(column) * size
         let y = CGFloat(row) * size
@@ -276,12 +287,12 @@ final class FieldRenderer {
         }
     }
 
-    private static func makeGround() throws -> MeshResource {
-        let minX = Float(FieldGrid.minX)
-        let maxX = Float(FieldGrid.maxX)
-        let minZ = Float(FieldGrid.minZ)
-        let maxZ = Float(FieldGrid.maxZ)
-        var descriptor = MeshDescriptor(name: "45 by 25 metre field")
+    private static func makeGround(_ bounds: FieldBounds) throws -> MeshResource {
+        let minX = Float(bounds.minX)
+        let maxX = Float(bounds.maxX)
+        let minZ = Float(bounds.minZ)
+        let maxZ = Float(bounds.maxZ)
+        var descriptor = MeshDescriptor(name: "\(Int(bounds.maxX - bounds.minX)) by \(bounds.maxZ - bounds.minZ) metre field")
         descriptor.positions = .init([
             [minX, 0.045, minZ], [maxX, 0.045, minZ],
             [minX, 0.045, maxZ], [maxX, 0.045, maxZ]
@@ -292,23 +303,24 @@ final class FieldRenderer {
         return try MeshResource.generate(from: [descriptor])
     }
 
-    private static func makePlants() -> [[Plant]] {
-        var result = Array(repeating: [Plant](), count: tileColumns * tileRows)
-        var seed: UInt32 = 22
+    private static func makePlants(_ bounds: FieldBounds, seed initial: UInt32) -> [[Plant]] {
+        let tiles = Self.tiles(bounds)
+        var result = Array(repeating: [Plant](), count: tiles.columns * tiles.rows)
+        var seed = initial
         func random() -> Double {
             seed = seed &* 1_664_525 &+ 1_013_904_223
             return Double(seed) / 4_294_967_296
         }
         var plantIndex = 0
-        var z = FieldGrid.minZ + FieldGrid.cellSize / 2
-        while z < FieldGrid.maxZ {
-            var x = FieldGrid.minX + FieldGrid.cellSize / 2
-            while x < FieldGrid.maxX {
-                let px = min(FieldGrid.maxX - 0.02, x + (random() - 0.5) * 0.18)
-                let pz = min(FieldGrid.maxZ - 0.02, z + (random() - 0.5) * 0.18)
-                let column = Int((px - FieldGrid.minX) / FieldGrid.cellSize)
-                let row = Int((pz - FieldGrid.minZ) / FieldGrid.cellSize)
-                let cell = row * FieldGrid.columns + column
+        var z = bounds.minZ + bounds.cellSize / 2
+        while z < bounds.maxZ {
+            var x = bounds.minX + bounds.cellSize / 2
+            while x < bounds.maxX {
+                let px = min(bounds.maxX - 0.02, x + (random() - 0.5) * 0.18)
+                let pz = min(bounds.maxZ - 0.02, z + (random() - 0.5) * 0.18)
+                let column = Int((px - bounds.minX) / bounds.cellSize)
+                let row = Int((pz - bounds.minZ) / bounds.cellSize)
+                let cell = row * bounds.columns + column
                 let plant = Plant(
                     x: Float(px),
                     z: Float(pz),
@@ -320,21 +332,22 @@ final class FieldRenderer {
                     tone: UInt32(plantIndex % 3),
                     flowerTone: UInt32(3 + plantIndex % 5)
                 )
-                result[tileIndex(forCell: cell)].append(plant)
+                result[tileIndex(forCell: cell, in: bounds)].append(plant)
                 plantIndex += 1
-                x += FieldGrid.cellSize
+                x += bounds.cellSize
             }
-            z += FieldGrid.cellSize
+            z += bounds.cellSize
         }
         return result
     }
 
-    private static func tileIndex(forCell cell: Int) -> Int {
-        let column = cell % FieldGrid.columns
-        let row = cell / FieldGrid.columns
-        let tileX = min(tileColumns - 1, column * tileColumns / FieldGrid.columns)
-        let tileZ = min(tileRows - 1, row * tileRows / FieldGrid.rows)
-        return tileZ * tileColumns + tileX
+    private static func tileIndex(forCell cell: Int, in bounds: FieldBounds) -> Int {
+        let tiles = Self.tiles(bounds)
+        let column = cell % bounds.columns
+        let row = cell / bounds.columns
+        let tileX = min(tiles.columns - 1, column * tiles.columns / bounds.columns)
+        let tileZ = min(tiles.rows - 1, row * tiles.rows / bounds.rows)
+        return tileZ * tiles.columns + tileX
     }
 
     private func rebuildTile(_ index: Int) throws {

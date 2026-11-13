@@ -64,7 +64,7 @@ func alignmentForTap(_ last: WorkedRow?, state: TractorState, point: FarmPoint, 
         points.append(FarmPoint(x: start.x + (finish.x - start.x) * d / length, z: start.z + (finish.z - start.z) * d / length))
     }
     guard !points.contains(where: { p in
-        p.x < -38.8 || p.x > 38.8 || p.z < -29.8 || p.z > 27.8
+        p.x < FarmWorld.minX + 0.2 || p.x > FarmWorld.maxX - 0.2 || p.z < FarmWorld.minZ + 0.2 || p.z > FarmWorld.maxZ - 0.2
             || obstacles.contains { hypot(p.x - $0.x, p.z - $0.z) < $0.radius + 1.05 }
     }) else { return nil }
     return alignment

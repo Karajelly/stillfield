@@ -2,7 +2,11 @@ import Foundation
 
 public struct MeadowSave: Codable, Equatable, Sendable {
     public var version: Int
+    /// The original field.
     public var field: FieldGrid
+    /// Fields beyond the original one, by field ID. Optional on disk so older meadows
+    /// decode, and load with a fresh Foxglove field.
+    public var fields: [FieldGrid]?
     public var tractor: TractorState
     public var tool: FarmTool
     public var rowAssist: Bool
@@ -19,8 +23,13 @@ public struct MeadowSave: Codable, Equatable, Sendable {
     public var light: DayHold?
     /// Seconds into the day while it drifts. Use `resolvedDay`.
     public var day: Double?
-    // Optional on disk so meadows saved before tidy rows still decode. Off unless chosen.
+    // Optional on disk so meadows saved before tidy rows still decode. On unless Freehand was chosen.
     public var tidyRows: Bool?
+
+    /// The saved grid for a field beyond the original one, if it belongs to that field.
+    public func savedField(_ site: FieldSite) -> FieldGrid? {
+        fields?.first { $0.fieldID == site.id && $0.bounds == site.bounds }
+    }
 
     /// A meadow saved with golden light switched on keeps its golden hour.
     public var resolvedLight: DayHold { light ?? (goldenLight ? .golden : .flow) }
@@ -32,6 +41,7 @@ public struct MeadowSave: Codable, Equatable, Sendable {
     public init(
         version: Int = 3,
         field: FieldGrid = FieldGrid(),
+        fields: [FieldGrid]? = nil,
         tractor: TractorState = TractorState(),
         tool: FarmTool = .harvest,
         rowAssist: Bool = true,
@@ -48,6 +58,7 @@ public struct MeadowSave: Codable, Equatable, Sendable {
     ) {
         self.version = version
         self.field = field
+        self.fields = fields
         self.tractor = tractor
         self.tool = tool
         self.rowAssist = rowAssist
@@ -64,9 +75,10 @@ public struct MeadowSave: Codable, Equatable, Sendable {
     }
 
     public var isValid: Bool {
-        (1...3).contains(version) && field.isValid &&
-        tractor.x.isFinite && (-39...39).contains(tractor.x) &&
-        tractor.z.isFinite && (-30...28).contains(tractor.z) &&
+        (1...3).contains(version) && field.isValid && field.bounds == .home &&
+        (fields ?? []).allSatisfy { $0.isValid && $0.bounds != .home } &&
+        tractor.x.isFinite && (FarmWorld.minX...FarmWorld.maxX).contains(tractor.x) &&
+        tractor.z.isFinite && (FarmWorld.minZ...FarmWorld.maxZ).contains(tractor.z) &&
         tractor.heading.isFinite && tractor.speed.isFinite && (0...6.875).contains(tractor.speed) &&
         pace.isFinite && (0.55...1.25).contains(pace) &&
         volume.isFinite && (0...1).contains(volume) &&

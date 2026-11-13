@@ -5,7 +5,7 @@ final class StillfieldUITests: XCTestCase {
     private let meadowControlIdentifiers = [
         "tool.harvest", "tool.cultivate", "tool.sow", "tool.wander",
         "action.postcard", "action.pause", "action.sound", "action.settings",
-        "action.camera",
+        "action.camera", "action.lane",
         "Zoom out", "Center the farm", "Zoom in"
     ]
 

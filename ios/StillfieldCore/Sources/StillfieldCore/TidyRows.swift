@@ -13,9 +13,11 @@ public struct TidyRow: Equatable, Sendable {
     public var to: Int
     /// +1 toward the field's maximum, -1 toward its minimum.
     public var dir: Int
+    /// The field the row belongs to; each field has its own lanes.
+    public var field: FieldBounds
 
-    public init(axis: RowAxis, lane: Int, from: Int, to: Int, dir: Int) {
-        self.axis = axis; self.lane = lane; self.from = from; self.to = to; self.dir = dir
+    public init(axis: RowAxis, lane: Int, from: Int, to: Int, dir: Int, field: FieldBounds = .home) {
+        self.axis = axis; self.lane = lane; self.from = from; self.to = to; self.dir = dir; self.field = field
     }
 }
 
@@ -35,42 +37,51 @@ public enum TidyRows {
 
     static func along(_ p: FarmPoint, _ axis: RowAxis) -> Double { axis == .x ? p.x : p.z }
     static func across(_ p: FarmPoint, _ axis: RowAxis) -> Double { axis == .x ? p.z : p.x }
-    static func alongMin(_ axis: RowAxis) -> Double { axis == .x ? FieldGrid.minX : FieldGrid.minZ }
-    static func acrossMin(_ axis: RowAxis) -> Double { axis == .x ? FieldGrid.minZ : FieldGrid.minX }
+    static func alongMin(_ axis: RowAxis, in f: FieldBounds = .home) -> Double { axis == .x ? f.minX : f.minZ }
+    static func acrossMin(_ axis: RowAxis, in f: FieldBounds = .home) -> Double { axis == .x ? f.minZ : f.minX }
     static func point(_ axis: RowAxis, along: Double, across: Double) -> FarmPoint {
         axis == .x ? FarmPoint(x: along, z: across) : FarmPoint(x: across, z: along)
     }
     static func position(_ state: TractorState) -> FarmPoint { FarmPoint(x: state.x, z: state.z) }
 
-    public static func alongCells(_ axis: RowAxis) -> Int { axis == .x ? FieldGrid.columns : FieldGrid.rows }
-    public static func laneCount(_ axis: RowAxis) -> Int { (axis == .x ? FieldGrid.rows : FieldGrid.columns) / laneCells }
-    public static func laneCentre(_ axis: RowAxis, lane: Int) -> Double { acrossMin(axis) + (Double(lane) + 0.5) * laneWidth }
-    public static func cellCentre(_ axis: RowAxis, cell: Int) -> Double { alongMin(axis) + (Double(cell) + 0.5) * FieldGrid.cellSize }
-    public static func lane(at p: FarmPoint, axis: RowAxis) -> Int {
-        min(laneCount(axis) - 1, max(0, Int(floor((across(p, axis) - acrossMin(axis)) / laneWidth))))
+    public static func alongCells(_ axis: RowAxis, in f: FieldBounds = .home) -> Int { axis == .x ? f.columns : f.rows }
+    public static func laneCount(_ axis: RowAxis, in f: FieldBounds = .home) -> Int { (axis == .x ? f.rows : f.columns) / laneCells }
+    public static func laneCentre(_ axis: RowAxis, lane: Int, in f: FieldBounds = .home) -> Double {
+        acrossMin(axis, in: f) + (Double(lane) + 0.5) * laneWidth
     }
-    public static func cell(at p: FarmPoint, axis: RowAxis) -> Int {
-        min(alongCells(axis) - 1, max(0, Int(floor((along(p, axis) - alongMin(axis)) / FieldGrid.cellSize))))
+    public static func cellCentre(_ axis: RowAxis, cell: Int, in f: FieldBounds = .home) -> Double {
+        alongMin(axis, in: f) + (Double(cell) + 0.5) * f.cellSize
+    }
+    public static func lane(at p: FarmPoint, axis: RowAxis, in f: FieldBounds = .home) -> Int {
+        min(laneCount(axis, in: f) - 1, max(0, Int(floor((across(p, axis) - acrossMin(axis, in: f)) / laneWidth))))
+    }
+    public static func cell(at p: FarmPoint, axis: RowAxis, in f: FieldBounds = .home) -> Int {
+        min(alongCells(axis, in: f) - 1, max(0, Int(floor((along(p, axis) - alongMin(axis, in: f)) / f.cellSize))))
     }
     public static func heading(_ axis: RowAxis, dir: Int) -> Double {
         axis == .x ? (dir > 0 ? .pi / 2 : -.pi / 2) : (dir > 0 ? 0 : .pi)
     }
     /// Where a row finishes: the centre of its last cell, on the lane's centre line.
     public static func end(of row: TidyRow) -> FarmPoint {
-        point(row.axis, along: cellCentre(row.axis, cell: row.to), across: laneCentre(row.axis, lane: row.lane))
+        point(row.axis, along: cellCentre(row.axis, cell: row.to, in: row.field),
+              across: laneCentre(row.axis, lane: row.lane, in: row.field))
     }
 
-    public static func nearField(_ p: FarmPoint, reach: Double = edgeReach) -> Bool {
-        p.x.isFinite && p.z.isFinite && p.x >= FieldGrid.minX - reach && p.x <= FieldGrid.maxX + reach
-            && p.z >= FieldGrid.minZ - reach && p.z <= FieldGrid.maxZ + reach
+    /// The field a point is in, or just beside.
+    public static func field(near p: FarmPoint, reach: Double = edgeReach) -> FieldBounds? {
+        guard p.x.isFinite, p.z.isFinite else { return nil }
+        return FieldBounds.all.first {
+            p.x >= $0.minX - reach && p.x <= $0.maxX + reach && p.z >= $0.minZ - reach && p.z <= $0.maxZ + reach
+        }
     }
+    public static func nearField(_ p: FarmPoint, reach: Double = edgeReach) -> Bool { field(near: p, reach: reach) != nil }
 
     /// The ground a row covers, for drawing it: its centre, and its extent along x and z.
     public static func rect(of row: TidyRow) -> (x: Double, z: Double, width: Double, depth: Double) {
-        let a = min(row.from, row.to), b = max(row.from, row.to)
-        let length = Double(b - a + 1) * FieldGrid.cellSize
-        let centre = point(row.axis, along: alongMin(row.axis) + Double(a + b + 1) / 2 * FieldGrid.cellSize,
-                           across: laneCentre(row.axis, lane: row.lane))
+        let a = min(row.from, row.to), b = max(row.from, row.to), f = row.field
+        let length = Double(b - a + 1) * f.cellSize
+        let centre = point(row.axis, along: alongMin(row.axis, in: f) + Double(a + b + 1) / 2 * f.cellSize,
+                           across: laneCentre(row.axis, lane: row.lane, in: f))
         return (centre.x, centre.z, row.axis == .x ? length : laneWidth, row.axis == .x ? laneWidth : length)
     }
 
@@ -78,10 +89,10 @@ public enum TidyRows {
     public static func cells(of row: TidyRow, from a: Int? = nil, to b: Int? = nil) -> [Int] {
         let a = a ?? row.from, b = b ?? row.to
         var cells: [Int] = []
-        let first = row.lane * laneCells
+        let first = row.lane * laneCells, columns = row.field.columns
         for along in stride(from: a, through: b, by: b >= a ? 1 : -1) {
             for across in first..<(first + laneCells) {
-                cells.append(row.axis == .x ? across * FieldGrid.columns + along : along * FieldGrid.columns + across)
+                cells.append(row.axis == .x ? across * columns + along : along * columns + across)
             }
         }
         return cells
@@ -105,12 +116,14 @@ public enum TidyRows {
     /// - Parameters:
     ///   - fill: Work every lane between the implement and the tap, not only the tapped one.
     ///   - last: The row most recently finished, so new rows can line their ends up with it.
-    ///   - workable: Whether the current tool would change a cell. Lets a fill skip idle lanes.
-    public static func plan(_ state: TractorState, tap: FarmPoint, fill: Bool = false, last: TidyRow? = nil,
-                            workable: ((Int) -> Bool)? = nil) -> [TidyRow] {
-        guard nearField(tap) else { return [] }
+    ///   - workable: Whether the current tool would change a cell of a field. Lets a fill skip idle lanes.
+    public static func plan(_ state: TractorState, tap: FarmPoint, fill: Bool = false, last lastRow: TidyRow? = nil,
+                            workable: ((Int, FieldBounds) -> Bool)? = nil) -> [TidyRow] {
+        guard let f = field(near: tap) else { return [] }
+        // Only a row in this same field can line the new one up.
+        let last = lastRow?.field == f ? lastRow : nil
         let brush = TractorHandling.attachment(state)
-        let axis = chooseAxis(state, brush: brush, tap: tap), count = alongCells(axis)
+        let axis = chooseAxis(state, brush: brush, tap: tap), count = alongCells(axis, in: f)
         func nearest(_ cell: Int, reach: Int, anchors: [Int]) -> Int {
             var best = cell, distance = reach + 1
             for anchor in anchors {
@@ -121,22 +134,22 @@ public enum TidyRows {
         }
         var ends: [Int] = []
         if let last, last.axis == axis { ends = [last.from, last.to] }
-        let to = nearest(cell(at: tap, axis: axis), reach: 3, anchors: [0, count - 1] + ends)
-        let from = nearest(cell(at: brush, axis: axis), reach: 2, anchors: ends)
+        let to = nearest(cell(at: tap, axis: axis, in: f), reach: 3, anchors: [0, count - 1] + ends)
+        let from = nearest(cell(at: brush, axis: axis, in: f), reach: 2, anchors: ends)
         let facing = axis == .x ? sin(state.heading) : cos(state.heading)
         let dir = to > from ? 1 : to < from ? -1 : facing >= 0 ? 1 : -1
-        func row(_ lane: Int) -> TidyRow { TidyRow(axis: axis, lane: lane, from: from, to: to, dir: dir) }
+        func row(_ lane: Int) -> TidyRow { TidyRow(axis: axis, lane: lane, from: from, to: to, dir: dir, field: f) }
         func hasWork(_ lane: Int) -> Bool {
             guard let workable else { return true }
-            return cells(of: row(lane)).contains(where: workable)
+            return cells(of: row(lane)).contains { workable($0, f) }
         }
-        var tapLane = lane(at: tap, axis: axis)
+        var tapLane = lane(at: tap, axis: axis, in: f)
         if !fill {
             // A tap near a lane's edge may have been meant for its neighbour. Prefer
             // the lane with something to do, then the one beside the last row.
-            let within = across(tap, axis) - acrossMin(axis) - Double(tapLane) * laneWidth
+            let within = across(tap, axis) - acrossMin(axis, in: f) - Double(tapLane) * laneWidth
             let beside = within < laneSlack ? tapLane - 1 : within > laneWidth - laneSlack ? tapLane + 1 : tapLane
-            if beside != tapLane, beside >= 0, beside < laneCount(axis), hasWork(beside) {
+            if beside != tapLane, beside >= 0, beside < laneCount(axis, in: f), hasWork(beside) {
                 func follows(_ lane: Int) -> Bool {
                     guard let last, last.axis == axis else { return false }
                     return abs(lane - last.lane) == 1
@@ -145,13 +158,13 @@ public enum TidyRows {
             }
             return [row(tapLane)]
         }
-        let startLane = lane(at: brush, axis: axis)
+        let startLane = lane(at: brush, axis: axis, in: f)
         var rows = stride(from: startLane, through: tapLane, by: tapLane >= startLane ? 1 : -1).map(row)
         let busy = rows.filter { hasWork($0.lane) }
         rows = busy.isEmpty ? Array(rows.suffix(1)) : busy
         // Back and forth, each row starting at the end the last one finished on.
         return rows.enumerated().map { index, planned in
-            index % 2 == 1 ? TidyRow(axis: axis, lane: planned.lane, from: to, to: from, dir: -dir) : planned
+            index % 2 == 1 ? TidyRow(axis: axis, lane: planned.lane, from: to, to: from, dir: -dir, field: f) : planned
         }
     }
 }
@@ -218,16 +231,17 @@ final class TidyRun {
         self.row = row
         self.obstacles = obstacles
         var covered: Set<Int> = []
+        let f = row.field
         for obstacle in obstacles {
             let centre = FarmPoint(x: obstacle.x, z: obstacle.z)
-            covered.formUnion(FarmSimulation.cellsUnderSweep(from: centre, to: centre, radius: obstacle.radius - 0.2))
+            covered.formUnion(FarmSimulation.cellsUnderSweep(from: centre, to: centre, radius: obstacle.radius - 0.2, bounds: f))
         }
         self.covered = covered
         let axis = row.axis, dir = Double(row.dir)
-        let heading = TidyRows.heading(axis, dir: row.dir), centre = TidyRows.laneCentre(axis, lane: row.lane)
+        let heading = TidyRows.heading(axis, dir: row.dir), centre = TidyRows.laneCentre(axis, lane: row.lane, in: f)
         let here = TidyRows.position(state), brush = TractorHandling.attachment(state)
         let across = TidyRows.across(here, axis) - centre, turn = TractorHandling.angle(state.heading, heading)
-        let first = TidyRows.cellCentre(axis, cell: row.from)
+        let first = TidyRows.cellCentre(axis, cell: row.from, in: f)
         var points = [here], look = [straightLook]
         let aligned = abs(across) <= 0.35 && abs(turn) <= 0.2 && (first - TidyRows.along(brush, axis)) * dir >= -0.75
         // After turning round on the spot, the implement trails ahead of the
@@ -280,7 +294,7 @@ final class TidyRun {
         let fx = -sin(back), fz = -cos(back)
         let lx = fz, lz = -fx
         func leftOf(_ p: FarmPoint) -> Double { (p.x - state.x) * lx + (p.z - state.z) * lz }
-        let middle = FarmPoint(x: (FieldGrid.minX + FieldGrid.maxX) / 2, z: (FieldGrid.minZ + FieldGrid.maxZ) / 2)
+        let middle = row.field.centre
         let tapped = hint.map(leftOf) ?? 0
         let towardMiddle: Double = leftOf(middle) < 0 ? -1 : 1
         let preferred: Double = abs(tapped) > 0.15 ? (tapped < 0 ? -1 : 1) : towardMiddle
@@ -293,7 +307,8 @@ final class TidyRun {
         }
         func clear(_ points: [FarmPoint]) -> Bool {
             points.allSatisfy { p in
-                p.x > -38.8 && p.x < 38.8 && p.z > -29.8 && p.z < 27.8
+                p.x > FarmWorld.minX + 0.2 && p.x < FarmWorld.maxX - 0.2
+                    && p.z > FarmWorld.minZ + 0.2 && p.z < FarmWorld.maxZ - 0.2
                     && obstacles.allSatisfy { hypot(p.x - $0.x, p.z - $0.z) >= $0.radius + 1.05 }
             }
         }
@@ -321,8 +336,9 @@ final class TidyRun {
 
     /// Where the tractor is headed once the row is done: past its end, on the lane.
     private static func finish(_ row: TidyRow) -> FarmPoint {
-        TidyRows.point(row.axis, along: TidyRows.cellCentre(row.axis, cell: row.to)
-            + (TractorHandling.attachmentOffset + 1.6) * Double(row.dir), across: TidyRows.laneCentre(row.axis, lane: row.lane))
+        TidyRows.point(row.axis, along: TidyRows.cellCentre(row.axis, cell: row.to, in: row.field)
+            + (TractorHandling.attachmentOffset + 1.6) * Double(row.dir),
+            across: TidyRows.laneCentre(row.axis, lane: row.lane, in: row.field))
     }
 
     /// Move the row's end along its lane. Cells already worked stay worked.
@@ -363,7 +379,7 @@ final class TidyRun {
             }
             remaining -= left; index += 1; t = 0
         }
-        let toGo = (TidyRows.cellCentre(row.axis, cell: row.to)
+        let toGo = (TidyRows.cellCentre(row.axis, cell: row.to, in: row.field)
             - TidyRows.along(TractorHandling.attachment(state), row.axis)) * Double(row.dir)
         return (target, TractorHandling.clamp((toGo + 0.5) / 3, 0.25, 1))
     }
@@ -380,27 +396,28 @@ final class TidyRun {
         lastBrush = brush
         lowered = false
         if done { return [] }
-        let centre = TidyRows.laneCentre(axis, lane: row.lane)
+        let f = row.field
+        let centre = TidyRows.laneCentre(axis, lane: row.lane, in: f)
         let onLane = abs(TidyRows.across(brush, axis) - centre) <= 1
             && abs(TractorHandling.angle(state.heading, TidyRows.heading(axis, dir: row.dir))) <= 0.6
         let along = TidyRows.along(brush, axis)
         lowered = (onLane || workedTo != nil)
-            && (along - TidyRows.cellCentre(axis, cell: row.from)) * dir >= -0.9
-            && (TidyRows.cellCentre(axis, cell: row.to) - along) * dir >= -0.6
+            && (along - TidyRows.cellCentre(axis, cell: row.from, in: f)) * dir >= -0.9
+            && (TidyRows.cellCentre(axis, cell: row.to, in: f) - along) * dir >= -0.6
         if !onLane {
             // Bending past an obstacle, the deck still works whatever part of the
             // row it actually crosses. Getting to a row, it works nothing.
             guard let workedTo else { return [] }
             let first = row.lane * TidyRows.laneCells
-            return FarmSimulation.cellsUnderSweep(from: previous, to: brush, radius: TractorHandling.brushRadius).filter { cell in
-                let column = cell % FieldGrid.columns, line = cell / FieldGrid.columns
+            return FarmSimulation.cellsUnderSweep(from: previous, to: brush, radius: TractorHandling.brushRadius, bounds: f).filter { cell in
+                let column = cell % f.columns, line = cell / f.columns
                 let alongCell = axis == .x ? column : line, acrossCell = axis == .x ? line : column
                 return acrossCell >= first && acrossCell < first + TidyRows.laneCells
                     && (alongCell - workedTo) * row.dir > 0 && (row.to - alongCell) * row.dir >= 0
             }
         }
         // The furthest cell whose centre the deck's leading edge has reached.
-        let reach = (along + deckReach * dir - TidyRows.alongMin(axis)) / FieldGrid.cellSize - 0.5
+        let reach = (along + deckReach * dir - TidyRows.alongMin(axis, in: f)) / f.cellSize - 0.5
         let reached = Int(row.dir > 0 ? floor(reach) : ceil(reach))
         let upTo = (reached - row.to) * row.dir > 0 ? row.to : reached
         var start = workedTo.map { $0 + row.dir } ?? row.from
@@ -411,7 +428,7 @@ final class TidyRun {
             cells = TidyRows.cells(of: row, from: start, to: upTo)
             workedTo = upTo
         }
-        done = workedTo == row.to && (along - TidyRows.cellCentre(axis, cell: row.to)) * dir >= -0.1
+        done = workedTo == row.to && (along - TidyRows.cellCentre(axis, cell: row.to, in: f)) * dir >= -0.1
         return cells
     }
 }

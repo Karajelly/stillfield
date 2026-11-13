@@ -432,6 +432,8 @@ struct FarmScreen: View {
                     .modifier(AmbientCopy(hidden: game.hasDriven))
                 }
                 Spacer(minLength: 0)
+                // A narrow phone has room for the signpost's icon; its name is read aloud.
+                laneButton(compact: !wide)
                 zoomControls
             }
             .frame(maxWidth: .infinity)
@@ -448,6 +450,7 @@ struct FarmScreen: View {
 
     private var landscapeFooter: some View {
         HStack(alignment: .bottom, spacing: 12) {
+            laneButton(compact: false)
             Spacer(minLength: 0)
             toolDock(compact: true)
                 .frame(maxWidth: 320)
@@ -530,6 +533,34 @@ struct FarmScreen: View {
         .shadow(color: MeadowPalette.dockShadow, radius: 12, y: 4)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Crop to sow")
+    }
+
+    /// The signpost always points to the other end of the lane. Tap to ride there
+    /// with the implement up; tap again to stop. Any touch on the meadow takes over.
+    private func laneButton(compact: Bool) -> some View {
+        let name = game.laneSignpost.name
+        return Button(action: game.rideLane) {
+            HStack(spacing: 7) {
+                Image(systemName: game.isRiding ? "pause.fill" : "signpost.left")
+                    .font(.system(size: 16))
+                if !compact {
+                    Text(game.isRiding ? "Stop here" : name)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, compact ? 0 : 15)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(MeadowPalette.zoom)
+        .background(game.isRiding ? MeadowPalette.roundButtonSelected
+                    : game.tint.afterDark ? MeadowPalette.nightSurface : MeadowPalette.zoomSurface, in: Capsule())
+        .overlay(Capsule().strokeBorder(MeadowPalette.zoomBorder, lineWidth: 1))
+        .accessibilityLabel(game.isRiding ? "Stop on the way to \(name)" : "Ride the lane to \(name)")
+        .accessibilityAddTraits(game.isRiding ? [.isSelected] : [])
+        .accessibilityIdentifier("action.lane")
     }
 
     private var zoomControls: some View {
@@ -862,6 +893,7 @@ private struct FarmHelpSheet: View {
                     helpRow("hand.draw", title: "Find your way", text: tidyRows
                         ? "Tap where a row should end and the tractor works a straight row to it. Tap more rows whenever you like and it works them in turn. Tap twice to fill every row up to that spot. Drag to steer freehand. Pinch to look a little closer."
                         : "Tap where mowing or planting should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop. Pinch to look a little closer.")
+                    helpRow("signpost.left", title: "Down the lane", text: "A lane past the tree line leads to Foxglove field, twice the size of this one. Tap the signpost beside the zoom controls to ride there with the implement up, or tap the lane and follow it. The view follows you along the lane and settles on whichever field you reach.")
                     helpRow("car.rear", title: "Come along for the ride", text: "Tap the vehicle button beside the zoom controls to follow behind your tractor. Drag to roll, slide your finger left or right to choose its direction, and lift to settle. A quick tap chooses where work should finish. Pinch to move closer or farther away. Tap the vehicle button again to see the whole farm.")
                     helpRow("leaf", title: "Make your mark", text: "Cultivate prepares soil and clears any crops. Sow a crop, then harvest when it’s ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests fill the pots and carts by the field.")
                     helpRow("sun.max", title: "Let it grow", text: "Sunflowers take 3 minutes, wheat 6, and pumpkins 9, only while you play. Seeds are unlimited. Nothing withers, and full displays never stop a harvest.")

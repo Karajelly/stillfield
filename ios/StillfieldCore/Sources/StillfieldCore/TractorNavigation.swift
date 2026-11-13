@@ -24,7 +24,7 @@ public final class TractorNavigation {
     private var queue: [(point: FarmPoint, fill: Bool)] = []
     /// The rows those taps are expected to become, for showing what is planned.
     private var preview: [TidyRow] = []
-    private var workable: ((Int) -> Bool)?
+    private var workable: ((Int, FieldBounds) -> Bool)?
     /// Rows still to come, the one in progress first and cut down to what is left of it.
     public var plannedRows: [TidyRow] {
         guard let run else { return [] }
@@ -49,9 +49,9 @@ public final class TractorNavigation {
     /// - Parameters:
     ///   - freehand: A drag steers freely; only taps ask for tidy rows.
     ///   - fill: Work every lane up to the tap instead of the tapped lane alone.
-    ///   - workable: Whether the current tool would change a cell, so a fill can skip idle lanes.
+    ///   - workable: Whether the current tool would change a cell of a field, so a fill can skip idle lanes.
     public func choose(_ point: FarmPoint, state: TractorState, tool: FarmTool, obstacles: [Obstacle],
-                       freehand: Bool = false, fill: Bool = false, workable: ((Int) -> Bool)? = nil) {
+                       freehand: Bool = false, fill: Bool = false, workable: ((Int, FieldBounds) -> Bool)? = nil) {
         if tidy, !freehand, tool != .wander, point.x.isFinite, point.z.isFinite {
             if let workable { self.workable = workable }
             chooseTidy(point, state: state, fill: fill, obstacles: obstacles)
@@ -72,13 +72,18 @@ public final class TractorNavigation {
         if let run, inside {
             // A row that has been asked for is never dropped by another tap. One in
             // its own lane moves its end; one anywhere else joins the list behind it.
-            let row = run.row, lane = TidyRows.lane(at: point, axis: row.axis)
+            let row = run.row
+            func laneOf(_ p: FarmPoint) -> Int {
+                TidyRows.field(near: p) == row.field ? TidyRows.lane(at: p, axis: row.axis, in: row.field) : -1
+            }
+            let lane = laneOf(point)
             if lane == row.lane, !fill {
-                run.retarget(TidyRows.cell(at: point, axis: row.axis))
+                run.retarget(TidyRows.cell(at: point, axis: row.axis, in: row.field))
                 target = TidyRows.end(of: run.row)
             } else {
                 // Tapping a lane that is already waiting replaces what was asked of it.
-                queue.removeAll { TidyRows.lane(at: $0.point, axis: row.axis) == lane }
+                // A tap in the other field never matches a lane here.
+                queue.removeAll { lane >= 0 && laneOf($0.point) == lane }
                 queue.append((point, fill))
                 target = point
             }
@@ -132,8 +137,10 @@ public final class TractorNavigation {
     public struct Step {
         public let state: TractorState
         public let paint: [FarmPoint]
-        /// Field cells a tidy row has just worked. Apply them as they are.
+        /// Field cells a tidy row has just worked. Apply them as they are, to `field`.
         public let cells: [Int]
+        /// The field `cells` index into. Swept paint finds its own fields.
+        public var field: FieldBounds = .home
         public let completed: Bool
         public let blocked: Bool
     }
@@ -171,7 +178,7 @@ public final class TractorNavigation {
                 cancel(); lastRow = last; blocked = true
             }
         } else { blockedTime = 0 }
-        return Step(state: state, paint: [], cells: cells, completed: completed, blocked: blocked)
+        return Step(state: state, paint: [], cells: cells, field: run.row.field, completed: completed, blocked: blocked)
     }
     public func step(_ initial: TractorState, deltaTime: Double, tool: FarmTool, obstacles: [Obstacle],
                      pace: Double = 0.85, manual: DriveInput? = nil, follow: Bool = false) -> Step {

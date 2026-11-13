@@ -11,17 +11,21 @@ final class WorkDestination {
     private var locked: Bool
     private var aligning: Bool
 
+    /// The field the destination's cell belongs to.
+    let field: FieldBounds
+
     static func create(_ point: FarmPoint, state: TractorState, tool: FarmTool) -> WorkDestination? {
-        guard tool != .wander, TractorHandling.inField(point) else { return nil }
-        return WorkDestination(point, state: state)
+        guard tool != .wander, let field = FieldBounds.containing(point) else { return nil }
+        return WorkDestination(point, state: state, field: field)
     }
-    private init(_ point: FarmPoint, state: TractorState) {
+    private init(_ point: FarmPoint, state: TractorState, field: FieldBounds) {
         self.point = point
-        let size = FieldGrid.cellSize
-        let col = Int(TractorHandling.clamp(floor((point.x - FieldGrid.minX) / size), 0, Double(FieldGrid.columns - 1)))
-        let row = Int(TractorHandling.clamp(floor((point.z - FieldGrid.minZ) / size), 0, Double(FieldGrid.rows - 1)))
-        cell = row * FieldGrid.columns + col
-        let center = FarmPoint(x: FieldGrid.minX + (Double(col) + 0.5) * size, z: FieldGrid.minZ + (Double(row) + 0.5) * size)
+        self.field = field
+        let size = field.cellSize
+        let col = Int(TractorHandling.clamp(floor((point.x - field.minX) / size), 0, Double(field.columns - 1)))
+        let row = Int(TractorHandling.clamp(floor((point.z - field.minZ) / size), 0, Double(field.rows - 1)))
+        cell = row * field.columns + col
+        let center = FarmPoint(x: field.minX + (Double(col) + 0.5) * size, z: field.minZ + (Double(row) + 0.5) * size)
         self.center = center
         corners = [-0.5, 0.5].flatMap { x in [-0.5, 0.5].map { z in FarmPoint(x: center.x + x * size, z: center.z + z * size) } }
         let dx = center.x - state.x, dz = center.z - state.z
@@ -43,7 +47,7 @@ final class WorkDestination {
         } else if !locked && distance > 4.5 { heading = atan2(center.x - state.x, center.z - state.z) }
         else { locked = true }
         let brush = TractorHandling.attachment(state)
-        let remaining = max(0, hypot(brush.x - center.x, brush.z - center.z) - (TractorHandling.brushRadius - FieldGrid.cellSize * sqrt(2) / 2))
+        let remaining = max(0, hypot(brush.x - center.x, brush.z - center.z) - (TractorHandling.brushRadius - field.cellSize * sqrt(2) / 2))
         return (FarmPoint(x: routePoint.x + sin(heading) * (TractorHandling.attachmentOffset + 0.6),
                           z: routePoint.z + cos(heading) * (TractorHandling.attachmentOffset + 0.6)),
                 aligning ? 0 : TractorHandling.clamp((remaining + 0.4) / 3, 0.2, 1))

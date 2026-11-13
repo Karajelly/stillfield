@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stillfield study: working demos</title>
+    <style>
+      body { margin: 0; padding: 24px; background: #e8ecda; color: #344c40; font: 15px/1.5 system-ui, sans-serif; }
+      .demo { max-width: 960px; margin: 0 auto 40px; }
+      .demo canvas { display: block; width: 100%; aspect-ratio: 16 / 10; background: #dfe5cf; border-radius: 12px; }
+      .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+      button { font: inherit; padding: 6px 12px; border-radius: 999px; border: 1px solid #52745a55; background: #f7f5e9; color: inherit; cursor: pointer; }
+      button.is-on, button[aria-pressed="true"] { background: #52745a; color: #f7f5e9; }
+      input[type="range"] { flex: 1; min-width: 200px; }
+    </style>
+  </head>
+  <body>
+    <p>Working demos for the crop and harvest study. They use the game's own stage, world, tractor and farming engine; see <code>study/README.md</code>.</p>
+    <section class="demo" data-demo="growth">
+      <canvas></canvas>
+      <div class="row">
+        <button data-look="today">Today</button><button data-look="proposed">Proposed</button>
+        <button data-crop="wheat">Wheat</button><button data-crop="sunflowers">Sunflowers</button><button data-crop="pumpkins">Pumpkins</button>
+        <button data-view="farm">Farm view</button><button data-view="tractor">Tractor view</button>
+        <button data-action="play" data-play="Play a season" data-pause="Pause">Play a season</button>
+        <button data-action="sound">Sound off</button>
+      </div>
+      <div class="row"><input type="range" data-scrub min="0" max="1000" value="1000" aria-label="Season" /><span data-readout></span></div>
+    </section>
+    <section class="demo" data-demo="pass">
+      <canvas></canvas>
+      <div class="row">
+        <button data-look="today">Today</button><button data-look="proposed">Proposed</button>
+        <button data-crop="wheat">Wheat</button><button data-crop="sunflowers">Sunflowers</button><button data-crop="pumpkins">Pumpkins</button>
+        <button data-view="farm">Farm view</button><button data-view="tractor">Tractor view</button>
+        <button data-light="morning">Morning</button><button data-light="golden">Golden hour</button>
+        <button data-action="play" data-play="Harvest" data-pause="Pause">Harvest</button>
+        <button data-action="sound">Sound off</button>
+        <span data-readout></span>
+      </div>
+    </section>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

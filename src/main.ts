@@ -133,7 +133,8 @@ let tractorState: TractorState =
 Object.assign(tractorState, clampToWorld(tractorState));
 let target: Point | null = null;
 // Taps ask for whole rows on the field's lanes once this is switched on.
-let tidy = saved.tidy === true;
+// Tidy rows are on unless this meadow chose freehand.
+let tidy = saved.tidy !== false;
 let navigation = new TractorNavigation();
 navigation.tidy = tidy;
 const app = document.querySelector<HTMLDivElement>("#app")!;

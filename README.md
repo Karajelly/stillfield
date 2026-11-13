@@ -15,7 +15,7 @@ There's no currency, no deadlines, no energy meter, no quests, and no punishment
 ## What makes it feel like this
 
 - 🚜 **Unhurried driving.** The tractor cruises at a gentle 3 m/s. Tap where you want it to work and it takes its time, turning in slow, wide arcs.
-- 🌻 **Three crops, one calm loop.** Cultivate, sow, harvest. Sunflowers take 3 minutes, wheat 6, and pumpkins 9 of active play. Mature crops wait for you indefinitely.
+- 🌻 **Three crops, one calm loop.** Plow, sow, harvest. Sunflowers take 3 minutes, wheat 6, and pumpkins 9 of active play. Mature crops wait for you indefinitely.
 - 🌾 **A harvest you can see.** Sunflower pots, golden wheat sheaves in a wheelbarrow, and pumpkins in a wooden cart fill in beside the barn path.
 - 🎧 **Sound that's made on the spot.** Wind, birdsong, and a soft tractor hum are synthesized live, with no audio files.
 - 📴 **Fully offline.** Play from the very first launch with no account, no cloud sync, no ads, and no tracking. Your meadow saves on your device.
@@ -30,7 +30,7 @@ npm install
 npm run dev
 ```
 
-Vite prints a local URL and a network URL. Open the network URL in Safari on an iPad on the same Wi-Fi to try the touch controls. On a keyboard, use the arrow keys or WASD, 1–4 to switch tools, V for tractor view, and Space to pause.
+Vite prints a local URL and a network URL. Open the network URL in Safari on an iPad on the same Wi-Fi to try the touch controls. On a keyboard, use the arrow keys or WASD, 1–5 to switch tools, V for tractor view, and Space to pause.
 
 **On iPhone or iPad**
 

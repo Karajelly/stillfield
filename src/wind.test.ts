@@ -28,7 +28,7 @@ const lane = (band: number, firstStep = 0, lastStep = WIND_STEPS - 1) => {
   return cells;
 };
 const grow = (f: FarmingEngine, cells: number[], crop: Crop, seconds = 9999) => {
-  f.applyCells(cells, "cultivate");
+  f.applyCells(cells, "plow");
   f.applyCells(cells, "sow", crop);
   f.advance(seconds);
 };
@@ -36,7 +36,7 @@ const grow = (f: FarmingEngine, cells: number[], crop: Crop, seconds = 9999) => 
 describe("the wind playing the field", () => {
   it("is silent over grass, mown paths, and bare soil", () => {
     const f = fresh();
-    f.applyCells(lane(2), "cultivate");
+    f.applyCells(lane(2), "plow");
     f.applyCells(lane(4), "mow");
     for (let step = 0; step < WIND_STEPS; step++)
       assert.deepEqual(sliceNotes(f, step), []);
@@ -55,7 +55,7 @@ describe("the wind playing the field", () => {
   it("keeps seeds silent and lets the song grow with the crop", () => {
     const f = fresh();
     const cells = lane(0);
-    f.applyCells(cells, "cultivate");
+    f.applyCells(cells, "plow");
     f.applyCells(cells, "sow", "sunflowers");
     assert.deepEqual(sliceNotes(f, 4), []);
     const levels: number[] = [];

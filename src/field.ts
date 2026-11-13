@@ -46,7 +46,12 @@ export function createField(
       state === Ground.grass
         ? ["#a4b376", "#a8b67a"]
         : state === Ground.mown
-          ? ["#b9c48b", "#bdc991"]
+          ? // Flat mown green darkens toward tufted grass as it grows back.
+            [
+              ["#b9c48b", "#bdc991"],
+              ["#b2bf84", "#b6c388"],
+              ["#abb97d", "#afbc81"],
+            ][stage]
           : state === Ground.stubble
             ? ["#bdab7e", "#b8a579"]
             : planted
@@ -223,6 +228,12 @@ export function createField(
       put(grass, i, p.x, 0.05, p.z, p.height, p.height, p.height, p.angle);
       grass.setColorAt(i, color.set(i % 2 ? "#7e9557" : "#a8b775"));
     }
+    if (state === Ground.mown && stage > 0) {
+      // Short blades come back first, then fill out before turning to tufts.
+      const h = p.height * (stage === 1 ? 0.3 : 0.6);
+      put(grass, i, p.x, 0.05, p.z, h, h, h, p.angle);
+      grass.setColorAt(i, color.set(i % 2 ? "#86a05e" : "#adbc7c"));
+    }
     if (state === Ground.stubble) {
       put(grass, i, p.x, 0.05, p.z, 0.25, 0.16, 0.25, p.angle);
       grass.setColorAt(i, color.set("#cfbb85"));
@@ -330,7 +341,11 @@ export function createField(
   redraw();
   const display = createHarvestDisplay(scene, engine);
   function respond(events: FarmingEvents) {
-    const cells = [...events.groundChanges, ...events.cropStages];
+    const cells = [
+      ...events.groundChanges,
+      ...events.cropStages,
+      ...events.grassRegrowth,
+    ];
     for (const i of cells) {
       drawCell(i);
       byCell.get(i)?.forEach((point) => updatePoint(point));

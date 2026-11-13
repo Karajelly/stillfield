@@ -14,14 +14,14 @@ private func lane(_ band: Int, from firstStep: Int = 0, through lastStep: Int = 
 }
 
 private func grow(_ field: inout FieldGrid, _ cells: [Int], _ crop: Crop, seconds: Double = 9_999) {
-    field.apply(cells: cells, tool: .cultivate)
+    field.apply(cells: cells, tool: .plow)
     field.apply(cells: cells, tool: .sow, crop: crop)
     field.advance(seconds: seconds)
 }
 
 @Test func theWindIsSilentOverGrassMownPathsAndBareSoil() {
     var field = FieldGrid(starterRows: false)
-    field.apply(cells: lane(2), tool: .cultivate)
+    field.apply(cells: lane(2), tool: .plow)
     field.apply(cells: lane(4), tool: .mow)
     for step in 0..<WindScore.steps { #expect(WindScore.notes(in: field, step: step).isEmpty) }
 }
@@ -42,7 +42,7 @@ private func grow(_ field: inout FieldGrid, _ cells: [Int], _ crop: Crop, second
 @Test func seedsAreSilentAndTheSongGrowsWithTheCrop() {
     var field = FieldGrid(starterRows: false)
     let cells = lane(0)
-    field.apply(cells: cells, tool: .cultivate)
+    field.apply(cells: cells, tool: .plow)
     field.apply(cells: cells, tool: .sow, crop: .sunflowers)
     #expect(WindScore.notes(in: field, step: 4).isEmpty)
     var levels: [Double] = []

@@ -3,7 +3,7 @@ import XCTest
 @MainActor
 final class StillfieldUITests: XCTestCase {
     private let meadowControlIdentifiers = [
-        "tool.harvest", "tool.cultivate", "tool.sow", "tool.wander",
+        "tool.harvest", "tool.mow", "tool.plow", "tool.sow", "tool.wander",
         "action.postcard", "action.pause", "action.sound", "action.settings",
         "action.camera", "action.lane",
         "Zoom out", "Center the farm", "Zoom in"
@@ -27,7 +27,7 @@ final class StillfieldUITests: XCTestCase {
         XCTAssertGreaterThan(farmingValue("wheatDisplay", in: app), 0, "The starter patch must reward harvesting immediately.")
         attachScreenshot("First wheat harvest and wheelbarrow", app: app)
 
-        app.buttons["tool.cultivate"].tap()
+        app.buttons["tool.plow"].tap()
         try drive(0.48, 0.52)
         try drive(0.41, 0.43)
         app.buttons["tool.sow"].tap()
@@ -72,7 +72,7 @@ final class StillfieldUITests: XCTestCase {
             })
             revealControls(in: app)
         }
-        app.buttons["tool.cultivate"].tap()
+        app.buttons["tool.plow"].tap()
         try drive(0.48, 0.52)
         try drive(0.41, 0.43)
         app.buttons["tool.sow"].tap()
@@ -205,7 +205,7 @@ final class StillfieldUITests: XCTestCase {
         let overviewZoom = try XCTUnwrap(telemetry(in: app)).zoom
         let surface = meadowSurface(in: app)
         let initial = try XCTUnwrap(telemetry(in: app))
-        app.buttons["tool.cultivate"].tap()
+        app.buttons["tool.plow"].tap()
         // Leave enough open meadow ahead to switch views during the drive,
         // including the time accessibility needs to locate the camera button.
         surface.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.40)).tap()
@@ -285,8 +285,8 @@ final class StillfieldUITests: XCTestCase {
             XCUIDevice.shared.orientation = .portrait
             app.terminate()
         }
-        // Cultivate would plough the way across the home field if the implement came down.
-        app.buttons["tool.cultivate"].tap()
+        // Plow would plough the way across the home field if the implement came down.
+        app.buttons["tool.plow"].tap()
         let lane = app.buttons["action.lane"]
         XCTAssertEqual(lane.label, "Ride the lane to Foxglove field")
         let start = try XCTUnwrap(telemetry(in: app))
@@ -408,7 +408,7 @@ final class StillfieldUITests: XCTestCase {
         let app = launchFreshMeadow()
         defer { app.terminate() }
         let surface = meadowSurface(in: app)
-        app.buttons["tool.cultivate"].tap()
+        app.buttons["tool.plow"].tap()
         let initial = try XCTUnwrap(telemetry(in: app))
 
         // A real touch lands in the central meadow. No test hook steers the tractor.
@@ -435,8 +435,8 @@ final class StillfieldUITests: XCTestCase {
         app.activate()
         XCTAssertTrue(meadowSurface(in: app).waitForExistence(timeout: 10))
         revealControls(in: app)
-        XCTAssertTrue(app.buttons["tool.cultivate"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["tool.cultivate"].isSelected)
+        XCTAssertTrue(app.buttons["tool.plow"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["tool.plow"].isSelected)
         XCTAssertTrue(waitUntil(timeout: 5) { self.telemetry(in: app)?.speed == 0 },
                       "Leaving the app must stop the tractor.")
         let resumed = try XCTUnwrap(telemetry(in: app))

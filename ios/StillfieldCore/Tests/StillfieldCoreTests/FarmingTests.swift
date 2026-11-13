@@ -3,7 +3,7 @@ import Testing
 @testable import StillfieldCore
 
 private func plant(_ field: inout FieldGrid, _ cells: [Int], _ crop: Crop = .wheat) {
-    field.apply(cells: cells, tool: .cultivate)
+    field.apply(cells: cells, tool: .plow)
     field.apply(cells: cells, tool: .sow, crop: crop)
 }
 
@@ -48,7 +48,7 @@ private func plant(_ field: inout FieldGrid, _ cells: [Int], _ crop: Crop = .whe
 }
 
 @Test func everyInvalidActionPreservesCropAndProgress() {
-    let valid: [[FarmTool]] = [[.cultivate, .mow], [.cultivate, .restore], [.sow, .restore], [.cultivate, .restore], [.cultivate, .harvest, .restore], [.cultivate, .restore]]
+    let valid: [[FarmTool]] = [[.plow, .mow], [.plow, .restore], [.sow, .mow, .restore], [.plow, .mow, .restore], [.plow, .harvest, .mow, .restore], [.plow, .mow, .restore]]
     for state in UInt8(0)...5 {
         for tool in FarmTool.allCases {
             var field = FieldGrid(starterRows: false)
@@ -64,12 +64,48 @@ private func plant(_ field: inout FieldGrid, _ cells: [Int], _ crop: Crop = .whe
     }
 }
 
-@Test func cultivationClearsGrowingAndLeftoverMatureCropsWithoutHarvestRewards() {
+@Test func mowingReturnsEveryStateToFlatGreenGrassWithoutHarvestRewards() {
+    for state in UInt8(0)...5 {
+        var field = FieldGrid(starterRows: false)
+        field.cells[0] = state
+        if state == 3 || state == 4 { field.crops[0] = 2; field.progress[0] = state == 4 ? 1 : 0.5 }
+        let result = field.apply(cells: [0], tool: .mow)
+        #expect(field.cells[0] == Ground.mown.rawValue && field.crops[0] == 0 && field.progress[0] == 0)
+        #expect(result.harvestResults.isEmpty && field.display == [0, 0, 0])
+    }
+}
+
+@Test func tuftedGrassGrowsBackOnlyOnMownGroundDuringActivePlay() throws {
+    let seconds = FarmingConfiguration().grassSeconds
+    var field = FieldGrid(starterRows: false)
+    field.cells[0] = Ground.mown.rawValue
+    field.cells[1] = Ground.soil.rawValue
+    field.cells[2] = Ground.stubble.rawValue
+    #expect(field.advance(seconds: seconds, active: false).grassRegrowth.isEmpty)
+    let third = field.advance(seconds: seconds / 3 + 1)
+    #expect(third.grassRegrowth == [0] && third.groundChanges.isEmpty)
+    #expect(field.cells[0] == Ground.mown.rawValue && field.stage(at: 0) == 1 && field.isValid)
+    // A partly grown patch can be mown flat again.
+    #expect(field.apply(cells: [0], tool: .mow).groundChanges == [0])
+    #expect(field.progress[0] == 0)
+    #expect(field.apply(cells: [0], tool: .mow).groundChanges.isEmpty)
+    let done = field.advance(seconds: seconds)
+    #expect(done.grassRegrowth.contains(0) && done.advancedSeconds > 0)
+    #expect(field.cells[0] == Ground.grass.rawValue && field.progress[0] == 0)
+    #expect(field.cells[1] == Ground.soil.rawValue && field.cells[2] == Ground.stubble.rawValue)
+    // Tufted grass stays as it is until mown again.
+    field.advance(seconds: seconds * 3)
+    #expect(field.cells[0] == Ground.grass.rawValue)
+    let loaded = try JSONDecoder().decode(FieldGrid.self, from: JSONEncoder().encode(field))
+    #expect(loaded == field)
+}
+
+@Test func plowingClearsGrowingAndLeftoverMatureCropsWithoutHarvestRewards() {
     let config = FarmingConfiguration()
     for crop in Crop.allCases {
         var field = FieldGrid(starterRows: false)
         let from = FarmPoint(x: -10, z: 0), to = FarmPoint(x: 10, z: 0)
-        let cells = field.apply(from: from, to: to, tool: .cultivate).groundChanges
+        let cells = field.apply(from: from, to: to, tool: .plow).groundChanges
         let mature = cells[0], growing = cells[1], harvested = cells[2]
         field.apply(cells: [mature, harvested], tool: .sow, crop: crop)
         field.advance(seconds: config.growthSeconds[crop]!)
@@ -78,12 +114,12 @@ private func plant(_ field: inout FieldGrid, _ cells: [Int], _ crop: Crop = .whe
         field.advance(seconds: config.growthSeconds[crop]! / 2)
         let display = field.display
 
-        let result = field.apply(from: to, to: from, tool: .cultivate)
+        let result = field.apply(from: to, to: from, tool: .plow)
         #expect(Set(result.groundChanges) == Set([mature, growing, harvested]))
         #expect(result.harvestResults.isEmpty)
         #expect(field.display == display)
         #expect(cells.allSatisfy { field.cells[$0] == Ground.soil.rawValue && field.crops[$0] == 0 && field.progress[$0] == 0 })
-        #expect(field.apply(from: from, to: to, tool: .cultivate).groundChanges.isEmpty)
+        #expect(field.apply(from: from, to: to, tool: .plow).groundChanges.isEmpty)
         #expect(field.rest().advancedSeconds == 0)
         #expect(field.advance(seconds: 100_000).cropMaturities.isEmpty)
         #expect(field.isValid)
@@ -143,10 +179,10 @@ private func plant(_ field: inout FieldGrid, _ cells: [Int], _ crop: Crop = .whe
     field.apply(cells: [0, 1], tool: .harvest, configuration: config)
     #expect(field.displayStage(.wheat, configuration: config) == 2)
     let from = FarmPoint(x: -10, z: 0), to = FarmPoint(x: 10, z: 0)
-    let wide = field.apply(from: from, to: to, tool: .cultivate).changedCells.count
+    let wide = field.apply(from: from, to: to, tool: .plow).changedCells.count
     config.edgeCoverage = 0
     var tight = FieldGrid(starterRows: false)
-    #expect(tight.apply(from: from, to: to, tool: .cultivate, configuration: config).changedCells.count < wide)
+    #expect(tight.apply(from: from, to: to, tool: .plow, configuration: config).changedCells.count < wide)
 }
 
 @Test func mixedFarmSavePreservesAllCropDisplaysAndPartialGrowthExactly() throws {
@@ -170,7 +206,7 @@ private func plant(_ field: inout FieldGrid, _ cells: [Int], _ crop: Crop = .whe
     #expect(field.crop(at: 2) == .sunflowers && field.stage(at: 2) == 3)
     #expect(field.isValid)
     let tool = try JSONDecoder().decode(FarmTool.self, from: Data("\"till\"".utf8))
-    #expect(tool == .cultivate)
+    #expect(tool == .plow)
     #expect(FieldGrid().cells.contains(Ground.mature.rawValue))
 }
 
@@ -211,7 +247,7 @@ private func plant(_ field: inout FieldGrid, _ cells: [Int], _ crop: Crop = .whe
         for offset in [-5.0, -2.5, 0, 2.5, 5] {
             let from = FarmPoint(x: -2.13 + dz * offset - dx * 9, z: 0.17 - dx * offset - dz * 9)
             let to = FarmPoint(x: from.x + dx * 18, z: from.z + dz * 18)
-            field.apply(from: from, to: to, tool: .cultivate)
+            field.apply(from: from, to: to, tool: .plow)
             field.apply(from: from, to: to, tool: .sow, crop: .sunflowers)
         }
         var checked = 0

@@ -170,7 +170,7 @@ final class FarmController {
         let start = FarmPoint(x: saved.tractor.x, z: saved.tractor.z)
         fieldView = FarmMap.viewBlend(start)
         laneSignpost = FarmMap.destination(from: start)
-        tool = saved.tool == .mow || saved.tool == .restore ? .wander : saved.tool
+        tool = saved.tool == .restore ? .wander : saved.tool
         selectedCrop = saved.selectedCrop ?? .wheat
         cameraMode = saved.cameraMode ?? .overview
         light = saved.resolvedLight
@@ -392,9 +392,10 @@ final class FarmController {
         guard let field = fields.first(where: { $0.bounds == bounds }),
               field.cells.indices.contains(cell), let ground = Ground(rawValue: field.cells[cell]) else { return false }
         switch tool {
-        case .cultivate: return ground != .soil
+        case .plow: return ground != .soil
         case .sow: return ground == .soil
         case .harvest: return ground == .mature
+        case .mow: return ground != .mown || field.progress[cell] > 0
         default: return false
         }
     }
@@ -768,11 +769,11 @@ final class FarmController {
     private func updateAttachment() {
         tractor.findEntity(named: "attachment")?.isEnabled = tool != .wander
         tractor.findEntity(named: "seed-box")?.isEnabled = tool == .sow
-        for index in 0..<7 { tractor.findEntity(named: "till-tooth-\(index)")?.isEnabled = tool == .cultivate }
+        for index in 0..<7 { tractor.findEntity(named: "till-tooth-\(index)")?.isEnabled = tool == .plow }
         if let mower = tractor.findEntity(named: "mower") {
             for case let part as ModelEntity in mower.children {
                 var material = PhysicallyBasedMaterial()
-                material.baseColor = .init(tint: UIColor(farmHex: tool == .cultivate ? "#AE7859" : "#91B399"))
+                material.baseColor = .init(tint: UIColor(farmHex: tool == .plow ? "#AE7859" : "#91B399"))
                 material.roughness = 0.65
                 material.specular = 0.22
                 part.model?.materials = [material]
@@ -897,7 +898,7 @@ final class FarmController {
     private func explainIdlePass() {
         let message: String
         switch tool {
-        case .sow: message = "Seeds like prepared soil. Cultivate here first."
+        case .sow: message = "Seeds like prepared soil. Plow here first."
         case .harvest: message = "Nothing here is ripe just yet."
         default: return
         }

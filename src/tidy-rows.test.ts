@@ -27,10 +27,10 @@ function farm(
   const nav = new TractorNavigation();
   nav.tidy = tidy;
   let state = initial,
-    tool: Tool = "cultivate",
+    tool: Tool = "plow",
     slowest = Infinity;
   const workable = (cell: number) =>
-    tool === "cultivate"
+    tool === "plow"
       ? engine.cells[cell] !== Ground.soil
       : tool === "sow"
         ? engine.cells[cell] === Ground.soil
@@ -238,7 +238,7 @@ it("moves the end of the row being worked when its own lane is tapped again", ()
   assert.ok(again.count(Ground.soil).all - worked <= 2 * LANE_CELLS);
 });
 
-it("keeps a neighbouring sown row whole when the next lane is cultivated", () => {
+it("keeps a neighbouring sown row whole when the next lane is plowed", () => {
   const meadow = farm({ x: 22, z: laneZ(8), heading: west, speed: 0 });
   meadow.tap({ x: -24.5, z: laneZ(8) });
   meadow.settle();
@@ -246,7 +246,7 @@ it("keeps a neighbouring sown row whole when the next lane is cultivated", () =>
   meadow.tap({ x: 19.5, z: laneZ(8) });
   meadow.settle();
   assert.equal(meadow.count(Ground.growing, [8]).all, 90 * 5);
-  meadow.tool("cultivate");
+  meadow.tool("plow");
   meadow.tap({ x: -24.5, z: laneZ(7) });
   meadow.settle();
   assert.deepEqual(meadow.count(Ground.growing, [8]), {

@@ -153,7 +153,7 @@ private func screenPosition(_ point: SIMD3<Double>, framing: OverviewCamera.Fram
     #expect(far.cells.allSatisfy { $0 == Ground.grass.rawValue }, "a new field starts as quiet meadow")
     #expect(far.fieldID == "foxglove")
     let from = FarmPoint(x: -80, z: 0), to = FarmPoint(x: -64, z: 0)
-    #expect(far.apply(from: from, to: to, tool: .cultivate).groundChanges.count > 100)
+    #expect(far.apply(from: from, to: to, tool: .plow).groundChanges.count > 100)
     far.apply(from: from, to: to, tool: .sow, crop: .pumpkins)
     far.rest()
     let harvest = far.apply(from: from, to: to, tool: .harvest)
@@ -162,7 +162,7 @@ private func screenPosition(_ point: SIMD3<Double>, framing: OverviewCamera.Fram
 
     // The home field never sees work done in Foxglove field.
     var homeField = FieldGrid()
-    #expect(homeField.apply(from: from, to: to, tool: .cultivate).groundChanges.isEmpty)
+    #expect(homeField.apply(from: from, to: to, tool: .plow).groundChanges.isEmpty)
 
     let restored = try JSONDecoder().decode(FieldGrid.self, from: JSONEncoder().encode(far))
     #expect(restored == far && restored.bounds == .foxglove)
@@ -184,10 +184,10 @@ private func screenPosition(_ point: SIMD3<Double>, framing: OverviewCamera.Fram
 }
 
 @Test func tapsInFoxgloveFieldSnapToItsOwnGrid() throws {
-    let destination = try #require(WorkDestination.create(FarmPoint(x: -70.1, z: 2.3), state: home, tool: .cultivate))
+    let destination = try #require(WorkDestination.create(FarmPoint(x: -70.1, z: 2.3), state: home, tool: .plow))
     #expect(destination.field == .foxglove)
     #expect(destination.center == FarmPoint(x: -70.25, z: 2.25))
-    #expect(WorkDestination.create(FarmPoint(x: -40, z: -1), state: home, tool: .cultivate) == nil)
+    #expect(WorkDestination.create(FarmPoint(x: -40, z: -1), state: home, tool: .plow) == nil)
 }
 
 @Test func tidyRowsInFoxgloveFieldUseItsOwnLanesAndCells() throws {
@@ -205,13 +205,13 @@ private func screenPosition(_ point: SIMD3<Double>, framing: OverviewCamera.Fram
     let navigation = TractorNavigation()
     navigation.tidy = true
     var state = start, worked = 0
-    navigation.choose(FarmPoint(x: -100, z: 2), state: state, tool: .cultivate, obstacles: sceneObstacles)
+    navigation.choose(FarmPoint(x: -100, z: 2), state: state, tool: .plow, obstacles: sceneObstacles)
     for _ in 0..<(60 * 30) where navigation.run != nil {
-        let step = navigation.step(state, deltaTime: 1.0 / 60, tool: .cultivate, obstacles: sceneObstacles)
+        let step = navigation.step(state, deltaTime: 1.0 / 60, tool: .plow, obstacles: sceneObstacles)
         state = step.state
         if !step.cells.isEmpty {
             #expect(step.field == .foxglove)
-            worked += far.apply(cells: step.cells, tool: .cultivate).groundChanges.count
+            worked += far.apply(cells: step.cells, tool: .plow).groundChanges.count
         }
     }
     #expect(navigation.run == nil, "the row finishes")
@@ -226,9 +226,9 @@ private func screenPosition(_ point: SIMD3<Double>, framing: OverviewCamera.Fram
 @Test func aTapInTheOtherFieldNeverRetargetsARowUnderWay() throws {
     let navigation = TractorNavigation()
     navigation.tidy = true
-    navigation.choose(FarmPoint(x: 10, z: 4.8), state: home, tool: .cultivate, obstacles: sceneObstacles)
+    navigation.choose(FarmPoint(x: 10, z: 4.8), state: home, tool: .plow, obstacles: sceneObstacles)
     let row = try #require(navigation.run?.row)
-    navigation.choose(FarmPoint(x: -100, z: 2), state: home, tool: .cultivate, obstacles: sceneObstacles)
+    navigation.choose(FarmPoint(x: -100, z: 2), state: home, tool: .plow, obstacles: sceneObstacles)
     #expect(navigation.run?.row == row)
     #expect(navigation.hasQueued)
 }
@@ -238,7 +238,7 @@ private func screenPosition(_ point: SIMD3<Double>, framing: OverviewCamera.Fram
     let west = FarmPoint(x: -117, z: 0), east = FarmPoint(x: -57, z: 0)
     var configuration = FarmingConfiguration()
     configuration.implementRadius = 40
-    far.apply(from: west, to: east, tool: .cultivate, configuration: configuration)
+    far.apply(from: west, to: east, tool: .plow, configuration: configuration)
     far.apply(from: west, to: east, tool: .sow, crop: .wheat, configuration: configuration)
     far.rest()
     #expect(WindScore.beats(in: .foxglove) == 60)

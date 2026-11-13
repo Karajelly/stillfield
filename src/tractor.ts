@@ -204,8 +204,8 @@ export function createTractor(scene: THREE.Scene) {
     },
     setTool(tool: Tool) {
       attachment.visible = tool !== "wander";
-      mower.material = tool === "cultivate" ? materials.seat : materials.light;
-      teeth.forEach((tooth) => (tooth.visible = tool === "cultivate"));
+      mower.material = tool === "plow" ? materials.seat : materials.light;
+      teeth.forEach((tooth) => (tooth.visible = tool === "plow"));
       seedBox.visible = tool === "sow";
     },
   };

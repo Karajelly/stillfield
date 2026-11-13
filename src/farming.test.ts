@@ -15,7 +15,7 @@ import type { Tool } from "./simulation";
 
 const fresh = () => new FarmingEngine(undefined, FARMING_CONFIG, false);
 const plant = (f: FarmingEngine, cells: number[], crop: Crop = "wheat") => {
-  f.applyCells(cells, "cultivate");
+  f.applyCells(cells, "plow");
   f.applyCells(cells, "sow", crop);
 };
 describe("tranquil farming loop", () => {
@@ -62,16 +62,16 @@ describe("tranquil farming loop", () => {
   });
   it("allows only valid operations at every ground state", () => {
     const valid: Record<number, Tool[]> = {
-      0: ["cultivate", "mow"],
-      1: ["cultivate", "restore"],
-      2: ["sow", "restore"],
-      3: ["cultivate", "restore"],
-      4: ["cultivate", "harvest", "restore"],
-      5: ["cultivate", "restore"],
+      0: ["plow", "mow"],
+      1: ["plow", "restore"],
+      2: ["sow", "mow", "restore"],
+      3: ["plow", "mow", "restore"],
+      4: ["plow", "harvest", "mow", "restore"],
+      5: ["plow", "mow", "restore"],
     };
     for (let state = 0; state <= 5; state++) {
       for (const tool of [
-        "cultivate",
+        "plow",
         "sow",
         "harvest",
         "mow",
@@ -97,12 +97,58 @@ describe("tranquil farming loop", () => {
       }
     }
   });
-  it("cultivates through growing and leftover mature crops without harvest rewards", () => {
+  it("mows every state back to flat green grass without harvest rewards", () => {
+    for (let state = 0; state <= 5; state++) {
+      const f = fresh();
+      f.cells[0] = state;
+      if (state === 3 || state === 4) {
+        f.crops[0] = 2;
+        f.progress[0] = state === 4 ? 1 : 0.5;
+      }
+      const result = f.applyCells([0], "mow");
+      assert.equal(f.cells[0], Ground.mown, `${state}`);
+      assert.equal(f.crops[0], 0);
+      assert.equal(f.progress[0], 0);
+      assert.equal(result.harvestResults.length, 0);
+      assert.equal(f.display.sunflowers, 0);
+    }
+  });
+  it("grows tufted grass back only on mown ground, in active play", () => {
+    const f = fresh();
+    f.cells[0] = Ground.mown;
+    f.cells[1] = Ground.soil;
+    f.cells[2] = Ground.stubble;
+    const seconds = FARMING_CONFIG.grassSeconds;
+    assert.equal(f.advance(seconds, false).grassRegrowth.length, 0);
+    const third = f.advance(seconds / 3 + 1);
+    assert.deepEqual(third.grassRegrowth, [0]);
+    assert.equal(third.groundChanges.length, 0);
+    assert.equal(f.cells[0], Ground.mown);
+    assert.equal(f.stage(0), 1);
+    assert.ok(validFarm(f.snapshot()));
+    // A partly grown patch can be mown flat again.
+    assert.equal(f.applyCells([0], "mow").groundChanges.length, 1);
+    assert.equal(f.progress[0], 0);
+    assert.equal(f.applyCells([0], "mow").groundChanges.length, 0);
+    const done = f.advance(seconds);
+    assert.ok(done.grassRegrowth.includes(0));
+    assert.ok(done.advancedSeconds > 0);
+    assert.equal(f.cells[0], Ground.grass);
+    assert.equal(f.progress[0], 0);
+    assert.equal(f.cells[1], Ground.soil);
+    assert.equal(f.cells[2], Ground.stubble);
+    // Tufted grass stays as it is until mown again.
+    f.advance(seconds * 3);
+    assert.equal(f.cells[0], Ground.grass);
+    const restored = new FarmingEngine(f.snapshot(), FARMING_CONFIG, false);
+    assert.deepEqual(restored.snapshot(), f.snapshot());
+  });
+  it("plows through growing and leftover mature crops without harvest rewards", () => {
     for (const crop of CROPS) {
       const f = fresh();
       const from = { x: -10, z: 0 },
         to = { x: 10, z: 0 };
-      const cells = f.apply(from, to, "cultivate").groundChanges;
+      const cells = f.apply(from, to, "plow").groundChanges;
       const [mature, growing, harvested] = cells;
       f.applyCells([mature, harvested], "sow", crop);
       f.advance(FARMING_CONFIG.growthSeconds[crop]);
@@ -111,7 +157,7 @@ describe("tranquil farming loop", () => {
       f.advance(FARMING_CONFIG.growthSeconds[crop] / 2);
       const display = { ...f.display };
 
-      const result = f.apply(to, from, "cultivate");
+      const result = f.apply(to, from, "plow");
       assert.deepEqual(
         new Set(result.groundChanges),
         new Set([mature, growing, harvested]),
@@ -126,7 +172,7 @@ describe("tranquil farming loop", () => {
             f.progress[i] === 0,
         ),
       );
-      assert.equal(f.apply(from, to, "cultivate").groundChanges.length, 0);
+      assert.equal(f.apply(from, to, "plow").groundChanges.length, 0);
       assert.equal(f.rest().advancedSeconds, 0);
       assert.deepEqual(f.advance(100000).cropMaturities, []);
       assert.ok(validFarm(f.snapshot()));
@@ -197,7 +243,7 @@ describe("tranquil farming loop", () => {
     const f = fresh(),
       from = { x: -10, z: 0 },
       to = { x: 10, z: 0 };
-    const result = f.apply(from, to, "cultivate");
+    const result = f.apply(from, to, "plow");
     assert.ok(
       result.groundChanges.length > 200 && result.groundChanges.length < 300,
     );
@@ -221,7 +267,7 @@ describe("tranquil farming loop", () => {
       false,
     );
     assert.ok(
-      tight.apply(from, to, "cultivate").groundChanges.length <
+      tight.apply(from, to, "plow").groundChanges.length <
         result.groundChanges.length,
     );
   });
@@ -240,7 +286,7 @@ describe("tranquil farming loop", () => {
           z: 0.17 - dx * offset - dz * 9,
         };
         const to = { x: from.x + dx * 18, z: from.z + dz * 18 };
-        f.apply(from, to, "cultivate");
+        f.apply(from, to, "plow");
         f.apply(from, to, "sow", "sunflowers");
       }
       let checked = 0;

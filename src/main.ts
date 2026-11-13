@@ -77,13 +77,13 @@ try {
   const raw = localStorage.getItem("stillfield-v1");
   const data = JSON.parse(raw || "null");
   if (data?.version === 1 || data?.version === 2 || data?.version === 3) {
-    saved = { ...data, tool: data.tool === "till" ? "cultivate" : data.tool };
+    saved = { ...data, tool: data.tool === "till" || data.tool === "cultivate" ? "plow" : data.tool };
     if (data.version < 3 && raw) legacySaveBackup = raw;
   }
 } catch {
   /* A private meadow works even without browser storage. */
 }
-const tools: Tool[] = ["cultivate", "sow", "harvest", "wander"];
+const tools: Tool[] = ["plow", "sow", "harvest", "mow", "wander"];
 const LIGHT_NAMES: Record<DayHold, string> = {
   flow: "Drifting",
   morning: "Morning",
@@ -93,7 +93,7 @@ const LIGHT_NAMES: Record<DayHold, string> = {
 };
 let selectedTool: Tool = tools.includes(saved.tool!)
   ? saved.tool!
-  : saved.tool === "mow" || saved.tool === "restore"
+  : saved.tool === "restore"
     ? "wander"
     : "harvest";
 let selectedCrop: Crop = CROPS.includes(saved.crop!) ? saved.crop! : "wheat";
@@ -167,9 +167,10 @@ app.innerHTML = `
     <section class="bottom-center menu-panel" id="tool-controls" aria-label="Tractor tools">
       <div class="crop-choices" id="crop-choice" role="group" aria-label="Crop to sow" hidden>${CROPS.map((crop) => `<button class="crop-button ${crop} ${crop === selectedCrop ? "selected" : ""}" data-crop="${crop}" aria-label="Sow ${CROP_NAMES[crop]}" aria-pressed="${crop === selectedCrop}">${icon(crop)}<span>${CROP_NAMES[crop]}</span></button>`).join("")}</div>
       <nav class="tool-dock" aria-label="Choose your tool">${[
-        ["cultivate", "Cultivate", "Prepare soil, clearing any crops"],
+        ["plow", "Plow", "Prepare soil, clearing any crops"],
         ["sow", "Sow", "Plant the chosen crop in soil"],
         ["harvest", "Harvest", "Gather mature crops"],
+        ["mow", "Mow", "Cut anything back to flat green grass"],
         ["wander", "Wander", "Just enjoy the ride"],
       ]
         .map(
@@ -682,7 +683,7 @@ function openDialog(content: string, kind = "") {
 }
 function showHelp() {
   openDialog(
-    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO STILLFIELD</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>${tidy ? "Tap where a row should end and the tractor works a straight row to it. Tap more rows whenever you like and it works them in turn. Tap twice to fill every row up to that spot. Drag to steer freehand." : "Tap where the work should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop."}<br>WASD or arrow keys follow the field rows. Tap a new direction to turn in place; hold to drive. Up follows the view, even when the window is narrow.<br>A lane past the tree line leads to Foxglove field, twice the size of this one. Tap the signpost to ride there, or tap the lane and follow it.<br>The tractor button beside the zoom controls, or V, follows behind your tractor. Drag to roll; slide left or right from where you pressed to choose its direction, and let go to settle. With keys, W rolls, A and D steer, and S settles.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Cultivate prepares soil and clears any crops. Sow wheat, sunflowers, or pumpkins, then harvest when they’re ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests gather in pots and carts by the field.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Crops grow only while you’re here: sunflowers in 3 minutes, wheat in 6, pumpkins in 9. Nothing withers. Your meadow saves on this device.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
+    `<div class="dialog-symbol">${brandMark}</div><div class="eyebrow">WELCOME TO STILLFIELD</div><h2 id="dialog-title">Make yourself<br><em>at home.</em></h2><p>There’s nothing to win and nowhere to fall behind. Just a little land to make your own.</p><div class="help-steps"><div>${icon("wander")}<span><strong>Find your way</strong>${tidy ? "Tap where a row should end and the tractor works a straight row to it. Tap more rows whenever you like and it works them in turn. Tap twice to fill every row up to that spot. Drag to steer freehand." : "Tap where the work should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop."}<br>WASD or arrow keys follow the field rows. Tap a new direction to turn in place; hold to drive. Up follows the view, even when the window is narrow.<br>A lane past the tree line leads to Foxglove field, twice the size of this one. Tap the signpost to ride there, or tap the lane and follow it.<br>The tractor button beside the zoom controls, or V, follows behind your tractor. Drag to roll; slide left or right from where you pressed to choose its direction, and let go to settle. With keys, W rolls, A and D steer, and S settles.</span></div><div>${icon("sow")}<span><strong>Make your mark</strong>Plow prepares soil and clears any crops. Mow cuts anything back to flat green grass, which slowly grows back into tufts. Sow wheat, sunflowers, or pumpkins, then harvest when they’re ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests gather in pots and carts by the field.</span></div><div>${icon("feather")}<span><strong>Stay for a while</strong>Crops grow only while you’re here: sunflowers in 3 minutes, wheat in 6, pumpkins in 9. Nothing withers. Your meadow saves on this device.</span></div></div><p class="ipad-tip">On iPad, open in Safari and choose Share → Add to Home Screen for a little more room to roam.</p><button class="primary-button" id="help-done">A little time outside ${icon("arrow")}</button>`,
   );
   dialog.querySelector("#help-done")!.addEventListener("click", closeDialog);
 }
@@ -841,12 +842,16 @@ function showReset() {
 }
 /** Whether the selected tool would change a cell, so a fill can pass over idle lanes. */
 function workable(cell: number, bounds: FieldBounds) {
-  const ground = fieldFor(bounds).grid[cell];
-  return selectedTool === "cultivate"
+  const field = fieldFor(bounds),
+    ground = field.grid[cell];
+  return selectedTool === "plow"
     ? ground !== Ground.soil
     : selectedTool === "sow"
       ? ground === Ground.soil
-      : selectedTool === "harvest" && ground === Ground.mature;
+      : selectedTool === "harvest"
+        ? ground === Ground.mature
+        : selectedTool === "mow" &&
+          (ground !== Ground.mown || field.engine.progress[cell] > 0);
 }
 // A pass that changes nothing says why, once, instead of leaving it a puzzle.
 let changedSinceTap = 0,
@@ -854,7 +859,7 @@ let changedSinceTap = 0,
 function explainIdlePass() {
   const message =
     selectedTool === "sow"
-      ? "Seeds like prepared soil. Cultivate here first."
+      ? "Seeds like prepared soil. Plow here first."
       : selectedTool === "harvest"
         ? "Nothing here is ripe just yet."
         : "";
@@ -1020,10 +1025,8 @@ window.addEventListener("keydown", (e) => {
   } else if (e.code === "Space" && !(e.target instanceof HTMLButtonElement)) {
     e.preventDefault();
     setPaused(!paused);
-  } else if (["1", "2", "3", "4"].includes(e.key)) {
-    updateTool(
-      (["cultivate", "sow", "harvest", "wander"] as Tool[])[Number(e.key) - 1],
-    );
+  } else if (["1", "2", "3", "4", "5"].includes(e.key)) {
+    updateTool(tools[Number(e.key) - 1]);
   } else if (e.key.toLowerCase() === "v" && !paused && !e.repeat) {
     e.preventDefault();
     setCameraMode(cameraMode === "tractor" ? "overview" : "tractor");

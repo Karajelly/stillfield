@@ -10,7 +10,7 @@ private final class TidyMeadow {
     let navigation = TractorNavigation()
     var state: TractorState
     var field = FieldGrid(starterRows: false)
-    var tool = FarmTool.cultivate
+    var tool = FarmTool.plow
     let obstacles: [Obstacle]
     let follow: Bool
     let fps: Double
@@ -22,7 +22,7 @@ private final class TidyMeadow {
     }
     func workable(_ cell: Int) -> Bool {
         switch tool {
-        case .cultivate: field.cells[cell] != Ground.soil.rawValue
+        case .plow: field.cells[cell] != Ground.soil.rawValue
         case .sow: field.cells[cell] == Ground.soil.rawValue
         default: field.cells[cell] == Ground.mature.rawValue
         }
@@ -183,7 +183,7 @@ private final class TidyMeadow {
     #expect(again.count(.soil).all - worked <= 2 * TidyRows.laneCells)
 }
 
-@Test func aNeighbouringSownRowStaysWholeWhenTheNextLaneIsCultivated() throws {
+@Test func aNeighbouringSownRowStaysWholeWhenTheNextLaneIsPlowed() throws {
     let meadow = TidyMeadow(TractorState(x: 22, z: laneZ(8), heading: west))
     meadow.tap(FarmPoint(x: -24.5, z: laneZ(8)))
     try meadow.settle()
@@ -191,7 +191,7 @@ private final class TidyMeadow {
     meadow.tap(FarmPoint(x: 19.5, z: laneZ(8)))
     try meadow.settle()
     #expect(meadow.count(.growing, lanes: [8]).all == 90 * 5)
-    meadow.setTool(.cultivate)
+    meadow.setTool(.plow)
     meadow.tap(FarmPoint(x: -24.5, z: laneZ(7)))
     try meadow.settle()
     let sown = meadow.count(.growing, lanes: [8])

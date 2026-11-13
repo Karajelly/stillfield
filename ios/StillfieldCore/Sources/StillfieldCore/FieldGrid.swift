@@ -7,19 +7,22 @@ public enum Crop: UInt8, Codable, CaseIterable, Sendable {
     }
 }
 
-/// Mown is grass with a permanent appearance change, not a cultivation prerequisite.
+/// Mown is flat, freshly cut grass. Its progress counts toward tufted grass growing back.
 public enum Ground: UInt8, Sendable {
     case grass, mown, soil, growing, mature, stubble
 }
 
 public struct FarmingConfiguration: Equatable, Sendable {
     public var growthSeconds: [Crop: Double] = [.wheat: 360, .sunflowers: 180, .pumpkins: 540]
+    /// Active-play seconds for mown ground to grow back into tufted grass.
+    public var grassSeconds = 300.0
     public var implementRadius = TractorHandling.brushRadius
     public var edgeCoverage = FieldGrid.cellSize / 2
     public var displayThresholds = [1, 64, 256]
     public init() {}
     public var isValid: Bool {
         Crop.allCases.allSatisfy { (growthSeconds[$0] ?? 0).isFinite && (growthSeconds[$0] ?? 0) > 0 } &&
+        grassSeconds.isFinite && grassSeconds > 0 &&
         implementRadius.isFinite && implementRadius >= 0 && edgeCoverage.isFinite && edgeCoverage >= 0 &&
         displayThresholds.count == 3 && displayThresholds[0] == 1 &&
         displayThresholds[1] > 1 && displayThresholds[2] > displayThresholds[1]
@@ -38,9 +41,11 @@ public struct FarmingEvents: Equatable, Sendable {
     public var groundChanges: [Int] = []
     public var cropStages: [Int] = []
     public var cropMaturities: [Int] = []
+    /// Mown cells whose grass reached a new height, or grew back into tufted grass.
+    public var grassRegrowth: [Int] = []
     public var harvestResults: [HarvestResult] = []
     public var advancedSeconds = 0.0
-    public var changedCells: [Int] { groundChanges + cropStages }
+    public var changedCells: [Int] { groundChanges + cropStages + grassRegrowth }
     public init() {}
 }
 
@@ -124,15 +129,16 @@ public struct FieldGrid: Codable, Equatable, Sendable {
         for i in indices where cells.indices.contains(i) {
             let state = Ground(rawValue: cells[i])
             switch tool {
-            case .cultivate where state == .grass || state == .mown || state == .growing || state == .mature || state == .stubble:
+            case .plow where state == .grass || state == .mown || state == .growing || state == .mature || state == .stubble:
                 cells[i] = Ground.soil.rawValue; crops[i] = 0; progress[i] = 0
             case .sow where state == .soil:
                 cells[i] = Ground.growing.rawValue; crops[i] = crop.rawValue
             case .harvest where state == .mature:
                 if let harvestedCrop = self.crop(at: i) { harvested[harvestedCrop, default: []].append(i) }
                 cells[i] = Ground.stubble.rawValue; crops[i] = 0; progress[i] = 0
-            case .mow where state == .grass:
-                cells[i] = Ground.mown.rawValue
+            case .mow where state != .mown || progress[i] > 0:
+                // Mowing always leaves flat green grass, whatever stood there.
+                cells[i] = Ground.mown.rawValue; crops[i] = 0; progress[i] = 0
             case .restore where state != .grass:
                 cells[i] = Ground.grass.rawValue; crops[i] = 0; progress[i] = 0
             default: continue
@@ -164,6 +170,15 @@ public struct FieldGrid: Codable, Equatable, Sendable {
         precondition(configuration.isValid)
         var events = FarmingEvents()
         guard active, seconds.isFinite, seconds > 0 else { return events }
+        for i in cells.indices where cells[i] == Ground.mown.rawValue {
+            // Only mown ground grows back into tufted grass.
+            events.advancedSeconds = seconds
+            let before = stage(at: i)
+            progress[i] += seconds / configuration.grassSeconds
+            if progress[i] >= 1 - 1e-12 {
+                cells[i] = Ground.grass.rawValue; progress[i] = 0; events.grassRegrowth.append(i)
+            } else if before != stage(at: i) { events.grassRegrowth.append(i) }
+        }
         for i in cells.indices where cells[i] == Ground.growing.rawValue {
             guard let crop = crop(at: i), let duration = configuration.growthSeconds[crop] else { continue }
             events.advancedSeconds = seconds
@@ -208,6 +223,7 @@ public struct FieldGrid: Codable, Equatable, Sendable {
             if state == .growing || state == .mature {
                 return crop(at: i) != nil && (state == .mature ? progress[i] == 1 : (0..<1).contains(progress[i]))
             }
+            if state == .mown { return crops[i] == 0 && (0..<1).contains(progress[i]) }
             return crops[i] == 0 && progress[i] == 0
         }
     }

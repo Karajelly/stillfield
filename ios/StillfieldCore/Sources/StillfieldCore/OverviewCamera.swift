@@ -12,7 +12,7 @@ public enum OverviewCamera {
     /// Foxglove field is framed exactly like the home field, just further west.
     static let farFocus: SIMD3<Double> = {
         let home = FieldBounds.home.centre, far = FieldBounds.foxglove.centre
-        return homeFocus + SIMD3(far.x - home.x, 0, far.z - home.z)
+        return OverviewCamera.homeFocus + SIMD3(far.x - home.x, 0, far.z - home.z)
     }()
 
     /// `blend` slides the same composition from the home field (0) to Foxglove

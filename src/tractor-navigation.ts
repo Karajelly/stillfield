@@ -107,7 +107,7 @@ export class TractorNavigation {
       this.target = { ...point }; this.painting = false;
       return;
     }
-    this.begin(planRows(state, point, { fill, last: this.lastRow, workable: this.workable }), state, obstacles);
+    this.begin(planRows(state, point, { fill, last: this.lastRow, workable: this.workable }), state, obstacles, point);
   }
   /** Work out the rows the waiting taps will become, from where each will start. */
   private foresee() {
@@ -123,10 +123,11 @@ export class TractorNavigation {
       last = rows.at(-1) ?? last;
     }
   }
-  private begin(rows: Row[], state: TractorState, obstacles: Obstacle[]) {
+  /** `tap` says which way to swing round when a row turns back along its own lane. */
+  private begin(rows: Row[], state: TractorState, obstacles: Obstacle[], tap?: Point) {
     const first = rows.shift();
     if (!first) return;
-    this.run = new TidyRun(first, state, obstacles);
+    this.run = new TidyRun(first, state, obstacles, tap);
     this.pending = rows;
     // The ring marks the corner that was asked for: the tapped lane, at the tapped cell.
     this.target = rowEnd({ ...(rows.at(-1) ?? first), to: first.to });
@@ -155,7 +156,7 @@ export class TractorNavigation {
       else if (waiting) {
         const queue = this.queue;
         this.cancel(); this.queue = queue;
-        this.begin(planRows(state, waiting.point, { fill: waiting.fill, last: this.lastRow, workable: this.workable }), state, obstacles);
+        this.begin(planRows(state, waiting.point, { fill: waiting.fill, last: this.lastRow, workable: this.workable }), state, obstacles, waiting.point);
         this.foresee();
         if (queue.length) this.target = { ...queue.at(-1)!.point };
       } else { this.cancel(); completed = true; }

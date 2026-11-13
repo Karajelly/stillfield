@@ -93,7 +93,8 @@ public final class TractorNavigation {
             target = point; painting = false
             return
         }
-        begin(TidyRows.plan(state, tap: point, fill: fill, last: lastRow, workable: workable), state: state, obstacles: obstacles)
+        begin(TidyRows.plan(state, tap: point, fill: fill, last: lastRow, workable: workable), state: state, obstacles: obstacles,
+              tap: point)
     }
     /// Work out the rows the waiting taps will become, from where each will start.
     private func foresee() {
@@ -108,9 +109,10 @@ public final class TractorNavigation {
             last = rows.last ?? last
         }
     }
-    private func begin(_ rows: [TidyRow], state: TractorState, obstacles: [Obstacle]) {
+    /// `tap` says which way to swing round when a row turns back along its own lane.
+    private func begin(_ rows: [TidyRow], state: TractorState, obstacles: [Obstacle], tap: FarmPoint? = nil) {
         guard let first = rows.first else { return }
-        run = TidyRun(first, state: state, obstacles: obstacles)
+        run = TidyRun(first, state: state, obstacles: obstacles, hint: tap)
         pending = Array(rows.dropFirst())
         // The ring marks the corner that was asked for: the tapped lane, at the tapped cell.
         var corner = rows.last ?? first
@@ -154,7 +156,7 @@ public final class TractorNavigation {
                 let waiting = queue.removeFirst(), rest = queue, last = lastRow
                 cancel(); queue = rest; lastRow = last
                 begin(TidyRows.plan(state, tap: waiting.point, fill: waiting.fill, last: lastRow, workable: workable),
-                      state: state, obstacles: obstacles)
+                      state: state, obstacles: obstacles, tap: waiting.point)
                 foresee()
                 if let latest = queue.last { target = latest.point }
             } else {

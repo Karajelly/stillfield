@@ -6,6 +6,7 @@ import {
   clamp,
   fieldColumns,
   fieldRows,
+  WORLD,
 } from "./simulation";
 import type { FieldBounds, Obstacle, Point, TractorState } from "./simulation";
 import { tuning } from "./handling";
@@ -314,6 +315,67 @@ function around(a: Point, b: Point, obstacles: Obstacle[]): Point[] {
     .flatMap((crossing) => crossing.points);
 }
 
+/** Radius of the turn back along a lane: the tractor's tightest comfortable circle. */
+const TURN_BACK_RADIUS = LANE_WIDTH / 2;
+
+/**
+ * Turning back along the tractor's own lane: a half circle out to one side,
+ * so the tractor turns that way from the very first moment, then the lane is
+ * rejoined from beside it. It turns toward the side the player tapped; a tap
+ * on the centre line turns toward the middle of the field, where there is
+ * more room. Returns no points when neither side is clear, leaving the plain
+ * approach.
+ */
+function turnBack(
+  state: TractorState,
+  row: Row,
+  f: FieldBounds,
+  hint: Point | undefined,
+  obstacles: Obstacle[],
+): Point[] {
+  // Forward along the lane the way the tractor faces, and the tractor's left.
+  const back = rowHeading(row.axis, row.dir);
+  const fx = -Math.sin(back),
+    fz = -Math.cos(back);
+  const lx = fz,
+    lz = -fx;
+  const leftOf = (p: Point) => (p.x - state.x) * lx + (p.z - state.z) * lz;
+  const middle = { x: (f.minX + f.maxX) / 2, z: (f.minZ + f.maxZ) / 2 };
+  const tapped = hint ? leftOf(hint) : 0;
+  const preferred =
+    Math.abs(tapped) > 0.15
+      ? Math.sign(tapped)
+      : Math.sign(leftOf(middle)) || 1;
+  const r = TURN_BACK_RADIUS;
+  const build = (side: number): Point[] => {
+    const points: Point[] = [];
+    for (let i = 1; i <= 16; i++) {
+      const a = (i / 16) * Math.PI,
+        along = r * Math.sin(a),
+        aside = side * r * (1 - Math.cos(a));
+      points.push({
+        x: state.x + fx * along + lx * aside,
+        z: state.z + fz * along + lz * aside,
+      });
+    }
+    return points;
+  };
+  const clear = (points: Point[]) =>
+    points.every(
+      (p) =>
+        p.x > WORLD.minX + 0.2 &&
+        p.x < WORLD.maxX - 0.2 &&
+        p.z > WORLD.minZ + 0.2 &&
+        p.z < WORLD.maxZ - 0.2 &&
+        obstacles.every((o) => Math.hypot(p.x - o.x, p.z - o.z) >= o.radius + 1.05),
+    );
+  for (const side of [preferred, -preferred]) {
+    const points = build(side);
+    if (clear(points)) return points;
+  }
+  return [];
+}
+
 /** One row in progress: the way to it, and the cells worked so far. */
 export class TidyRun {
   readonly row: Row;
@@ -332,7 +394,16 @@ export class TidyRun {
 
   private readonly field: FieldBounds;
 
-  constructor(row: Row, state: TractorState, obstacles: Obstacle[] = []) {
+  /**
+   * `hint` is where the player tapped. When the row means turning back along
+   * the tractor's own lane, it says which way to swing round.
+   */
+  constructor(
+    row: Row,
+    state: TractorState,
+    obstacles: Obstacle[] = [],
+    hint?: Point,
+  ) {
     this.row = { ...row };
     this.obstacles = obstacles;
     const f = (this.field = fieldOf(row));
@@ -390,9 +461,19 @@ export class TidyRun {
       }
     } else if (!aligned) {
       // Join the lane with the implement a little short of the first cell.
-      this.points.push(
-        pointAt(axis, first + (attachmentOffset - 1.25) * dir, centre),
-      );
+      const join = pointAt(axis, first + (attachmentOffset - 1.25) * dir, centre);
+      // Heading back along its own lane, the join point sits dead astern, where
+      // "the shorter way round" is a coin toss. Turn round deliberately instead.
+      const behind =
+        Math.abs(Math.abs(turn) - Math.PI) <= 0.6 &&
+        Math.abs(across) < 1.5 &&
+        (alongOf(axis, join) - alongOf(axis, state)) * dir > 1;
+      const loop = behind ? turnBack(state, row, f, hint, obstacles) : [];
+      for (const point of loop) {
+        this.points.push(point);
+        this.look.push(ARC_LOOK);
+      }
+      this.points.push(join);
       this.look.push(STRAIGHT_LOOK);
     }
     this.points.push(this.finish());

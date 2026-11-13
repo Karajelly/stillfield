@@ -212,7 +212,9 @@ final class TidyRun {
     private let covered: Set<Int>
     var started: Bool { workedTo != nil }
 
-    init(_ row: TidyRow, state: TractorState, obstacles: [Obstacle] = []) {
+    /// `hint` is where the player tapped. When the row means turning back along
+    /// the tractor's own lane, it says which way to swing round.
+    init(_ row: TidyRow, state: TractorState, obstacles: [Obstacle] = [], hint: FarmPoint? = nil) {
         self.row = row
         self.obstacles = obstacles
         var covered: Set<Int> = []
@@ -245,7 +247,15 @@ final class TidyRun {
             }
         } else if !aligned {
             // Join the lane with the implement a little short of the first cell.
-            points.append(TidyRows.point(axis, along: first + (TractorHandling.attachmentOffset - 1.25) * dir, across: centre))
+            let join = TidyRows.point(axis, along: first + (TractorHandling.attachmentOffset - 1.25) * dir, across: centre)
+            // Heading back along its own lane, the join point sits dead astern, where
+            // "the shorter way round" is a coin toss. Turn round deliberately instead.
+            let behind = abs(abs(turn) - .pi) <= 0.6 && abs(across) < 1.5
+                && (TidyRows.along(join, axis) - TidyRows.along(here, axis)) * dir > 1
+            for point in behind ? Self.turnBack(state, row: row, hint: hint, obstacles: obstacles) : [] {
+                points.append(point); look.append(arcLook)
+            }
+            points.append(join)
             look.append(straightLook)
         }
         points.append(Self.finish(row))
@@ -253,6 +263,45 @@ final class TidyRun {
         let route = Self.cleared(points, look, from: 1, obstacles: obstacles)
         self.points = route.0
         self.look = route.1
+    }
+
+    /// Radius of the turn back along a lane: the same half lane as a turn onto the next one.
+    static let turnBackRadius = TidyRows.laneWidth / 2
+
+    /// Turning back along the tractor's own lane: a half circle out to one side,
+    /// so the tractor turns that way from the very first moment, then the lane is
+    /// rejoined from beside it. It turns toward the side the player tapped; a tap
+    /// on the centre line turns toward the middle of the field, where there is
+    /// more room. Returns no points when neither side is clear, leaving the plain
+    /// approach. Matches `turnBack` in `src/tidy-rows.ts`.
+    static func turnBack(_ state: TractorState, row: TidyRow, hint: FarmPoint?, obstacles: [Obstacle]) -> [FarmPoint] {
+        // Forward along the lane the way the tractor faces, and the tractor's left.
+        let back = TidyRows.heading(row.axis, dir: row.dir)
+        let fx = -sin(back), fz = -cos(back)
+        let lx = fz, lz = -fx
+        func leftOf(_ p: FarmPoint) -> Double { (p.x - state.x) * lx + (p.z - state.z) * lz }
+        let middle = FarmPoint(x: (FieldGrid.minX + FieldGrid.maxX) / 2, z: (FieldGrid.minZ + FieldGrid.maxZ) / 2)
+        let tapped = hint.map(leftOf) ?? 0
+        let towardMiddle: Double = leftOf(middle) < 0 ? -1 : 1
+        let preferred: Double = abs(tapped) > 0.15 ? (tapped < 0 ? -1 : 1) : towardMiddle
+        let r = turnBackRadius
+        func build(_ side: Double) -> [FarmPoint] {
+            (1...16).map { i in
+                let a = Double(i) / 16 * .pi, along = r * sin(a), aside = side * r * (1 - cos(a))
+                return FarmPoint(x: state.x + fx * along + lx * aside, z: state.z + fz * along + lz * aside)
+            }
+        }
+        func clear(_ points: [FarmPoint]) -> Bool {
+            points.allSatisfy { p in
+                p.x > -38.8 && p.x < 38.8 && p.z > -29.8 && p.z < 27.8
+                    && obstacles.allSatisfy { hypot(p.x - $0.x, p.z - $0.z) >= $0.radius + 1.05 }
+            }
+        }
+        for side in [preferred, -preferred] {
+            let points = build(side)
+            if clear(points) { return points }
+        }
+        return []
     }
 
     /// Bend every straight leg from `first` on around the obstacles in its way.

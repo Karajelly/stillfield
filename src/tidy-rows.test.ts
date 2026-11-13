@@ -424,3 +424,59 @@ it("leaves the original free approach unchanged when tidy rows are off", () => {
     "the straight-line approach works the ground it crosses",
   );
 });
+
+it("turns back along its own lane toward the side that was tapped, from the first moment", () => {
+  // At the end of a row, a tap back down the same lane puts the way in dead
+  // astern. Which way the tractor swings must follow the tap, never rounding.
+  const z = laneCentre("x", 6);
+  // Facing east, the tractor's left is -z. The field's middle (z 0.5) is on its left.
+  for (const follow of [false, true])
+    for (const [aside, expected] of [
+      [-0.4, 1],
+      [0.4, -1],
+      [-0.05, 1],
+      [0, 1],
+    ] as const) {
+      const meadow = farm({ x: 15, z, heading: east, speed: 0 }, true, 60, [], follow);
+      meadow.tap({ x: 0, z: z + aside });
+      const start = meadow.state.heading;
+      let first = 0,
+        against = 0,
+        peak = 0;
+      for (let i = 0; i < 60 * 8; i++) {
+        const before = meadow.state.heading;
+        meadow.step();
+        const d = Math.atan2(
+          Math.sin(meadow.state.heading - before),
+          Math.cos(meadow.state.heading - before),
+        );
+        if (!first && Math.abs(d) > 1e-4) first = Math.sign(d);
+        const net = Math.atan2(
+          Math.sin(meadow.state.heading - start),
+          Math.cos(meadow.state.heading - start),
+        );
+        // Unwrapped progress of the turn toward the expected side.
+        peak = Math.max(peak, expected * net > -0.5 ? Math.abs(net) : peak);
+        if (peak < Math.PI * 0.9) against = Math.max(against, -expected * net);
+      }
+      const view = follow ? "tractor view" : "farm view";
+      assert.equal(first, expected, `${view}, tap ${aside} m aside: first turn`);
+      assert.ok(against < 0.05, `${view}, tap ${aside} m aside: swung ${against} rad the wrong way`);
+      meadow.settle();
+      // Then it works exactly the lane it turned back along, up to the tap.
+      // From the implement's cell (x 12.9, cell 75) back to the tapped cell (x 0, cell 50).
+      assert.equal(meadow.count(Ground.soil, [6]).inside, 26 * LANE_CELLS, view);
+      assert.equal(meadow.count(Ground.soil, [6]).outside, 0, view);
+    }
+});
+
+it("turns back the other way round when something stands on the tapped side", () => {
+  const z = laneCentre("x", 6);
+  const tree: Obstacle = { x: 16, z: z - 2.2, radius: 0.5 };
+  const meadow = farm({ x: 15, z, heading: east, speed: 0 }, true, 60, [tree]);
+  meadow.tap({ x: 0, z: z - 0.4 });
+  const start = meadow.state.heading;
+  for (let i = 0; i < 30; i++) meadow.step();
+  assert.ok(meadow.state.heading < start, "turns right, away from the tree");
+  meadow.settle();
+});

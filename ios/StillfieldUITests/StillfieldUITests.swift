@@ -279,6 +279,69 @@ final class StillfieldUITests: XCTestCase {
         attachScreenshot("Tractor view restored after relaunch", app: app)
     }
 
+    func testRidingTheLaneToFoxgloveFieldAndBackHome() throws {
+        let app = launchFreshMeadow()
+        defer {
+            XCUIDevice.shared.orientation = .portrait
+            app.terminate()
+        }
+        // Cultivate would plough the way across the home field if the implement came down.
+        app.buttons["tool.cultivate"].tap()
+        let lane = app.buttons["action.lane"]
+        XCTAssertEqual(lane.label, "Ride the lane to Foxglove field")
+        let start = try XCTUnwrap(telemetry(in: app))
+        XCTAssertTrue(start.inHomeField)
+        XCTAssertEqual(start.view, 0)
+
+        // There: the signpost rides the lane in portrait with the implement up.
+        lane.tap()
+        XCTAssertTrue(waitUntil(timeout: 5) { self.telemetry(in: app)?.riding == true },
+                      "The signpost must start a ride.")
+        XCTAssertTrue(lane.isSelected)
+        XCTAssertEqual(lane.label, "Stop on the way to Foxglove field")
+        XCTAssertTrue(waitUntil(timeout: 60) {
+            guard let now = self.telemetry(in: app) else { return false }
+            return !now.riding && now.inFoxglove && now.view == 1
+        }, "The ride must arrive in Foxglove field with the view settled on it.")
+        let arrived = try XCTUnwrap(telemetry(in: app))
+        XCTAssertEqual(arrived.painted, start.painted, "Nothing is worked on the way along the lane.")
+        XCTAssertLessThan(arrived.cameraX, start.cameraX - 50, "The farm view follows the tractor west.")
+        XCTAssertEqual(arrived.speed, 0, accuracy: 0.05)
+        revealControls(in: app)
+        XCTAssertEqual(lane.label, "Ride the lane to Home field", "The signpost always points to the other field.")
+        XCTAssertFalse(lane.isSelected)
+        attachScreenshot("Foxglove field in portrait", app: app)
+
+        // Back: rotate mid-ride, stop with a second tap, carry on, and arrive home.
+        lane.tap()
+        XCTAssertTrue(waitUntil(timeout: 5) { self.telemetry(in: app)?.riding == true })
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            guard let now = self.telemetry(in: app) else { return false }
+            return app.frame.width > app.frame.height && now.riding && now.distance(from: arrived) > 3
+        }, "Rotating must keep the ride going.")
+        revealControls(in: app)
+        lane.tap()
+        XCTAssertTrue(waitUntil(timeout: 5) {
+            guard let now = self.telemetry(in: app) else { return false }
+            return !now.riding && now.speed < 0.05
+        }, "A second tap stops the ride where it is.")
+        let paused = try XCTUnwrap(telemetry(in: app))
+        XCTAssertFalse(paused.inHomeField)
+        XCTAssertEqual(lane.label, "Ride the lane to Home field")
+        revealControls(in: app)
+        lane.tap()
+        XCTAssertTrue(waitUntil(timeout: 60) {
+            guard let now = self.telemetry(in: app) else { return false }
+            return !now.riding && now.inHomeField && now.view == 0
+        }, "The ride must arrive back in the home field with the view settled on it.")
+        let home = try XCTUnwrap(telemetry(in: app))
+        XCTAssertEqual(home.painted, start.painted, "Nothing is worked on the way back either.")
+        revealControls(in: app)
+        XCTAssertEqual(lane.label, "Ride the lane to Foxglove field")
+        attachScreenshot("Home again, in landscape", app: app)
+    }
+
     func testNativeToolsSettingsAndPause() throws {
         let app = launchFreshMeadow()
         defer { app.terminate() }
@@ -657,7 +720,8 @@ final class StillfieldUITests: XCTestCase {
         return Telemetry(x: x, z: z, speed: speed, painted: Int(painted), zoom: zoom,
                          steeringCount: Int(steeringCount), destination: destination, markerVisible: marker == 1,
                          tractorView: values["tractorView"] == 1, heading: values["heading"] ?? 0,
-                         cameraX: values["cameraX"] ?? 0, cameraY: values["cameraY"] ?? 0, cameraZ: values["cameraZ"] ?? 0)
+                         cameraX: values["cameraX"] ?? 0, cameraY: values["cameraY"] ?? 0, cameraZ: values["cameraZ"] ?? 0,
+                         view: values["view"] ?? 0, riding: values["riding"] == 1)
     }
 
     private func waitUntil(timeout: TimeInterval, condition: () -> Bool) -> Bool {
@@ -692,6 +756,13 @@ final class StillfieldUITests: XCTestCase {
         let cameraX: Double
         let cameraY: Double
         let cameraZ: Double
+        /// 0 frames the home field, 1 Foxglove field.
+        let view: Double
+        /// Riding the lane with the implement up.
+        let riding: Bool
+        /// Foxglove field spans x -117 to -57; the home field x -25 to 20.
+        var inFoxglove: Bool { (-117 ... -57).contains(x) && (-18 ... 19.5).contains(z) }
+        var inHomeField: Bool { (-25 ... 20).contains(x) && (-12 ... 13).contains(z) }
 
         func distance(from other: Telemetry) -> Double {
             hypot(x - other.x, z - other.z)

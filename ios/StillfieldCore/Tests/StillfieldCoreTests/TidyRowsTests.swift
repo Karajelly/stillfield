@@ -327,3 +327,43 @@ private final class TidyMeadow {
     still.update([103, 202])
     #expect(!still.isFreehand(heldFor: 6)) // a long press that never moves is not steering
 }
+
+@Test func turnsBackAlongItsOwnLaneTowardTheTappedSideFromTheFirstMoment() throws {
+    // At the end of a row, a tap back down the same lane puts the way in dead
+    // astern. Which way the tractor swings must follow the tap, never rounding.
+    // Facing east, the tractor's left is -z. The field's middle (z 0.5) is on its left.
+    for follow in [false, true] {
+        for (aside, expected) in [(-0.4, 1.0), (0.4, -1.0), (-0.05, 1.0), (0, 1.0)] {
+            let meadow = TidyMeadow(TractorState(x: 15, z: laneZ(6), heading: east), follow: follow)
+            meadow.tap(FarmPoint(x: 0, z: laneZ(6) + aside))
+            let start = meadow.state.heading
+            var first = 0.0, against = 0.0, peak = 0.0
+            for _ in 0..<(60 * 8) {
+                let before = meadow.state.heading
+                meadow.step()
+                let d = atan2(sin(meadow.state.heading - before), cos(meadow.state.heading - before))
+                if first == 0 && abs(d) > 1e-4 { first = d < 0 ? -1 : 1 }
+                let net = atan2(sin(meadow.state.heading - start), cos(meadow.state.heading - start))
+                if expected * net > -0.5 { peak = max(peak, abs(net)) }
+                if peak < .pi * 0.9 { against = max(against, -expected * net) }
+            }
+            #expect(first == expected, "follow \(follow), tap \(aside) m aside")
+            #expect(against < 0.05, "follow \(follow), tap \(aside) m aside: swung \(against) rad the wrong way")
+            try meadow.settle()
+            // Then it works exactly the lane it turned back along, up to the tap:
+            // from the implement's cell (x 12.9, cell 75) back to the tapped cell (x 0, cell 50).
+            let soil = meadow.count(.soil, lanes: [6])
+            #expect(soil.inside == 26 * TidyRows.laneCells && soil.outside == 0)
+        }
+    }
+}
+
+@Test func turnsBackTheOtherWayRoundWhenSomethingStandsOnTheTappedSide() throws {
+    let tree = Obstacle(x: 16, z: laneZ(6) - 2.2, radius: 0.5)
+    let meadow = TidyMeadow(TractorState(x: 15, z: laneZ(6), heading: east), obstacles: [tree])
+    meadow.tap(FarmPoint(x: 0, z: laneZ(6) - 0.4))
+    let start = meadow.state.heading
+    for _ in 0..<30 { meadow.step() }
+    #expect(meadow.state.heading < start, "turns right, away from the tree")
+    try meadow.settle()
+}

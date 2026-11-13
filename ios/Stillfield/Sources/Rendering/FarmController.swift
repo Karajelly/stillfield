@@ -139,7 +139,13 @@ final class FarmController {
         }
         let saved = loaded ?? MeadowSave()
         field = saved.field
+        // Tidy rows are on unless this meadow chose freehand.
+        var tidyByDefault = true
 #if DEBUG
+        if testing && ProcessInfo.processInfo.arguments.contains("--freehand-rows") {
+            // The UI suite drives freehand; it opts in to tidy rows where it means to.
+            tidyByDefault = false
+        }
         if testing && ProcessInfo.processInfo.arguments.contains("--fast-crops") {
             // UI tests exercise automatic active-play growth without several-minute waits.
             for crop in Crop.allCases { farmingConfiguration.growthSeconds[crop] = 45 }
@@ -157,7 +163,7 @@ final class FarmController {
         light = saved.resolvedLight
         dayTime = saved.resolvedDay
         haptics = saved.haptics
-        tidyRows = saved.tidyRows ?? false
+        tidyRows = saved.tidyRows ?? tidyByDefault
         introDismissed = saved.introDismissed
         pace = saved.pace
         volume = saved.volume

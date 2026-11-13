@@ -330,7 +330,7 @@ final class StillfieldUITests: XCTestCase {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing", "--fresh-meadow", "--still-gust"]
+        app.launchArguments = ["--ui-testing", "--fresh-meadow", "--freehand-rows", "--still-gust"]
         app.launch()
         defer { app.terminate() }
         XCTAssertTrue(app.buttons["tool.harvest"].waitForExistence(timeout: 40))
@@ -535,7 +535,8 @@ final class StillfieldUITests: XCTestCase {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing", "--fresh-meadow"] + (fastCrops ? ["--fast-crops"] : [])
+        // Tidy rows are on by default; this suite drives freehand.
+        app.launchArguments = ["--ui-testing", "--fresh-meadow", "--freehand-rows"] + (fastCrops ? ["--fast-crops"] : [])
         app.launch()
         XCTAssertTrue(app.buttons["tool.harvest"].waitForExistence(timeout: 40))
         if app.buttons["action.begin"].exists {

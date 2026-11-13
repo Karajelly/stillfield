@@ -1069,21 +1069,26 @@ function leave() {
   } else stop();
   persist();
 }
-/** Hidden pages get no frames, so the work done while away is caught up on return. */
+/**
+ * Hidden pages get no frames, so time away is caught up on return: the
+ * tractor finishes its path, then the crops grow through the rest.
+ */
 const MAX_CATCH_UP_SECONDS = 30 * 60;
 let hiddenAt: number | null = null;
 function catchUp(seconds: number) {
   const step = 0.05;
-  let remaining = Math.min(seconds, MAX_CATCH_UP_SECONDS);
-  while (remaining > 0 && onAutopilot()) {
-    const dt = Math.min(step, remaining);
+  let driving = Math.min(seconds, MAX_CATCH_UP_SECONDS);
+  while (driving > 0 && onAutopilot()) {
+    const dt = Math.min(step, driving);
     workStep(dt, dt, true);
-    remaining -= dt;
+    driving -= dt;
+    seconds -= dt;
   }
   if (!onAutopilot()) {
     tractorState.speed = 0;
     audio.setDriving(0);
   }
+  if (seconds > 0) for (const f of fields) f.advance(seconds);
   persist();
   changedSinceSave = false;
 }
@@ -1091,7 +1096,7 @@ window.addEventListener("blur", leave);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     leave();
-    hiddenAt = onAutopilot() ? performance.now() : null;
+    hiddenAt = paused || modalOpen ? null : performance.now();
     if (soundEnabled) void audio.setEnabled(false);
   } else {
     windowActive = document.hasFocus();

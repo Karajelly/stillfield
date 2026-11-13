@@ -428,7 +428,7 @@ p {
 .tool-illustration.mow {
   color: #728c59;
 }
-.tool-illustration.cultivate {
+.tool-illustration.plow {
   color: #a68a69;
 }
 .tool-illustration.sow {
@@ -946,7 +946,8 @@ dialog .ipad-tip {
     bottom: calc(72px + env(safe-area-inset-bottom));
   }
   .tool-button {
-    width: 68px;
+    /* Five tools share the dock; keep it inside the narrowest phones. */
+    width: min(68px, calc((100vw - 34px) / 5));
     height: 72px;
   }
   .tool-dock {

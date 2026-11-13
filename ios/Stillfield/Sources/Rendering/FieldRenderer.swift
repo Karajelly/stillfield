@@ -236,7 +236,8 @@ final class FieldRenderer {
         let palette: [UInt32]
         switch state {
         // Match the web field's grass, mowing stripes, soil, and sown ground.
-        case 1: palette = [0xB9C48B, 0xBDC991]
+        // Flat mown green darkens toward tufted grass as it grows back.
+        case 1: palette = [[0xB9C48B, 0xBDC991], [0xB2BF84, 0xB6C388], [0xABB97D, 0xAFBC81]][min(2, stage)]
         case 2: palette = [0xB89570, 0xC29F79]
         case 3, 4:
             switch crop {
@@ -363,6 +364,14 @@ final class FieldRenderer {
                 }
                 if plant.wildflower {
                     geometry.flower(center: origin + [0, plant.height * 0.86, 0], radius: 0.105, angle: plant.angle, material: 3)
+                }
+            } else if state == 1 && stages[plant.cell] > 0 {
+                // Short blades come back first, then fill out before turning to tufts.
+                let height = plant.height * (stages[plant.cell] == 1 ? 0.3 : 0.6)
+                for blade in 0..<3 {
+                    geometry.blade(origin: origin, angle: plant.angle + Float(blade) * 2.3,
+                                   height: height * (1 - Float(blade) * 0.19), width: 0.04,
+                                   bend: height * 0.3, material: plant.tone)
                 }
             } else if state == 5 {
                 for blade in 0..<3 {

@@ -142,7 +142,7 @@ test("Foxglove field keeps its own soil, crops, harvest display, and save", () =
   assert.equal(area(FAR_FIELD), 2 * area(FIELD));
   assert.ok(far.cells.every((c) => c === Ground.grass), "a new field starts as quiet meadow");
   assert.equal(far.fieldId, "foxglove");
-  const events = far.apply({ x: -80, z: 0 }, { x: -64, z: 0 }, "cultivate");
+  const events = far.apply({ x: -80, z: 0 }, { x: -64, z: 0 }, "plow");
   assert.ok(events.groundChanges.length > 100);
   far.apply({ x: -80, z: 0 }, { x: -64, z: 0 }, "sow", "pumpkins");
   far.rest();
@@ -152,7 +152,7 @@ test("Foxglove field keeps its own soil, crops, harvest display, and save", () =
 
   // The home field never sees work done in Foxglove field.
   const homeEngine = new FarmingEngine();
-  assert.equal(homeEngine.apply({ x: -80, z: 0 }, { x: -64, z: 0 }, "cultivate").groundChanges.length, 0);
+  assert.equal(homeEngine.apply({ x: -80, z: 0 }, { x: -64, z: 0 }, "plow").groundChanges.length, 0);
 
   const restored = new FarmingEngine(far.snapshot(), FARMING_CONFIG, true, FAR_SITE);
   assert.deepEqual(restored.snapshot(), far.snapshot());
@@ -163,11 +163,11 @@ test("Foxglove field keeps its own soil, crops, harvest display, and save", () =
 });
 
 test("taps in Foxglove field snap to its own grid", () => {
-  const destination = WorkDestination.create({ x: -70.1, z: 2.3 }, home, "cultivate")!;
+  const destination = WorkDestination.create({ x: -70.1, z: 2.3 }, home, "plow")!;
   assert.ok(destination);
   assert.equal(destination.field, FAR_FIELD);
   assert.deepEqual(destination.center, { x: -70.25, z: 2.25 });
-  assert.equal(WorkDestination.create({ x: -40, z: -1 }, home, "cultivate"), null);
+  assert.equal(WorkDestination.create({ x: -40, z: -1 }, home, "plow"), null);
 });
 
 test("tidy rows in Foxglove field use its own lanes and cells", () => {
@@ -186,14 +186,14 @@ test("tidy rows in Foxglove field use its own lanes and cells", () => {
   const navigation = new TractorNavigation();
   navigation.tidy = true;
   let state = start;
-  navigation.choose({ x: -100, z: 2 }, state, "cultivate", obstacles);
+  navigation.choose({ x: -100, z: 2 }, state, "plow", obstacles);
   let worked = 0;
   for (let i = 0; i < 30 * 60 && navigation.run; i++) {
-    const step = navigation.step(state, 1 / 30, "cultivate", obstacles);
+    const step = navigation.step(state, 1 / 30, "plow", obstacles);
     state = step.state;
     if (step.cells.length) {
       assert.equal(step.field, FAR_FIELD);
-      worked += far.applyCells(step.cells, "cultivate").groundChanges.length;
+      worked += far.applyCells(step.cells, "plow").groundChanges.length;
     }
   }
   assert.equal(navigation.run, null, "the row finishes");
@@ -209,9 +209,9 @@ test("tidy rows in Foxglove field use its own lanes and cells", () => {
 test("a tap in the other field never retargets a row under way", () => {
   const navigation = new TractorNavigation();
   navigation.tidy = true;
-  navigation.choose({ x: 10, z: 4.8 }, home, "cultivate", obstacles);
+  navigation.choose({ x: 10, z: 4.8 }, home, "plow", obstacles);
   const row = { ...navigation.run!.row };
-  navigation.choose({ x: -100, z: 2 }, home, "cultivate", obstacles);
+  navigation.choose({ x: -100, z: 2 }, home, "plow", obstacles);
   assert.deepEqual(navigation.run!.row, row);
   assert.ok(navigation.hasQueued);
 });
@@ -228,7 +228,7 @@ test("hand-driven lanes in Foxglove field report Foxglove cells", () => {
 
 test("wind plays Foxglove field's ten lanes over its longer width", () => {
   const far = new FarmingEngine(undefined, FARMING_CONFIG, true, FAR_SITE);
-  far.apply({ x: -117, z: 0 }, { x: -57, z: 0 }, "cultivate", "wheat", 40);
+  far.apply({ x: -117, z: 0 }, { x: -57, z: 0 }, "plow", "wheat", 40);
   far.apply({ x: -117, z: 0 }, { x: -57, z: 0 }, "sow", "wheat", 40);
   far.rest();
   assert.equal(windSteps(FAR_FIELD), 60);

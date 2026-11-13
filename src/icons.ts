@@ -9,7 +9,7 @@ const paths: Record<string, string> = {
   play: '<path d="m8 5 11 7-11 7V5Z"/>',
   leaf: '<path d="M20 4c-1 10-3 15-10 15-4 0-6-3-5-6C6 7 12 6 20 4Z"/><path d="M4 21 15 10"/>',
   mow: '<path d="M3 19h18M6 16l-2-5m7 5V6m5 10 4-9M7 9 5 6m10 5 2-7"/>',
-  cultivate:
+  plow:
     '<path d="m8 3 5 12M3 19c3-4 5 4 9 0s6 3 9 0M8 14l9-4m-10 4 2 4m3-6 2 4m3-6 2 4"/>',
   harvest: '<path d="M4 12h16l-2 8H6l-2-8Zm4 0 4-8 4 8M8 16h8"/>',
   restore:

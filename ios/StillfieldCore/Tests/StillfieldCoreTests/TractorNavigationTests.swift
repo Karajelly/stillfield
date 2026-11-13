@@ -37,12 +37,12 @@ private final class TestMeadow {
     let points = [FarmPoint(x: FieldGrid.maxX, z: 0.125), FarmPoint(x: FieldGrid.minX, z: 0.125),
                   FarmPoint(x: 0.125, z: FieldGrid.minZ), FarmPoint(x: 0.125, z: FieldGrid.maxZ),
                   FarmPoint(x: FieldGrid.maxX, z: FieldGrid.maxZ)]
-    for follow in [false, true] { for fps in [30.0, 60, 120] { for tool in [FarmTool.mow, .cultivate, .sow] {
+    for follow in [false, true] { for fps in [30.0, 60, 120] { for tool in [FarmTool.mow, .plow, .sow] {
         for point in points {
             let farm = TestMeadow(TractorState(x: 0, z: 0, heading: atan2(point.x, point.z)), follow: follow, fps: fps)
             if tool == .sow { farm.field.cells = Array(repeating: Ground.soil.rawValue, count: FieldGrid.cellCount) }
             farm.setTool(tool); farm.choose(point); try farm.settle()
-            try #require(farm.value(at: point) == (tool == .mow ? 1 : tool == .cultivate ? 2 : 3))
+            try #require(farm.value(at: point) == (tool == .mow ? 1 : tool == .plow ? 2 : 3))
         }
     } } }
     for follow in [false, true] { for speed in [0.0, 3, 4.5] { for distance in [0.01, 0.3, 1, 2, 3, 5, 10] {
@@ -98,11 +98,11 @@ private final class TestMeadow {
     let farm = TestMeadow(TractorState(x: -15, z: 0.125, heading: .pi / 2), follow: true)
     farm.choose(FarmPoint(x: 0.125, z: 0.125)); try farm.settle()
     let point = FarmPoint(x: 0.125, z: 2.625)
-    farm.choose(point); farm.setTool(.cultivate)
+    farm.choose(point); farm.setTool(.plow)
     try #require(farm.navigation.turningAtRowEnd)
     for _ in 0..<1200 { if !farm.navigation.turningAtRowEnd { break }; farm.step() }
     farm.setTool(.sow); try farm.settle()
-    // Switching before the lowered cultivator reaches this square leaves grass.
+    // Switching before the lowered plow reaches this square leaves grass.
     // Sowing must not silently prepare it. The work endpoint still completes.
     #expect(farm.value(at: point) == 0)
     #expect(abs(TractorHandling.angle(farm.state.heading, -.pi / 2)) < 0.025)

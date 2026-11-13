@@ -143,19 +143,19 @@ test("obstacles and map edges stop grid driving without sideways slides, and all
 test("keyboard takes over destinations, lifts the implement through pivots, and resumes only the new row", () => {
   const nav = new TractorNavigation();
   let state = { x: 0, z: 0, heading: 0, speed: 3 };
-  nav.choose({ x: 0, z: 10 }, state, "cultivate", []);
-  state = nav.step(state, 1 / 60, "cultivate", []).state;
+  nav.choose({ x: 0, z: 10 }, state, "plow", []);
+  state = nav.step(state, 1 / 60, "plow", []).state;
   const corner = { ...state };
   const grid = { heading: Math.PI / 2, driving: true };
   while (Math.abs(angleDifference(state.heading, grid.heading)) > 1e-8) {
-    const result = nav.step(state, 1 / 60, "cultivate", [], 0.85, { grid });
+    const result = nav.step(state, 1 / 60, "plow", [], 0.85, { grid });
     state = result.state;
     assert.equal(nav.target, null); assert.equal(nav.work, null); assert.equal(nav.turn, null);
     assert.equal(nav.gridTurning, true); assert.deepEqual(result.paint, []);
     assert.equal(state.x, corner.x); assert.equal(state.z, corner.z);
   }
   const brush = attachmentPoint(state);
-  const moving = nav.step(state, 1 / 60, "cultivate", [], 0.85, { grid });
+  const moving = nav.step(state, 1 / 60, "plow", [], 0.85, { grid });
   assert.equal(nav.gridTurning, false);
   assert.ok(moving.state.x > state.x); assert.equal(moving.state.z, state.z);
   assert.deepEqual(moving.paint[0], brush);

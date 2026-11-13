@@ -208,7 +208,7 @@ private func drive(
     #expect(field.paint(x: 0, z: 0, tool: .mow) == expected)
     #expect(field.paint(x: 0, z: 0, tool: .mow).isEmpty)
     #expect(expected.allSatisfy { field.cells[$0] == 1 })
-    #expect(field.paint(x: 0, z: 0, tool: .cultivate) == expected)
+    #expect(field.paint(x: 0, z: 0, tool: .plow) == expected)
     #expect(expected.allSatisfy { field.cells[$0] == 2 })
     #expect(field.paint(x: 0, z: 0, tool: .sow) == expected)
     #expect(expected.allSatisfy { field.cells[$0] == 3 })

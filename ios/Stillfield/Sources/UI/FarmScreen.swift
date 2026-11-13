@@ -49,7 +49,7 @@ private enum MeadowPalette {
     static let sunflowers = color(0x8c874c)
     static let pumpkins = color(0xad7859)
     static let mow = color(0x728c59)
-    static let cultivate = color(0xa68a69)
+    static let plow = color(0xa68a69)
     static let sow = color(0x839a64)
     static let wander = color(0x87998a)
     static let driveHint = color(0x899479)
@@ -464,7 +464,7 @@ struct FarmScreen: View {
         VStack(spacing: 6) {
             if game.tool == .sow { cropChoices(compact: compact) }
             HStack(spacing: 3) {
-                ForEach([FarmTool.cultivate, .sow, .harvest, .wander], id: \.self) { tool in
+                ForEach([FarmTool.plow, .sow, .harvest, .mow, .wander], id: \.self) { tool in
                     let selected = game.tool == tool
                     Button { game.selectTool(tool) } label: {
                         VStack(spacing: compact ? 5 : 8) {
@@ -895,7 +895,7 @@ private struct FarmHelpSheet: View {
                         : "Tap where mowing or planting should finish. Drag to keep steering. Tap beside a finished row to face back down it and stop. Pinch to look a little closer.")
                     helpRow("signpost.left", title: "Down the lane", text: "A lane past the tree line leads to Foxglove field, twice the size of this one. Tap the signpost beside the zoom controls to ride there with the implement up, or tap the lane and follow it. The view follows you along the lane and settles on whichever field you reach.")
                     helpRow("car.rear", title: "Come along for the ride", text: "Tap the vehicle button beside the zoom controls to follow behind your tractor. Drag to roll, slide your finger left or right to choose its direction, and lift to settle. A quick tap chooses where work should finish. Pinch to move closer or farther away. Tap the vehicle button again to see the whole farm.")
-                    helpRow("leaf", title: "Make your mark", text: "Cultivate prepares soil and clears any crops. Sow a crop, then harvest when it’s ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests fill the pots and carts by the field.")
+                    helpRow("leaf", title: "Make your mark", text: "Plow prepares soil and clears any crops. Mow cuts anything back to flat green grass, which slowly grows back into tufts. Sow a crop, then harvest when it’s ready. Three little plots of wheat, sunflowers, and pumpkins are ready to gather. Harvests fill the pots and carts by the field.")
                     helpRow("sun.max", title: "Let it grow", text: "Sunflowers take 3 minutes, wheat 6, and pumpkins 9, only while you play. Seeds are unlimited. Nothing withers, and full displays never stop a harvest.")
                     helpRow("moon.stars", title: "Watch the day go by", text: "Morning turns to golden hour, dusk, and a short bright night as you play, and never while you’re away. Every so often the wind crosses the field and plays what’s growing. Keep a favourite light in settings, or tap the camera for a postcard.")
                     helpRow("wind", title: "Stay for a while", text: "Set your own pace, turn on the birdsong, and take a breath. Your meadow saves on this device. Nothing changes while you’re away.")
@@ -1034,15 +1034,15 @@ private extension Crop {
 
 private extension FarmTool {
     var title: String {
-        switch self { case .mow: "Mow"; case .cultivate: "Cultivate"; case .sow: "Sow"; case .harvest: "Harvest"; case .restore: "Restore grass"; case .wander: "Wander" }
+        switch self { case .mow: "Mow"; case .plow: "Plow"; case .sow: "Sow"; case .harvest: "Harvest"; case .restore: "Restore grass"; case .wander: "Wander" }
     }
     var symbol: String {
-        switch self { case .mow: "leaf"; case .cultivate: "line.3.horizontal"; case .sow: "camera.macro"; case .harvest: "basket"; case .restore: "arrow.uturn.backward"; case .wander: "wind" }
+        switch self { case .mow: "leaf"; case .plow: "line.3.horizontal"; case .sow: "camera.macro"; case .harvest: "basket"; case .restore: "arrow.uturn.backward"; case .wander: "wind" }
     }
     var color: Color {
         switch self {
         case .mow: MeadowPalette.mow
-        case .cultivate: MeadowPalette.cultivate
+        case .plow: MeadowPalette.plow
         case .sow: MeadowPalette.sow
         case .harvest: MeadowPalette.gold
         case .restore: MeadowPalette.mow
@@ -1051,8 +1051,8 @@ private extension FarmTool {
     }
     var accessibilityDescription: String {
         switch self {
-        case .mow: "Mow. Trim the meadow."
-        case .cultivate: "Cultivate. Prepare soil for planting, clearing any crops."
+        case .mow: "Mow. Cut anything back to flat green grass."
+        case .plow: "Plow. Prepare soil for planting, clearing any crops."
         case .sow: "Sow. Plant your chosen crop in prepared soil."
         case .harvest: "Harvest. Gather mature crops into the field display."
         case .restore: "Restore grass. Remove crops and return the ground to grass."

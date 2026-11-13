@@ -14,7 +14,7 @@ function meadow(initial: TractorState, follow = false, fps = 60, pace = 0.85) {
     state = result.state;
     result.paint.forEach((p, i, points) => {
       for (const cell of cellsUnderSweep(points[Math.max(0, i - 1)], p, tuning.brushRadius + FIELD.cell / 2))
-        cells.set(cell, tool === "mow" ? 1 : tool === "cultivate" ? 2 : 3);
+        cells.set(cell, tool === "mow" ? 1 : tool === "plow" ? 2 : 3);
     });
     return result;
   };
@@ -33,12 +33,12 @@ function meadow(initial: TractorState, follow = false, fps = 60, pace = 0.85) {
 it("works through endpoints and settles for every tool, view, frame rate and close approach", () => {
   const points = [{ x: FIELD.maxX, z: 0.125 }, { x: FIELD.minX, z: 0.125 },
     { x: 0.125, z: FIELD.minZ }, { x: 0.125, z: FIELD.maxZ }, { x: FIELD.maxX, z: FIELD.maxZ }];
-  for (const follow of [false, true]) for (const fps of [30, 60, 120]) for (const tool of ["mow", "cultivate", "sow"] as const) {
+  for (const follow of [false, true]) for (const fps of [30, 60, 120]) for (const tool of ["mow", "plow", "sow"] as const) {
     for (const point of points) {
       const farm = meadow({ x: 0, z: 0, heading: Math.atan2(point.x, point.z), speed: 0 }, follow, fps);
       farm.tool(tool); farm.choose(point); farm.settle();
       const cell = WorkDestination.create(point, farm.state, tool)!.cell;
-      assert.equal(farm.cells.get(cell), tool === "mow" ? 1 : tool === "cultivate" ? 2 : 3);
+      assert.equal(farm.cells.get(cell), tool === "mow" ? 1 : tool === "plow" ? 2 : 3);
     }
   }
   for (const follow of [false, true]) for (const speed of [0, 3, 4.5])
@@ -97,7 +97,7 @@ it("retargeting, working-tool changes, Wander, and interruptions never continue 
   const farm = meadow({ x: -15, z: 0.125, heading: Math.PI / 2, speed: 0 }, true);
   farm.choose({ x: 0.125, z: 0.125 }); farm.settle();
   const point = { x: 0.125, z: 2.625 };
-  farm.choose(point); farm.tool("cultivate");
+  farm.choose(point); farm.tool("plow");
   assert.ok(farm.nav.turn);
   while (farm.nav.turn) farm.step();
   farm.tool("sow"); farm.settle();

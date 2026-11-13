@@ -17,7 +17,7 @@ export const CROP_NAMES: Record<Crop, string> = {
   sunflowers: "Sunflowers",
   pumpkins: "Pumpkins",
 };
-// Mown is grass with a permanent appearance change, not a prerequisite for soil.
+// Mown is flat, freshly cut grass. Its progress counts toward tufted grass growing back.
 export const Ground = {
   grass: 0,
   mown: 1,
@@ -34,12 +34,15 @@ const LEGACY_COLUMNS = 172,
 const LEGACY_CELL_COUNT = LEGACY_COLUMNS * LEGACY_ROWS;
 export interface FarmingConfig {
   growthSeconds: Record<Crop, number>;
+  /** Active-play seconds for mown ground to grow back into tufted grass. */
+  grassSeconds: number;
   implementRadius: number;
   edgeCoverage: number;
   displayThresholds: [number, number, number];
 }
 export const FARMING_CONFIG: FarmingConfig = {
   growthSeconds: { wheat: 360, sunflowers: 180, pumpkins: 540 },
+  grassSeconds: 300,
   implementRadius: tuning.brushRadius,
   edgeCoverage: FIELD.cell / 2,
   displayThresholds: [1, 64, 256],
@@ -64,6 +67,8 @@ export interface FarmingEvents {
   groundChanges: number[];
   cropStages: number[];
   cropMaturities: number[];
+  /** Mown cells whose grass reached a new height, or grew back into tufted grass. */
+  grassRegrowth: number[];
   harvestResults: HarvestResult[];
   advancedSeconds: number;
 }
@@ -71,6 +76,7 @@ const events = (): FarmingEvents => ({
   groundChanges: [],
   cropStages: [],
   cropMaturities: [],
+  grassRegrowth: [],
   harvestResults: [],
   advancedSeconds: 0,
 });
@@ -139,6 +145,8 @@ function validSnapshot(
           ? progress === 1
           : progress >= 0 && progress < 1)
       );
+    if (state === Ground.mown)
+      return crop === 0 && progress >= 0 && progress < 1;
     return crop === 0 && progress === 0;
   });
 }
@@ -230,6 +238,8 @@ export class FarmingEngine {
           Number.isFinite(config.growthSeconds[c]) &&
           config.growthSeconds[c] > 0,
       ) ||
+      !Number.isFinite(config.grassSeconds) ||
+      config.grassSeconds <= 0 ||
       !Number.isFinite(config.implementRadius) ||
       config.implementRadius < 0 ||
       !Number.isFinite(config.edgeCoverage) ||
@@ -331,7 +341,7 @@ export class FarmingEngine {
       if (!Number.isInteger(i) || i < 0 || i >= this.cells.length) continue;
       const state = this.cells[i];
       if (
-        action === "cultivate" &&
+        action === "plow" &&
         (state === Ground.grass ||
           state === Ground.mown ||
           state === Ground.growing ||
@@ -356,9 +366,15 @@ export class FarmingEngine {
         this.cells[i] = Ground.stubble;
         this.crops[i] = 0;
         this.progress[i] = 0;
-      } else if (action === "mow" && state === Ground.grass)
+      } else if (
+        action === "mow" &&
+        (state !== Ground.mown || this.progress[i] > 0)
+      ) {
+        // Mowing always leaves flat green grass, whatever stood there.
         this.cells[i] = Ground.mown;
-      else if (action === "restore" && state !== Ground.grass) {
+        this.crops[i] = 0;
+        this.progress[i] = 0;
+      } else if (action === "restore" && state !== Ground.grass) {
         this.cells[i] = Ground.grass;
         this.crops[i] = 0;
         this.progress[i] = 0;
@@ -384,6 +400,18 @@ export class FarmingEngine {
     const result = events();
     if (!active || !Number.isFinite(seconds) || seconds <= 0) return result;
     for (let i = 0; i < this.cells.length; i++) {
+      if (this.cells[i] === Ground.mown) {
+        // Only mown ground grows back into tufted grass.
+        result.advancedSeconds = seconds;
+        const before = this.stage(i);
+        this.progress[i] += seconds / this.config.grassSeconds;
+        if (this.progress[i] >= 1 - 1e-12) {
+          this.cells[i] = Ground.grass;
+          this.progress[i] = 0;
+          result.grassRegrowth.push(i);
+        } else if (before !== this.stage(i)) result.grassRegrowth.push(i);
+        continue;
+      }
       if (this.cells[i] !== Ground.growing) continue;
       result.advancedSeconds = seconds;
       const before = this.stage(i);

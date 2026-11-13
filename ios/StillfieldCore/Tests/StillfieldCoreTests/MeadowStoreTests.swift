@@ -11,7 +11,7 @@ private func withSaveURL(_ body: (URL) throws -> Void) throws {
 @Test func saveRoundTripPreservesEverySettingAndPaintedCell() throws {
     try withSaveURL { url in
         var save = MeadowSave()
-        save.field.paint(x: 1, z: -2, tool: .cultivate)
+        save.field.paint(x: 1, z: -2, tool: .plow)
         save.field.paint(x: 1, z: -2, tool: .sow)
         save.tractor = TractorState(x: -10, z: -3, heading: 1.2, speed: 2.4)
         save.tool = .sow
@@ -27,7 +27,7 @@ private func withSaveURL(_ body: (URL) throws -> Void) throws {
         save.day = 432.5
         try MeadowStore.save(save, to: url)
         #expect(MeadowStore.load(from: url) == save)
-        save.field.paint(x: 2, z: -4, tool: .cultivate)
+        save.field.paint(x: 2, z: -4, tool: .plow)
         try MeadowStore.save(save, to: url)
         #expect(MeadowStore.load(from: url) == save)
     }
@@ -51,6 +51,15 @@ private func withSaveURL(_ body: (URL) throws -> Void) throws {
     let restored = try JSONDecoder().decode(MeadowSave.self, from: JSONSerialization.data(withJSONObject: json))
     #expect(restored.tidyRows == nil)
     #expect(MeadowSave().tidyRows == nil)
+}
+
+@Test func meadowsSavedWithCultivateOrTillChosenLoadWithPlow() throws {
+    for old in ["cultivate", "till"] {
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(MeadowSave())) as? [String: Any])
+        json["tool"] = old
+        let restored = try JSONDecoder().decode(MeadowSave.self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(restored.tool == .plow)
+    }
 }
 
 @Test func missingOrTruncatedSaveIsReadOnly() throws {

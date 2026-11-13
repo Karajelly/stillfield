@@ -1,4 +1,4 @@
-export type Tool = "cultivate" | "sow" | "harvest" | "mow" | "restore" | "wander";
+export type Tool = "plow" | "sow" | "harvest" | "mow" | "restore" | "wander";
 export interface Point {
   x: number;
   z: number;

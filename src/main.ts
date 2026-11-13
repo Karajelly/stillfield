@@ -1046,22 +1046,59 @@ window.addEventListener("focus", () => {
   windowActive = true;
   lastTime = performance.now();
 });
-window.addEventListener("blur", () => {
+/** A path the tractor follows on its own: a tap's destination, tidy rows, or a ride down the lane. */
+function onAutopilot() {
+  return (
+    !paused &&
+    !modalOpen &&
+    !!(travel || navigation.target || navigation.run || navigation.turn)
+  );
+}
+/**
+ * Leaving the page lets go of the wheel and the keys, but a tractor already on
+ * its way keeps going. With nowhere to go, it stops as before.
+ */
+function leave() {
   windowActive = false;
   cancelControlsHide();
-  stop();
+  if (onAutopilot() && !steering?.moved) {
+    pointerId = null;
+    steering = null;
+    keyboard.reset();
+    driveKeys.reset();
+  } else stop();
   persist();
-});
+}
+/** Hidden pages get no frames, so the work done while away is caught up on return. */
+const MAX_CATCH_UP_SECONDS = 30 * 60;
+let hiddenAt: number | null = null;
+function catchUp(seconds: number) {
+  const step = 0.05;
+  let remaining = Math.min(seconds, MAX_CATCH_UP_SECONDS);
+  while (remaining > 0 && onAutopilot()) {
+    const dt = Math.min(step, remaining);
+    workStep(dt, dt, true);
+    remaining -= dt;
+  }
+  if (!onAutopilot()) {
+    tractorState.speed = 0;
+    audio.setDriving(0);
+  }
+  persist();
+  changedSinceSave = false;
+}
+window.addEventListener("blur", leave);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
-    windowActive = false;
-    cancelControlsHide();
-    stop();
-    persist();
+    leave();
+    hiddenAt = onAutopilot() ? performance.now() : null;
     if (soundEnabled) void audio.setEnabled(false);
   } else {
     windowActive = document.hasFocus();
-    lastTime = performance.now();
+    const now = performance.now();
+    if (hiddenAt !== null) catchUp((now - hiddenAt) / 1000);
+    hiddenAt = null;
+    lastTime = now;
     if (soundEnabled) void audio.setEnabled(true).catch(() => {});
   }
 });
@@ -1176,6 +1213,93 @@ setCameraMode(cameraMode, false);
 updateTool(selectedTool);
 updateTravelButton();
 let changedSinceSave = false;
+/** Advances the farm by one step of active time: growth, driving and the work it does. */
+function workStep(dt: number, activeSeconds: number, quiet = false) {
+  time += dt;
+  if (light === "flow") dayTime = wrapDay(dayTime + activeSeconds);
+  for (const f of fields)
+    changedSinceSave ||= f.advance(activeSeconds).advancedSeconds > 0;
+  const gridInput = keyboard.input;
+  const previousHeading = tractorState.heading;
+  const movement = navigation.step(
+    tractorState,
+    dt,
+    travel ? "wander" : selectedTool,
+    world.obstacles,
+    pace,
+    travel
+      ? null
+      : steering?.moved
+        ? { heading: steering.heading }
+        : cameraMode === "tractor" && driveKeys.input
+          ? { keys: driveKeys.input }
+          : gridInput
+            ? { grid: gridInput }
+            : null,
+    cameraMode === "tractor",
+  );
+  tractorState = movement.state;
+  changedSinceSave ||= tractorState.heading !== previousHeading;
+  if (travel) {
+    const arrived = travel.to,
+      ride = travel.update(tractorState, movement.blocked);
+    if (ride === "blocked") {
+      endTravel();
+      toast("Something’s in the way. Tap the lane to find a way round.");
+    } else if (ride === "arrived") {
+      endTravel();
+      toast(
+        arrived.id === FAR_SITE.id
+          ? "Foxglove field. A little more room to roam."
+          : "Home again, by the barn.",
+      );
+    }
+  }
+  target = navigation.target;
+  cursor.visible = target !== null;
+  if (target) cursor.position.set(target.x, 0.09, target.z);
+  updateRowWash();
+  const worked = (event: FarmingEvents) => {
+    changedSinceSave ||= event.groundChanges.length > 0;
+    changedSinceTap += event.groundChanges.length;
+    if (event.harvestResults.length && !quiet)
+      audio.harvest(event.harvestResults[0].crop);
+  };
+  // A sweep only touches cells under the implement, so every field can listen.
+  movement.paint.forEach((point, index, points) => {
+    for (const f of fields)
+      worked(
+        f.paint(
+          point.x,
+          point.z,
+          selectedTool,
+          points[Math.max(0, index - 1)],
+          selectedCrop,
+        ),
+      );
+  });
+  // A tidy row works exactly its own cells, in its own field.
+  if (movement.cells.length)
+    worked(
+      fieldFor(movement.field).paintCells(movement.cells, selectedTool, selectedCrop),
+    );
+  if (movement.completed && tidy && changedSinceTap === 0) explainIdlePass();
+  if (tractorState.speed > 0.1) {
+    if (!hasDriven) {
+      hasDriven = true;
+      document.querySelector(".farm-app")!.classList.add("has-driven");
+      ambientCopy.forEach((element) => {
+        element.inert = true;
+        element.setAttribute("aria-hidden", "true");
+      });
+      window.clearTimeout(toastTimer);
+      document.querySelector("#toast")!.classList.remove("visible");
+      controlsToggle.hidden = false;
+      scheduleControlsHide(3200);
+    }
+    changedSinceSave = true;
+  }
+}
 const attachment = tractor.group.getObjectByName("attachment")!;
 function animate(now: number) {
   requestAnimationFrame(animate);
@@ -1190,47 +1314,8 @@ function animate(now: number) {
   }
   const daylight = applyDaylight();
   dusk.update(daylight.glow, reducedMotion ? 0 : time);
-  if (!paused && !modalOpen && windowActive) {
-    time += dt;
-    if (light === "flow") dayTime = wrapDay(dayTime + activeSeconds);
-    for (const f of fields)
-      changedSinceSave ||= f.advance(activeSeconds).advancedSeconds > 0;
-    const gridInput = keyboard.input;
-    const previousHeading = tractorState.heading;
-    const movement = navigation.step(
-      tractorState,
-      dt,
-      travel ? "wander" : selectedTool,
-      world.obstacles,
-      pace,
-      travel
-        ? null
-        : steering?.moved
-          ? { heading: steering.heading }
-          : cameraMode === "tractor" && driveKeys.input
-            ? { keys: driveKeys.input }
-            : gridInput
-              ? { grid: gridInput }
-              : null,
-      cameraMode === "tractor",
-    );
-    tractorState = movement.state;
-    changedSinceSave ||= tractorState.heading !== previousHeading;
-    if (travel) {
-      const arrived = travel.to,
-        ride = travel.update(tractorState, movement.blocked);
-      if (ride === "blocked") {
-        endTravel();
-        toast("Something’s in the way. Tap the lane to find a way round.");
-      } else if (ride === "arrived") {
-        endTravel();
-        toast(
-          arrived.id === FAR_SITE.id
-            ? "Foxglove field. A little more room to roam."
-            : "Home again, by the barn.",
-        );
-      }
-    }
+  if (!paused && !modalOpen && (windowActive || onAutopilot())) {
+    workStep(dt, activeSeconds);
     // Follow the tractor along the lane; settle on whichever field it reaches.
     const desiredView = viewBlend(tractorState);
     if (Math.abs(desiredView - fieldView) > 1e-4) {
@@ -1242,50 +1327,6 @@ function animate(now: number) {
       if (!hasDriven) positionLabels();
     }
     updateTravelButton();
-    target = navigation.target;
-    cursor.visible = target !== null;
-    if (target) cursor.position.set(target.x, 0.09, target.z);
-    updateRowWash();
-    const worked = (event: FarmingEvents) => {
-      changedSinceSave ||= event.groundChanges.length > 0;
-      changedSinceTap += event.groundChanges.length;
-      if (event.harvestResults.length)
-        audio.harvest(event.harvestResults[0].crop);
-    };
-    // A sweep only touches cells under the implement, so every field can listen.
-    movement.paint.forEach((point, index, points) => {
-      for (const f of fields)
-        worked(
-          f.paint(
-            point.x,
-            point.z,
-            selectedTool,
-            points[Math.max(0, index - 1)],
-            selectedCrop,
-          ),
-        );
-    });
-    // A tidy row works exactly its own cells, in its own field.
-    if (movement.cells.length)
-      worked(
-        fieldFor(movement.field).paintCells(movement.cells, selectedTool, selectedCrop),
-      );
-    if (movement.completed && tidy && changedSinceTap === 0) explainIdlePass();
-    if (tractorState.speed > 0.1) {
-      if (!hasDriven) {
-        hasDriven = true;
-        document.querySelector(".farm-app")!.classList.add("has-driven");
-        ambientCopy.forEach((element) => {
-          element.inert = true;
-          element.setAttribute("aria-hidden", "true");
-        });
-        window.clearTimeout(toastTimer);
-        document.querySelector("#toast")!.classList.remove("visible");
-        controlsToggle.hidden = false;
-        scheduleControlsHide(3200);
-      }
-      changedSinceSave = true;
-    }
     tractor.group.position.set(tractorState.x, 0, tractorState.z);
     tractor.group.rotation.y = tractorState.heading;
     tractor.update(tractorState.speed, dt, time);

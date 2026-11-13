@@ -45,6 +45,7 @@ public struct FarmingEvents: Equatable, Sendable {
 }
 
 public struct FieldGrid: Codable, Equatable, Sendable {
+    /// The home field's geometry. Other fields carry their own `bounds`.
     public static let minX = -25.0, maxX = 20.0, minZ = -12.0, maxZ = 13.0
     public static let cellSize = 0.5
     public static let columns = 90, rows = 50
@@ -60,13 +61,19 @@ public struct FieldGrid: Codable, Equatable, Sendable {
     public var display: [Int]
     public var fieldID = "willowbrook"
     public var displayLocation = FarmPoint(x: -16, z: -15.5)
+    /// Where this grid's cells lie. Follows its field ID; not saved separately.
+    public private(set) var bounds = FieldBounds.home
 
-    public init(starterRows: Bool = true) {
-        cells = Array(repeating: 0, count: Self.cellCount)
+    /// A new field. Only the original one has starter plots.
+    public init(starterRows: Bool = true, site: FieldSite = .home) {
+        bounds = site.bounds
+        fieldID = site.id
+        displayLocation = site.displayLocation
+        cells = Array(repeating: 0, count: site.bounds.cellCount)
         crops = cells
-        progress = Array(repeating: 0, count: Self.cellCount)
+        progress = Array(repeating: 0, count: site.bounds.cellCount)
         display = [0, 0, 0]
-        if starterRows {
+        if starterRows && site.original {
             var x = -21.0
             while x <= 13 {
                 for z in [10.8, 7.8] {
@@ -104,7 +111,8 @@ public struct FieldGrid: Codable, Equatable, Sendable {
                                configuration: FarmingConfiguration = .init()) -> FarmingEvents {
         precondition(configuration.isValid)
         return apply(cells: FarmSimulation.cellsUnderSweep(from: from, to: to,
-                     radius: configuration.implementRadius + configuration.edgeCoverage), tool: tool, crop: crop, configuration: configuration)
+                     radius: configuration.implementRadius + configuration.edgeCoverage, bounds: bounds),
+                     tool: tool, crop: crop, configuration: configuration)
     }
 
     @discardableResult
@@ -183,12 +191,12 @@ public struct FieldGrid: Codable, Equatable, Sendable {
 
     public mutating func clearDisplay() { display = [0, 0, 0] }
     public mutating func reset() {
-        cells = Array(repeating: 0, count: Self.cellCount); crops = cells
-        progress = Array(repeating: 0, count: Self.cellCount); clearDisplay()
+        cells = Array(repeating: 0, count: bounds.cellCount); crops = cells
+        progress = Array(repeating: 0, count: bounds.cellCount); clearDisplay()
     }
 
     public var isValid: Bool {
-        valid(cellCount: Self.cellCount)
+        valid(cellCount: bounds.cellCount)
     }
 
     private func valid(cellCount: Int) -> Bool {
@@ -239,7 +247,7 @@ public struct FieldGrid: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let data = try decoder.container(keyedBy: CodingKeys.self)
         let version = try data.decodeIfPresent(Int.self, forKey: .version) ?? 1
-        let count = version < 3 ? Self.legacyColumns * Self.legacyRows : Self.cellCount
+        var count = version < 3 ? Self.legacyColumns * Self.legacyRows : Self.cellCount
         cells = try data.decode([UInt8].self, forKey: .cells)
         if version == 1 {
             guard cells.count == count, cells.allSatisfy({ $0 <= 3 }) else {
@@ -256,6 +264,8 @@ public struct FieldGrid: Codable, Equatable, Sendable {
             display = try data.decode([Int].self, forKey: .display)
             fieldID = try data.decode(String.self, forKey: .fieldID)
             displayLocation = try data.decode(FarmPoint.self, forKey: .displayLocation)
+            // Legacy grids only ever belonged to the original field.
+            if version == 3 { bounds = FieldSite.site(id: fieldID).bounds; count = bounds.cellCount }
         } else {
             throw DecodingError.dataCorruptedError(forKey: .version, in: data, debugDescription: "Unsupported farming version")
         }

@@ -83,8 +83,9 @@ final class HarvestDisplayRenderer {
             guard flights.count < 3, !flights.contains(where: { $0.crop == result.crop }),
                   let section = sections[result.crop], !result.cells.isEmpty else { continue }
             let cell = result.cells[result.cells.count / 2]
-            let world = SIMD3<Float>(Float(FieldGrid.minX + (Double(cell % FieldGrid.columns) + 0.5) * FieldGrid.cellSize), 0.4,
-                                    Float(FieldGrid.minZ + (Double(cell / FieldGrid.columns) + 0.5) * FieldGrid.cellSize))
+            let field = grid.bounds
+            let world = SIMD3<Float>(Float(field.minX + (Double(cell % field.columns) + 0.5) * field.cellSize), 0.4,
+                                    Float(field.minZ + (Double(cell / field.columns) + 0.5) * field.cellSize))
             let start = world - entity.position
             let item = produce(result.crop); item.position = start; item.scale = .init(repeating: 0.8)
             entity.addChild(item)

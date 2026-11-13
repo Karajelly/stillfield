@@ -37,7 +37,7 @@ private final class TidyMeadow {
     }
     var idle: Bool { navigation.run == nil && navigation.target == nil && state.speed == 0 }
     func tap(_ point: FarmPoint, fill: Bool = false) {
-        navigation.choose(point, state: state, tool: tool, obstacles: obstacles, fill: fill, workable: { self.workable($0) })
+        navigation.choose(point, state: state, tool: tool, obstacles: obstacles, fill: fill, workable: { cell, _ in self.workable(cell) })
     }
     func drag(_ point: FarmPoint) {
         navigation.choose(point, state: state, tool: tool, obstacles: obstacles, freehand: true)

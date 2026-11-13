@@ -10,10 +10,8 @@ enum TractorHandling {
     static func attachment(_ state: TractorState) -> FarmPoint {
         FarmPoint(x: state.x - sin(state.heading) * attachmentOffset, z: state.z - cos(state.heading) * attachmentOffset)
     }
-    static func inField(_ p: FarmPoint) -> Bool {
-        p.x.isFinite && p.z.isFinite && p.x >= FieldGrid.minX && p.x <= FieldGrid.maxX
-            && p.z >= FieldGrid.minZ && p.z <= FieldGrid.maxZ
-    }
+    /// Whether a point is in any field.
+    static func inField(_ p: FarmPoint) -> Bool { FieldBounds.containing(p) != nil }
     static func constrain(_ before: TractorState, _ after: TractorState, dt: Double, obstacles: [Obstacle]) -> TractorState {
         var result = after
         var constrained = false
@@ -27,7 +25,7 @@ enum TractorHandling {
                 constrained = true
             }
         }
-        let x = clamp(result.x, -39, 39), z = clamp(result.z, -30, 28)
+        let x = clamp(result.x, FarmWorld.minX, FarmWorld.maxX), z = clamp(result.z, FarmWorld.minZ, FarmWorld.maxZ)
         constrained = constrained || x != result.x || z != result.z
         result.x = x; result.z = z
         if constrained && dt > 0 { result.speed = min(result.speed, hypot(x - before.x, z - before.z) / dt) }

@@ -31,7 +31,7 @@ public enum PerspectiveGroundProjection {
     /// pulled to its edge, so a near-horizon tap never sends the tractor to a far corner.
     /// Matches `drivableTarget` in src/follow-camera.ts.
     public static func drivable(_ point: FarmPoint?) -> FarmPoint? {
-        guard let point, (-39...39).contains(point.x), (-30...28).contains(point.z) else { return nil }
+        guard let point, FarmWorld.contains(point) else { return nil }
         return point
     }
 

@@ -78,11 +78,15 @@ private func screenPosition(_ point: SIMD3<Double>, framing: OverviewCamera.Fram
         #expect(simd_distance(direction(0), direction(1)) < 1e-9)
         #expect(simd_distance(direction(0), direction(0.5)) < 1e-9)
     }
-    // Landscape keeps the home zoom; narrow screens ease back, gradually, along the lane.
-    for aspect in [4.0 / 3, 16.0 / 9, 2.2] {
+    // Wide landscape keeps the home zoom. iPad landscape is framed more tightly than the
+    // web's 4:3 view, so it eases back a sliver (1.6%); narrow screens ease back further.
+    for aspect in [16.0 / 9, 2.2] {
         #expect(OverviewCamera.frame(aspect: aspect, blend: 1).verticalHalfExtent
                 == OverviewCamera.frame(aspect: aspect).verticalHalfExtent)
     }
+    let ipadHome = OverviewCamera.frame(aspect: 4.0 / 3).verticalHalfExtent
+    let ipadFar = OverviewCamera.frame(aspect: 4.0 / 3, blend: 1).verticalHalfExtent
+    #expect(ipadFar >= ipadHome && ipadFar < ipadHome * 1.05)
     for aspect in [375.0 / 812, 402.0 / 874] {
         let near = OverviewCamera.frame(aspect: aspect).verticalHalfExtent
         let midway = OverviewCamera.frame(aspect: aspect, blend: 0.5).verticalHalfExtent

@@ -131,11 +131,14 @@ import Testing
 @Test func perspectiveTapsBeyondTheDrivableMeadowAreIgnored() {
     let near = PerspectiveGroundProjection.drivable(FarmPoint(x: 12, z: -4))
     #expect(near?.x == 12 && near?.z == -4)
-    for edge in [FarmPoint(x: 39, z: 28), FarmPoint(x: -39, z: -30)] {
+    for edge in [FarmPoint(x: FarmWorld.maxX, z: FarmWorld.maxZ), FarmPoint(x: FarmWorld.minX, z: FarmWorld.minZ)] {
         #expect(PerspectiveGroundProjection.drivable(edge) != nil)
     }
-    for far in [FarmPoint(x: 39.01, z: 0), FarmPoint(x: -120, z: 0), FarmPoint(x: 0, z: 28.5),
-                FarmPoint(x: 0, z: -30.5), FarmPoint(x: .nan, z: 0)] {
+    // Foxglove field, out along the lane, is part of the meadow.
+    #expect(PerspectiveGroundProjection.drivable(FarmPoint(x: -100, z: 0)) != nil)
+    for far in [FarmPoint(x: FarmWorld.maxX + 0.01, z: 0), FarmPoint(x: FarmWorld.minX - 0.5, z: 0),
+                FarmPoint(x: 0, z: FarmWorld.maxZ + 0.5), FarmPoint(x: 0, z: FarmWorld.minZ - 0.5),
+                FarmPoint(x: .nan, z: 0)] {
         #expect(PerspectiveGroundProjection.drivable(far) == nil)
     }
     #expect(PerspectiveGroundProjection.drivable(nil) == nil)

@@ -561,7 +561,7 @@ p {
   width: 17px;
   height: 17px;
 }
-.zoom-controls .view-toggle[aria-pressed="true"] {
+.tractor-view .zoom-controls .view-toggle {
   background: #e0e7ce;
 }
 .farm-app.tractor-view .world-label {
@@ -1304,4 +1304,49 @@ dialog.postcard .primary-button {
 }
 .after-dark .action-group {
   border-left-color: #f1efdc33;
+}
+
+.plot-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+  border-radius: 18px;
+  background: #f9f9eeed;
+  box-shadow: 0 2px 10px #40503417;
+  color: #456044;
+}
+.plot-controls[hidden] { display: none; }
+#plot-mode, #sow-last {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  pointer-events: auto;
+  border-radius: inherit;
+  color: inherit;
+  background: transparent;
+  font-size: 12px;
+}
+#sow-last[hidden] { display: none; }
+#sow-last, #plot-mode:hover, #plot-mode[aria-pressed="true"] { background: #e2e8d5; }
+#plot-mode .icon { width: 15px; height: 15px; }
+#plot-hint { padding-left: 12px; font-size: 12px; }
+#plot-hint:empty { display: none; }
+#work-state {
+  position: absolute;
+  top: max(80px, calc(56px + env(safe-area-inset-top)));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 13px;
+  border-radius: 16px;
+  background: #344738eb;
+  color: #fff9e8;
+  font-size: 12px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+@media (pointer: coarse) {
+  #plot-mode, #sow-last { min-height: 44px; }
 }

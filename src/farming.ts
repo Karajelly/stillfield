@@ -2,13 +2,15 @@ import {
   FIELD,
   FIELD_COLUMNS,
   FIELD_ROWS,
-  cellsUnderBrush,
   cellsUnderSweep,
   fieldColumns,
   fieldRows,
 } from "./simulation";
-import type { FieldBounds, Point, Tool } from "./simulation";
+import type { FieldBounds, Point, Tool, TractorState } from "./simulation";
 import { tuning } from "./handling";
+import { LANE_CELLS, rowCells, rowEnd, rowHeading } from "./tidy-rows";
+import type { Row } from "./tidy-rows";
+import { attachmentOffset } from "./work-destination";
 
 export const CROPS = ["wheat", "sunflowers", "pumpkins"] as const;
 export type Crop = (typeof CROPS)[number];
@@ -104,6 +106,23 @@ export const HOME_SITE: FieldSite = {
   displayLocation: { x: -16, z: -15.5 },
   original: true,
 };
+
+/** A westbound pass laid out in whole implement-width squares from the field edge. */
+function starterRow(lane: number, westTile: number, widthInTiles: number): Row {
+  return {
+    axis: "x", lane, dir: -1,
+    from: (westTile + widthInTiles) * LANE_CELLS - 1,
+    to: westTile * LANE_CELLS,
+  };
+}
+
+const shortMownRow = starterRow(5, 8, 7);
+
+export function freshTractor(): TractorState {
+  const end = rowEnd(shortMownRow);
+  // Face west with the mower resting on the last cut cell, ready to continue.
+  return { x: end.x - attachmentOffset, z: end.z, heading: rowHeading(shortMownRow.axis, shortMownRow.dir), speed: 0 };
+}
 
 function validSnapshot(
   value: unknown,
@@ -273,28 +292,17 @@ export class FarmingEngine {
       this.progress.set(snapshot.progress);
       this.display = { ...snapshot.display };
     } else if (starter && site.original) {
-      for (let x = -21; x <= 13; x += 0.2)
-        for (const z of [10.8, 7.8])
-          for (const i of cellsUnderBrush(x, z, 1.05))
-            this.cells[i] = Ground.mown;
-      for (let x = -4; x <= 13; x += 0.2)
-        for (const i of cellsUnderBrush(x, 4.8, 1.05))
-          this.cells[i] = Ground.mown;
-      // Square crop plots leave a broad grass gap above the mown rows.
-      for (const [crop, minX] of [
-        ["sunflowers", -20.5],
-        ["wheat", -11.5],
-        ["pumpkins", -2.5],
-      ] as const) {
-        for (let z = -7; z < -2; z += FIELD.cell)
-          for (let x = minX; x < minX + 5; x += FIELD.cell) {
-            const i =
-              Math.floor((z - FIELD.minZ) / FIELD.cell) * FIELD_COLUMNS +
-              Math.floor((x - FIELD.minX) / FIELD.cell);
+      for (const row of [starterRow(9, 1, 14), starterRow(7, 1, 14), shortMownRow])
+        for (const cell of rowCells(row)) this.cells[cell] = Ground.mown;
+
+      for (const [crop, westTile] of [["sunflowers", 2], ["wheat", 5], ["pumpkins", 9]] as const) {
+        for (const lane of [2, 3]) {
+          for (const i of rowCells(starterRow(lane, westTile, 2))) {
             this.cells[i] = Ground.mature;
             this.crops[i] = CROPS.indexOf(crop) + 1;
             this.progress[i] = 1;
           }
+        }
       }
     }
   }

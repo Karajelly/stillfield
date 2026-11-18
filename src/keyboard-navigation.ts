@@ -65,7 +65,7 @@ function clearTravel(state: TractorState, direction: Point, distance: number, ob
 
 /** Pivot within the current cell, then travel along exactly one field axis. */
 export function advanceGridTractor(state: TractorState, input: GridInput, dt: number,
-  obstacles: Obstacle[], pace = 0.85): TractorState {
+  obstacles: Obstacle[], pace = 0.85, stopIn = Infinity): TractorState {
   dt = Number.isFinite(dt) ? clamp(dt, 0, 0.05) : 0;
   if (dt === 0) return state;
   const turn = angleDifference(input.heading, state.heading);
@@ -85,9 +85,15 @@ export function advanceGridTractor(state: TractorState, input: GridInput, dt: nu
   const speed = state.speed + (cruise - state.speed) * response;
   const distance = cruise * dt + (state.speed - cruise) * response / acceleration;
   const direction = { x: Math.round(Math.sin(heading)), z: Math.round(Math.cos(heading)) };
-  const travel = clearTravel(state, direction, distance, obstacles);
+  // With a known row end, follow a constant-deceleration braking curve.
+  const braking = 4;
+  const remaining = Math.max(0, stopIn);
+  const arrivalSpeed = Math.max(0, Math.sqrt(2 * braking * remaining) - braking * dt);
+  const brakingTravel = Number.isFinite(remaining) ? remaining - arrivalSpeed ** 2 / (2 * braking) : Infinity;
+  const permitted = Math.min(distance, brakingTravel);
+  const travel = clearTravel(state, direction, permitted, obstacles);
   return { x: state.x + direction.x * travel, z: state.z + direction.z * travel,
-    heading, speed: travel < distance ? 0 : speed };
+    heading, speed: travel < permitted ? 0 : Math.min(speed, arrivalSpeed) };
 }
 
 const driveAxes: Record<string, { throttle?: number; steer?: number }> = {

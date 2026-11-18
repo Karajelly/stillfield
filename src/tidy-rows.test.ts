@@ -1,16 +1,23 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { FarmingEngine, FARMING_CONFIG, Ground } from "./farming";
-import { FIELD, FIELD_COLUMNS, seededRandom } from "./simulation";
+import { FAR_FIELD, FIELD, FIELD_COLUMNS, seededRandom } from "./simulation";
 import type { Obstacle, Point, Tool, TractorState } from "./simulation";
 import { TractorNavigation } from "./tractor-navigation";
 import { attachmentPoint } from "./work-destination";
+import { planPlot } from "./plot";
 import {
   LANE_CELLS,
   LANE_WIDTH,
+  cellAt,
+  laneAt,
   laneCentre,
+  laneWork,
+  manualCorner,
   planRows,
+  previewManualRow,
   rowCells,
+  rowHeading,
 } from "./tidy-rows";
 
 const east = Math.PI / 2,
@@ -407,8 +414,9 @@ it("settles keyboard rows onto the same lanes", () => {
   // A rough step sideways still lands in the next lane.
   for (let i = 0; i < 60 * 1.1; i++)
     meadow.step({ grid: { heading: Math.PI, driving: true } });
-  for (let i = 0; i < 60 * 17; i++)
+  for (let i = 0; i < 60 * 20 && meadow.nav.matchedPass?.phase !== "finished"; i++)
     meadow.step({ grid: { heading: east, driving: true } });
+  assert.equal(meadow.nav.matchedPass?.phase, "finished");
   assert.equal(meadow.count(Ground.soil, [5]).inside, 90 * 5);
   assert.ok(Math.abs(attachmentPoint(meadow.state).z - laneZ(5)) < 0.02);
 });
@@ -423,6 +431,135 @@ it("leaves the original free approach unchanged when tidy rows are off", () => {
     meadow.count(Ground.soil, [3]).outside > 100,
     "the straight-line approach works the ground it crosses",
   );
+});
+
+it("hand-driven tractor passes work a square-ended lane across both field edges", () => {
+  for (const fps of [30, 60, 120]) for (const method of ["drag", "keys"] as const) {
+    const meadow = farm({ x: -27, z: laneZ(4) + 0.8, heading: east + 0.13, speed: 0 }, true, fps, [], true);
+    meadow.tool("mow");
+    for (let frame = 0; frame < 19 * fps; frame++) {
+      const input = method === "drag"
+        ? { heading: east + 0.12 * Math.sin(frame / fps) }
+        : { keys: { throttle: 1, steer: 0 } };
+      const result = meadow.step(input);
+      assert.deepEqual(result.paint, []);
+      if (frame === 6 * fps) {
+        assert.equal(meadow.nav.manualRow?.lane, 4);
+        assert.equal(meadow.nav.manualRow?.to, FIELD_COLUMNS - 1);
+        assert.equal(meadow.state.heading, east);
+        assert.ok(Math.abs(meadow.state.z - laneZ(4)) < 0.001);
+      }
+    }
+    assert.deepEqual(meadow.count(Ground.mown, [4]), { inside: 450, outside: 0, all: 450 });
+  }
+});
+
+it("lifts for steering and coasting, and re-engages on a new cardinal heading", () => {
+  for (const method of ["drag", "keys"] as const) {
+    const meadow = farm({ x: -10, z: laneZ(3), heading: east, speed: 0 }, true, 60, [], true);
+    const forward = { keys: { throttle: 1, steer: 0 } };
+    for (let frame = 0; frame < 90; frame++) meadow.step(method === "drag" ? { heading: east } : forward);
+    const first = meadow.count(Ground.soil).all;
+    assert.ok(first > 5);
+    for (let frame = 0; frame < 60; frame++) meadow.step();
+    assert.ok(meadow.nav.lifted);
+    assert.equal(meadow.count(Ground.soil).all, first);
+    for (let frame = 0; frame < 240 && meadow.state.heading > 0.12; frame++) {
+      const turning = method === "drag" ? { heading: 0 } : { keys: { throttle: 1, steer: 1 } };
+      const before = meadow.state.heading;
+      const result = meadow.step(turning);
+      if (before > 0.4 || method === "keys") {
+        assert.deepEqual(result.cells, []);
+        assert.deepEqual(result.paint, []);
+        assert.ok(meadow.nav.lifted);
+      }
+    }
+    for (let frame = 0; frame < 80; frame++) meadow.step(method === "drag" ? { heading: 0 } : forward);
+    assert.equal(meadow.nav.manualRow?.axis, "z");
+    assert.equal(meadow.state.heading, 0);
+    assert.ok(meadow.count(Ground.soil).all > first);
+    meadow.nav.cancel();
+    assert.equal(meadow.nav.manualRow, null);
+  }
+});
+
+it("keeps the manual sightline and the worked cells in the same field", () => {
+  const start = { x: -88, z: 2.1, heading: west - 0.1, speed: 0 };
+  const row = previewManualRow(start)!;
+  assert.equal(row.field, FAR_FIELD);
+  const nav = new TractorNavigation();
+  nav.tidy = true;
+  let state = start, count = 0;
+  for (let frame = 0; frame < 180; frame++) {
+    const result = nav.step(state, 1 / 60, "sow", [], 0.85, { heading: west }, true);
+    state = result.state;
+    assert.equal(result.field, FAR_FIELD);
+    if (result.cells.length) count += result.cells.length;
+  }
+  assert.ok(count >= 50);
+  assert.equal(nav.manualRow?.lane, row.lane);
+  assert.equal(previewManualRow({ ...state, x: -40 }), null, "no lane lock on the road");
+});
+
+it("joins hand-driven right angles with square corners in all eight directions", () => {
+  for (const axis of ["x", "z"] as const) for (const dir of [1, -1] as const)
+    for (const nextDir of [1, -1] as const) for (const frames of [90, 104, 118]) {
+      const nextAxis = axis === "x" ? "z" : "x";
+      const heading = rowHeading(axis, dir), nextHeading = rowHeading(nextAxis, nextDir);
+      const start = { x: laneCentre("z", 8), z: laneZ(4), heading, speed: 0 };
+      const meadow = farm(start);
+      for (let i = 0; i < frames; i++) meadow.step({ grid: { heading, driving: true } });
+      const pivot = meadow.state;
+      // Releasing the key to look at the corner does no work and keeps its position.
+      for (let i = 0; i < 10; i++) assert.deepEqual(meadow.step({ grid: { heading, driving: false } }).cells, []);
+      for (let i = 0; i < 150; i++) meadow.step({ grid: { heading: nextHeading, driving: true } });
+      const lane = laneAt(axis, start), nextLane = laneAt(nextAxis, pivot);
+      const expected = new Set([
+        ...rowCells({ axis, dir, lane, from: cellAt(axis, attachmentPoint(start)),
+          to: nextLane * LANE_CELLS + (dir > 0 ? LANE_CELLS - 1 : 0) }),
+        ...rowCells({ axis: nextAxis, dir: nextDir, lane: nextLane,
+          from: lane * LANE_CELLS + (nextDir > 0 ? 0 : LANE_CELLS - 1),
+          to: laneWork(meadow.state, null).progress!.cell }),
+      ]);
+      const worked = Array.from(meadow.engine.cells.keys()).filter(cell => meadow.engine.cells[cell] === Ground.soil);
+      assert.deepEqual(new Set(worked), expected);
+    }
+});
+
+it("starts a new manual pass after cancellation and avoids stitching across an obstruction", () => {
+  const nav = new TractorNavigation();
+  nav.tidy = true;
+  let state = { x: -11.25, z: laneZ(4), heading: east, speed: 0 };
+  const drive = (session: TractorNavigation, heading: number, from: TractorState) =>
+    session.step(from, 1 / 60, "mow", [], 0.85, { grid: { heading, driving: true } });
+  for (let i = 0; i < 197; i++) state = drive(nav, east, state).state;
+  const incoming = laneWork(state, null).progress!;
+  const afterPivot = { ...state, heading: 0 };
+  const outgoing = previewManualRow(afterPivot)!;
+  assert.ok(manualCorner(incoming, outgoing, afterPivot, []));
+  const corner = { x: laneCentre("z", outgoing.lane), z: laneCentre("x", incoming.lane), radius: 0.5 };
+  assert.equal(manualCorner(incoming, outgoing, afterPivot, [corner]), null);
+  nav.cancel();
+  const fresh = new TractorNavigation();
+  fresh.tidy = true;
+  for (let i = 0; i < 120; i++) {
+    const next = drive(nav, 0, state);
+    assert.deepEqual(next, drive(fresh, 0, state));
+    state = next.state;
+  }
+});
+
+it("reaches the start of short plots before lowering the implement from a crossing approach", () => {
+  const corner = { x: 2.87, z: 0.68 }, end = { x: 1.46, z: -0.06 };
+  for (const follow of [false, true]) for (const heading of [west, 0, 0.9, east]) {
+    const meadow = farm({ x: -4, z: 4.8, heading, speed: 3 }, true, 60, [], follow);
+    const rows = planPlot(corner, end, heading);
+    const expected = new Set(rows.flatMap(row => rowCells(row)));
+    meadow.nav.choosePlot(rows, meadow.state, []);
+    meadow.settle(30);
+    const changed = Array.from(meadow.engine.cells.keys()).filter(cell => meadow.engine.cells[cell] === Ground.soil);
+    assert.deepEqual(new Set(changed), expected);
+  }
 });
 
 it("turns back along its own lane toward the side that was tapped, from the first moment", () => {

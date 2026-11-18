@@ -5,6 +5,7 @@ const paths: Record<string, string> = {
   muted: '<path d="m11 5-6 4H2v6h3l6 4V5Zm5 4 6 6m0-6-6 6"/>',
   settings:
     '<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="currentColor"/><circle cx="15" cy="17" r="3" fill="currentColor"/>',
+  plot: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5M8 7v10m4-10v10m4-10v10"/>',
   pause: '<path d="M9 5v14M15 5v14" stroke-width="3"/>',
   play: '<path d="m8 5 11 7-11 7V5Z"/>',
   leaf: '<path d="M20 4c-1 10-3 15-10 15-4 0-6-3-5-6C6 7 12 6 20 4Z"/><path d="M4 21 15 10"/>',

@@ -29,7 +29,13 @@ public struct TractorState: Codable, Equatable, Sendable {
     public var heading: Double
     public var speed: Double
 
-    public init(x: Double = -4, z: Double = 4.8, heading: Double = -.pi / 2, speed: Double = 0) {
+    /// Park facing west with the deck on the last worked cell of the short strip.
+    public static let homeStart: FarmPoint = {
+        let deck = TidyRows.end(of: FieldGrid.halfMownRow)
+        return FarmPoint(x: deck.x - TractorHandling.attachmentOffset, z: deck.z)
+    }()
+
+    public init(x: Double = Self.homeStart.x, z: Double = Self.homeStart.z, heading: Double = -.pi / 2, speed: Double = 0) {
         self.x = x
         self.z = z
         self.heading = heading

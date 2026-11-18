@@ -12,7 +12,13 @@ private func plant(_ field: inout FieldGrid, _ cells: [Int], _ crop: Crop = .whe
     #expect(field.isValid && !field.isGrowing)
     for crop in Crop.allCases {
         let cells = field.cells.indices.filter { field.crop(at: $0) == crop }
-        #expect(!cells.isEmpty)
+        let xs = Set(cells.map { $0 % FieldGrid.columns })
+        let zs = Set(cells.map { $0 / FieldGrid.columns })
+        let size = 2 * TidyRows.laneCells
+        let x = try #require(xs.min()), z = try #require(zs.min())
+        #expect(x.isMultiple(of: TidyRows.laneCells) && z.isMultiple(of: TidyRows.laneCells))
+        #expect(xs == Set(x..<(x + size)) && zs == Set(z..<(z + size)))
+        #expect(cells.count == size * size)
         #expect(cells.allSatisfy { field.cells[$0] == Ground.mature.rawValue && field.progress[$0] == 1 })
         let result = field.apply(cells: cells, tool: .harvest)
         #expect(result.harvestResults.first?.crop == crop)

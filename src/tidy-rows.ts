@@ -261,7 +261,7 @@ export function planRows(
 const STRAIGHT_LOOK = 2.6,
   ARC_LOOK = 0.9;
 /** How far the deck's leading edge works ahead of the implement's centre. */
-const DECK_REACH = 0.75;
+export const DECK_REACH = 0.75;
 /** Cells a row may pick up behind the deck once it is back on its lane. */
 const CATCH_UP = 4;
 /** Room kept beyond the tractor's own clearance when passing an obstacle. */
@@ -386,6 +386,9 @@ export class TidyRun {
   private points: Point[];
   private look: number[];
   private segment = 0;
+  /** An approach from another direction must reach this point before the working leg. */
+  private join: Point | null = null;
+  private facingRow = false;
   private finished = false;
   private lastBrush: Point | null = null;
   private readonly obstacles: Obstacle[];
@@ -475,6 +478,7 @@ export class TidyRun {
       }
       this.points.push(join);
       this.look.push(STRAIGHT_LOOK);
+      if (!loop.length) this.join = join;
     }
     this.points.push(this.finish());
     this.look.push(STRAIGHT_LOOK);
@@ -525,7 +529,8 @@ export class TidyRun {
     const limit = this.workedTo ?? this.row.from;
     this.row.to = (cell - limit) * dir >= 0 ? cell : limit;
     // Rebuild the last leg from wherever the route has reached.
-    const kept = Math.min(this.segment + 1, this.points.length - 1);
+    const kept = this.join ? this.points.indexOf(this.join) + 1
+      : Math.min(this.segment + 1, this.points.length - 1);
     this.points = [...this.points.slice(0, kept), this.finish()];
     this.look = [...this.look.slice(0, kept), STRAIGHT_LOOK];
     this.clear(kept);
@@ -533,7 +538,17 @@ export class TidyRun {
 
   /** The point to steer toward, and how gently to arrive at the row's end. */
   guide(state: TractorState): { target: Point; paceScale: number } {
-    const last = this.points.length - 1;
+    if (this.join && Math.hypot(state.x - this.join.x, state.z - this.join.z) <= 0.55) this.facingRow = true;
+    if (this.facingRow) {
+      const heading = rowHeading(this.row.axis, this.row.dir);
+      if (state.speed > 0.12 || Math.abs(angleDifference(heading, state.heading)) > 0.06) {
+        return { target: { x: state.x + 3 * Math.sin(heading), z: state.z + 3 * Math.cos(heading) }, paceScale: 0 };
+      }
+      this.segment = this.points.indexOf(this.join!);
+      this.join = null;
+      this.facingRow = false;
+    }
+    const last = this.join ? this.points.indexOf(this.join) : this.points.length - 1;
     // Progress only moves forward, so a tight turn cannot double back.
     let best = this.segment,
       bestT = 0,
@@ -578,6 +593,7 @@ export class TidyRun {
       index++;
       t = 0;
     }
+    if (this.join) return { target, paceScale: 1 };
     const { axis, dir } = this.row;
     const toGo =
       (cellCentre(axis, this.row.to, this.field) -
@@ -600,7 +616,7 @@ export class TidyRun {
       previous = this.lastBrush ?? brush;
     this.lastBrush = brush;
     this.lowered = false;
-    if (this.finished) return [];
+    if (this.finished || this.join) return [];
     const f = this.field;
     const centre = laneCentre(axis, this.row.lane, f);
     const onLane =
@@ -664,6 +680,36 @@ export interface LaneProgress {
   field?: FieldBounds;
 }
 
+/** Close the elbow between two hand-driven lanes. The incoming strip meets
+ * the near side of the outgoing strip, and the latter starts flush with the
+ * incoming strip's outside edge. The caller also limits travel during the turn. */
+export function manualCorner(previous: LaneProgress, row: Row, state: TractorState, obstacles: Obstacle[]) {
+  const field = fieldOf(row);
+  if (fieldOf(previous) !== field || previous.axis === row.axis) return null;
+  const near = row.lane * LANE_CELLS + (previous.dir > 0 ? -1 : LANE_CELLS);
+  const gap = (near - previous.cell) * previous.dir;
+  const first = previous.lane * LANE_CELLS + (row.dir > 0 ? 0 : LANE_CELLS - 1);
+  const underDeck = cellAt(row.axis, attachmentPoint(state), field);
+  if (gap > CATCH_UP || gap < -LANE_CELLS || Math.abs(first - underDeck) > CATCH_UP) return null;
+  // Allow an obstacle to separate two nearby passes. The space to check
+  // includes the whole elbow and any unworked tail of the incoming strip.
+  const junction = rowRect({ ...row, from: first, to: first + row.dir * (LANE_CELLS - 1) });
+  const tailLength = Math.max(0, gap) * field.cell;
+  if (previous.axis === "x") {
+    junction.x -= previous.dir * tailLength / 2;
+    junction.width += tailLength;
+  } else {
+    junction.z -= previous.dir * tailLength / 2;
+    junction.depth += tailLength;
+  }
+  if (obstacles.some(o => Math.hypot(
+    Math.max(0, Math.abs(o.x - junction.x) - junction.width / 2),
+    Math.max(0, Math.abs(o.z - junction.z) - junction.depth / 2),
+  ) <= o.radius + 0.9)) return null;
+  const tail = gap > 0 ? rowCells({ ...previous, from: previous.cell + previous.dir, to: near }) : [];
+  return { tail, progress: { ...row, cell: first - row.dir } };
+}
+
 /**
  * Keyboard rows use the same lanes. `settle` eases the tractor onto the centre
  * of the lane it is in, and `laneWork` returns that lane's cells as the deck
@@ -688,8 +734,38 @@ export function laneFor(
   );
 }
 
-export function settle(state: TractorState, dt: number): TractorState {
-  const lane = laneFor(state);
+/** A sightline from the deck to the end of a manually driven lane. */
+export function previewManualRow(
+  state: TractorState,
+  requested = state.heading,
+  previous: Row | null = null,
+  atReturn?: "drive" | "drag",
+): Row | null {
+  const quarter = Math.PI / 2;
+  const heading = Math.round(requested / quarter) * quarter;
+  // A deliberate turn breaks the lock. The wider release angle keeps a
+  // thumb resting near the capture angle from lifting the tool repeatedly.
+  const sameHeading = previous && Math.abs(angleDifference(heading, rowHeading(previous.axis, previous.dir))) < 0.01;
+  // A driver releasing a steering key is asking to straighten. A drag is
+  // still requesting its chosen angle, including deliberate diagonal exits.
+  const aimTolerance = atReturn === "drive" ? 0.55 : sameHeading ? 0.40 : 0.28;
+  if (Math.abs(angleDifference(requested, heading)) > aimTolerance
+    || Math.abs(angleDifference(state.heading, heading)) > (atReturn ? 0.55 : 0.40)) return null;
+  const brush = attachmentPoint(state);
+  const f = fieldNear(brush, EDGE_REACH + DECK_REACH);
+  if (!f) return null;
+  const axis = Math.abs(Math.sin(heading)) > 0.5 ? "x" : "z";
+  const dir = (axis === "x" ? Math.sin(heading) : Math.cos(heading)) > 0 ? 1 : -1;
+  const lane = sameHeading && fieldOf(previous) === f ? previous.lane : laneAt(axis, state, f);
+  const centre = laneCentre(axis, lane, f);
+  // Catch a pass grazing the outside edge, while leaving the headland free to turn on.
+  if (Math.abs(acrossOf(axis, state) - centre) > LANE_WIDTH / 2 + f.cell) return null;
+  const from = cellAt(axis, brush, f), to = dir > 0 ? alongCells(axis, f) - 1 : 0;
+  if ((alongOf(axis, brush) - cellCentre(axis, to, f)) * dir > DECK_REACH) return null;
+  return inField<Row>({ axis, dir, lane, from, to }, f);
+}
+
+export function settle(state: TractorState, dt: number, lane = laneFor(state)): TractorState {
   if (!lane || state.speed <= 0.1) return state;
   const offset =
     laneCentre(lane.axis, lane.lane, fieldOf(lane)) - acrossOf(lane.axis, state);
@@ -702,8 +778,9 @@ export function settle(state: TractorState, dt: number): TractorState {
 export function laneWork(
   state: TractorState,
   progress: LaneProgress | null,
-): { cells: number[]; progress: LaneProgress | null; field: FieldBounds } {
-  const lane = laneFor(state);
+  lane = laneFor(state),
+  limits?: Row,
+): { cells: number[]; progress: LaneProgress | null; field: FieldBounds; strip?: Row } {
   if (!lane) return { cells: [], progress: null, field: nearestField(state) };
   const f = fieldOf(lane);
   const { axis, dir } = lane,
@@ -720,18 +797,19 @@ export function laneWork(
     progress.dir === dir &&
     fieldOf(progress) === f;
   // A fresh lane starts under the deck; nothing behind it is worked.
-  const start = same ? progress.cell + dir : passed;
-  const row: Row = { ...lane, from: start, to: passed };
-  const first = clamp(start, 0, count - 1),
-    last = clamp(passed, 0, count - 1);
-  const inside =
-    (passed - start) * dir >= 0 &&
-    (dir > 0
-      ? passed >= 0 && start <= count - 1
-      : passed <= count - 1 && start >= 0);
+  const underDeck = Math.floor((alongOf(axis, brush) - alongMin(axis, f)) / f.cell);
+  const next = same ? progress.cell + dir : underDeck;
+  // Intersect with the field and, on a return, the previous pass's worked ends.
+  const low = limits ? Math.min(limits.from, limits.to) : 0;
+  const high = limits ? Math.max(limits.from, limits.to) : count - 1;
+  const first = dir > 0 ? Math.max(next, low) : Math.min(next, high);
+  const last = dir > 0 ? Math.min(passed, high) : Math.max(passed, low);
+  const strip: Row | undefined = (last - first) * dir >= 0
+    ? { ...lane, from: first, to: last } : undefined;
   return {
     field: f,
-    cells: inside ? rowCells(row, first, last) : [],
+    strip,
+    cells: strip ? rowCells(strip) : [],
     progress: {
       ...lane,
       cell: same && (passed - progress.cell) * dir < 0 ? progress.cell : passed,

@@ -69,6 +69,13 @@ public struct FieldGrid: Codable, Equatable, Sendable {
     /// Where this grid's cells lie. Follows its field ID; not saved separately.
     public private(set) var bounds = FieldBounds.home
 
+    /// Starter beds use the same implement-width tiles and worked cells as tidy rows.
+    private static func starterRow(lane: Int, tiles: Range<Int>) -> TidyRow {
+        TidyRow(axis: .x, lane: lane, from: tiles.upperBound * TidyRows.laneCells - 1,
+                to: tiles.lowerBound * TidyRows.laneCells, dir: -1)
+    }
+    static let halfMownRow = starterRow(lane: 5, tiles: 8..<15)
+
     /// A new field. Only the original one has starter plots.
     public init(starterRows: Bool = true, site: FieldSite = .home) {
         bounds = site.bounds
@@ -79,24 +86,15 @@ public struct FieldGrid: Codable, Equatable, Sendable {
         progress = Array(repeating: 0, count: site.bounds.cellCount)
         display = [0, 0, 0]
         if starterRows && site.original {
-            var x = -21.0
-            while x <= 13 {
-                for z in [10.8, 7.8] {
-                    for i in FarmSimulation.cellsUnderBrush(x: x, z: z, radius: 1.05) { cells[i] = Ground.mown.rawValue }
-                }
-                x += 0.2
+            let longStrips = [7, 9].map { Self.starterRow(lane: $0, tiles: 1..<15) }
+            for row in longStrips + [Self.halfMownRow] {
+                for i in TidyRows.cells(of: row) { cells[i] = Ground.mown.rawValue }
             }
-            x = -4
-            while x <= 13 {
-                for i in FarmSimulation.cellsUnderBrush(x: x, z: 4.8, radius: 1.05) { cells[i] = Ground.mown.rawValue }
-                x += 0.2
-            }
-            // Square crop plots leave a broad grass gap above the mown rows.
-            let plots: [(Crop, Double)] = [(.sunflowers, -20.5), (.wheat, -11.5), (.pumpkins, -2.5)]
-            for (crop, minX) in plots {
-                for z in stride(from: -7.0, to: -2.0, by: Self.cellSize) {
-                    for x in stride(from: minX, to: minX + 5, by: Self.cellSize) {
-                        let i = Int((z - Self.minZ) / Self.cellSize) * Self.columns + Int((x - Self.minX) / Self.cellSize)
+            let plots: [(Crop, Int)] = [(.sunflowers, 2), (.wheat, 5), (.pumpkins, 9)]
+            for (crop, firstTile) in plots {
+                for lane in 2..<4 {
+                    let row = Self.starterRow(lane: lane, tiles: firstTile..<(firstTile + 2))
+                    for i in TidyRows.cells(of: row) {
                         cells[i] = Ground.mature.rawValue; crops[i] = crop.rawValue; progress[i] = 1
                     }
                 }

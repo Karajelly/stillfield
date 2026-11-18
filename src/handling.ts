@@ -29,10 +29,13 @@ export function constrain(before: TractorState, after: TractorState, dt: number,
 }
 
 /** Sideways drag distance in tractor view becomes a heading offset: position control, never a turn rate. */
-export function steeringOffset(dx: number) {
+export function steeringOffset(dx: number, touchWidth = Infinity) {
   if (!Number.isFinite(dx)) return 0;
-  const amount = Math.max(0, Math.abs(dx) - tuning.deadzone) / tuning.dragPerQuarterTurn;
-  return Math.sign(dx) * Math.min(Math.PI, (amount * Math.PI) / 4);
+  // On a phone, leave a thumb's width before the edge for a full U-turn.
+  // Keep the same dead zone for small corrections at every screen size.
+  const halfTurnDrag = Math.min(4 * tuning.dragPerQuarterTurn, Math.max(1, touchWidth * 0.4 - tuning.deadzone));
+  const amount = Math.max(0, Math.abs(dx) - tuning.deadzone) / halfTurnDrag;
+  return Math.sign(dx) * Math.min(1, amount) * Math.PI;
 }
 
 /** Keyboard driving behind the tractor: throttle and steer are each -1, 0, or 1. */

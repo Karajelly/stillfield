@@ -219,11 +219,18 @@ private func drive(
     #expect(field.isValid && field.cells.allSatisfy { $0 == 0 })
 }
 
-@Test func starterRowsLeaveSpaceToMakeTheMeadowYourOwn() {
+@Test func starterStripsMatchWholeLanesWithTheDeckAtTheUnfinishedEnd() {
     let field = FieldGrid()
     #expect(field.isValid)
-    let mown = field.cells.filter { $0 == 1 }.count
-    #expect(Double(mown) * FieldGrid.cellSize * FieldGrid.cellSize > 125 && mown < field.cells.count / 2)
-    #expect(FarmSimulation.cellsUnderBrush(x: 0, z: 10.8, radius: 0.3).allSatisfy { field.cells[$0] == 1 })
-    #expect(FarmSimulation.cellsUnderBrush(x: 0, z: -8, radius: 0.3).allSatisfy { field.cells[$0] == 0 })
+    let mown = Set(field.cells.indices.filter { field.cells[$0] == Ground.mown.rawValue })
+    let width = TidyRows.laneCells
+    let expected = [5, 7, 9].flatMap { lane in
+        let first = lane == 5 ? 8 : 1
+        return TidyRows.cells(of: TidyRow(axis: .x, lane: lane, from: first * width, to: 15 * width - 1, dir: 1))
+    }
+    #expect(mown == Set(expected))
+    let tractor = TractorState(), deck = TractorHandling.attachment(tractor)
+    #expect(tractor.heading == -.pi / 2)
+    #expect(abs(deck.x - TidyRows.cellCentre(.x, cell: 8 * width)) < 1e-9)
+    #expect(abs(deck.z - TidyRows.laneCentre(.x, lane: 5)) < 1e-9)
 }

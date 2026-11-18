@@ -3,13 +3,40 @@ import { clamp, WORLD } from "./simulation";
 import { steeringOffset } from "./handling";
 import type { Obstacle, Point, TractorState } from "./simulation";
 
-export type CameraMode = "overview" | "tractor";
+export type CameraMode = "overview" | "tractor" | "cab";
+
+export const nextCameraMode: Record<CameraMode, CameraMode> = {
+  overview: "tractor",
+  tractor: "cab",
+  cab: "overview",
+};
 
 export const FOLLOW_ZOOM = { default: 0.65, min: 0.65, max: 1.8 };
 
 export interface FollowPose {
   position: THREE.Vector3;
   focus: THREE.Vector3;
+}
+
+/** The cab near plane sits ahead of the driver's hat and behind the wheel. */
+export const CAB_NEAR = 0.4;
+
+/** Use the seated eye position and chassis heading so the hood and row stay aligned. */
+export function cabPose(tractor: TractorState): FollowPose {
+  const forward = new THREE.Vector3(Math.sin(tractor.heading), 0, Math.cos(tractor.heading));
+  const position = new THREE.Vector3(tractor.x, 2.24, tractor.z).addScaledVector(forward, -0.44);
+  const focus = position.clone().addScaledVector(forward, 10);
+  focus.y -= 1.7;
+  return { position, focus };
+}
+
+/** Zoom the lens from the seat. Keep both sides of a working pass in view on a phone. */
+export function cabFieldOfView(aspect: number, zoom: number) {
+  const safeAspect = Number.isFinite(aspect) ? Math.max(0.1, aspect) : 1;
+  const zoomStep = clamp(zoom, FOLLOW_ZOOM.min, FOLLOW_ZOOM.max) - FOLLOW_ZOOM.min;
+  const lens = 65 - 12 * zoomStep;
+  const narrow = 2 * Math.atan(Math.tan((20 - 3 * zoomStep) * Math.PI / 180) / safeAspect) * 180 / Math.PI;
+  return Math.max(lens, narrow);
 }
 
 /**
@@ -87,7 +114,7 @@ export class SteeringGesture {
   readonly origin: { x: number; y: number };
   location: { x: number; y: number };
   moved = false;
-  constructor(x: number, y: number, readonly startHeading: number) {
+  constructor(x: number, y: number, readonly startHeading: number, private readonly touchWidth?: number) {
     this.origin = { x, y };
     this.location = { x, y };
   }
@@ -97,7 +124,7 @@ export class SteeringGesture {
   }
   get drag() { return this.location.x - this.origin.x; }
   /** Drag right to turn right. Heading-positive is screen-left for the +Z forward tractor. */
-  get heading() { return this.startHeading - steeringOffset(this.drag); }
+  get heading() { return this.startHeading - steeringOffset(this.drag, this.touchWidth); }
 }
 
 /**

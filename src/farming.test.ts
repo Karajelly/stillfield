@@ -5,6 +5,7 @@ import {
   CROPS,
   FARMING_CONFIG,
   FarmingEngine,
+  freshTractor,
   Ground,
   validFarm,
   migrateFarm,
@@ -12,6 +13,9 @@ import {
 import type { Crop } from "./farming";
 import { FIELD, FIELD_COLUMNS, FIELD_ROWS } from "./simulation";
 import type { Tool } from "./simulation";
+import { planPlot } from "./plot";
+import { cellCentre, LANE_CELLS, rowCells } from "./tidy-rows";
+import { attachmentPoint } from "./work-destination";
 
 const fresh = () => new FarmingEngine(undefined, FARMING_CONFIG, false);
 const plant = (f: FarmingEngine, cells: number[], crop: Crop = "wheat") => {
@@ -19,6 +23,45 @@ const plant = (f: FarmingEngine, cells: number[], crop: Crop = "wheat") => {
   f.applyCells(cells, "sow", crop);
 };
 describe("tranquil farming loop", () => {
+  it("fits the three starter beds and the two long and one half-length mown strips to the plot grid", () => {
+    const farm = new FarmingEngine();
+    const cells = Array.from(farm.cells.keys());
+    function checkPlot(indices: number[]) {
+      assert.ok(indices.length);
+      const xs = indices.map(i => i % FIELD_COLUMNS);
+      const zs = indices.map(i => Math.floor(i / FIELD_COLUMNS));
+      const left = Math.min(...xs), right = Math.max(...xs);
+      const top = Math.min(...zs), bottom = Math.max(...zs);
+      const corner = (x: number, z: number) => ({ x: cellCentre("x", x), z: cellCentre("z", z) });
+      const plan = planPlot(corner(left, top), corner(right, bottom), Math.PI / 2);
+      assert.deepEqual(new Set(indices), new Set(plan.flatMap(row => rowCells(row))),
+        "marking the bed's opposite corners must select precisely its seeded cells");
+      return { width: right - left + 1, depth: bottom - top + 1, left, right, top };
+    }
+    for (const crop of CROPS) {
+      const bed = checkPlot(cells.filter(i => farm.cropAt(i) === crop));
+      assert.equal(bed.width, 2 * LANE_CELLS);
+      assert.equal(bed.depth, 2 * LANE_CELLS);
+    }
+    const strips = [];
+    for (let z = 0; z < FIELD_ROWS; z += LANE_CELLS) {
+      const strip = cells.slice(z * FIELD_COLUMNS, (z + LANE_CELLS) * FIELD_COLUMNS)
+        .filter(i => farm.cells[i] === Ground.mown);
+      if (strip.length) strips.push(checkPlot(strip));
+    }
+    assert.equal(strips.length, 3);
+    const [short, long, other] = strips;
+    assert.ok(strips.every(strip => strip.depth === LANE_CELLS && strip.right === long.right));
+    assert.ok(long.top - short.top >= 2 * LANE_CELLS && other.top - long.top >= 2 * LANE_CELLS,
+      "a grass lane separates neighboring strips");
+    assert.equal(short.width * 2, long.width);
+    assert.equal(long.width, other.width);
+    const tractor = freshTractor();
+    assert.equal(tractor.heading, -Math.PI / 2);
+    const deck = attachmentPoint(tractor);
+    assert.ok(Math.abs(deck.x - cellCentre("x", short.left)) < 1e-8);
+    assert.ok(Math.abs(deck.z - cellCentre("z", short.top + Math.floor(LANE_CELLS / 2))) < 1e-8);
+  });
   it("starts with a harvest-ready plot of every crop without reseeding saved farms", () => {
     const f = new FarmingEngine();
     assert.ok(validFarm(f.snapshot()));

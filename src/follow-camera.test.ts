@@ -1,13 +1,40 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as THREE from "three";
-import { drivableTarget, FOLLOW_ZOOM, SteeringGesture, TractorFollowCamera } from "./follow-camera";
+import { CAB_NEAR, cabFieldOfView, cabPose, drivableTarget, FOLLOW_ZOOM, SteeringGesture, TractorFollowCamera } from "./follow-camera";
 import type { TractorState } from "./simulation";
 import { WORLD } from "./simulation";
 
 const tractorAt = (heading: number, x = 0, z = 0): TractorState => ({ x, z, heading, speed: 0 });
 const viewports: [number, number][] = [[402, 874], [874, 402], [744, 1133], [1133, 744], [1440, 900]];
 const zooms = [FOLLOW_ZOOM.min, 1, FOLLOW_ZOOM.max];
+
+test("the driver's seat keeps the hood, horizon and nearby working width in view while turning", () => {
+  for (const [width, height] of viewports) {
+    const aspect = width / height;
+    assert.ok(cabFieldOfView(aspect, FOLLOW_ZOOM.max) < cabFieldOfView(aspect, FOLLOW_ZOOM.min));
+    for (const zoom of zooms) for (const heading of [-3.1, -Math.PI / 2, 0, 1.7]) {
+      const tractor = tractorAt(heading, -7, 11);
+      const pose = cabPose(tractor);
+      const camera = new THREE.PerspectiveCamera(cabFieldOfView(aspect, zoom), aspect, CAB_NEAR, 300);
+      camera.position.copy(pose.position);
+      camera.lookAt(pose.focus);
+      camera.updateMatrixWorld();
+      function project(side: number, y: number, ahead: number) {
+        return new THREE.Vector3(tractor.x + side * Math.cos(heading) + ahead * Math.sin(heading), y,
+          tractor.z - side * Math.sin(heading) + ahead * Math.cos(heading)).project(camera);
+      }
+      const horizon = project(0, pose.position.y, 25), hood = project(0, 1.6, 1.35);
+      assert.ok(project(0, 2.1, -0.1).z < -1, "the hat brim clears the near plane");
+      assert.ok(horizon.y > 0 && horizon.y < 0.5);
+      assert.ok(hood.y < -0.15 && hood.y > -0.85 && Math.abs(hood.x) < 1e-6);
+      for (const side of [-1.25, 1.25]) {
+        const rowEdge = project(side, 0, 6);
+        assert.ok(Math.abs(rowEdge.x) < 1 && Math.abs(rowEdge.y) < 1);
+      }
+    }
+  }
+});
 
 function perspective(width: number, height: number, follow: TractorFollowCamera, tractor: TractorState, zoom: number, dt = 0, snap = true) {
   const pose = follow.update(tractor, zoom, dt, [], snap);
@@ -129,6 +156,24 @@ test("only movement turns a tap into driving; holding still stays a tap", () => 
   drag.update(100, 200);
   assert.equal(drag.moved, true, "returning to center still drives straight, never a tap");
   assert.equal(drag.heading, 1);
+});
+
+test("a thumb can turn back down the next row from mid-screen on a phone", () => {
+  for (const width of [320, 390, 744]) {
+    const middle = width / 2;
+    const drag = new SteeringGesture(middle, 200, 0, width);
+    for (const side of [-1, 1]) {
+      drag.update(middle + side * 9, 180);
+      assert.equal(drag.heading, 0);
+      drag.update(middle + side * (width * 0.4 + 10) / 2, 180);
+      assert.ok(Math.abs(drag.heading + side * Math.PI / 2) < 1e-9);
+      drag.update(middle + side * Math.ceil(width * 0.4), 180);
+      assert.equal(drag.heading, -side * Math.PI);
+    }
+  }
+  const wide = new SteeringGesture(560, 200, 0, 1120);
+  wide.update(670, 180);
+  assert.equal(wide.heading, -Math.PI / 4);
 });
 
 test("taps beyond the drivable meadow are ignored instead of pulled to its edge", () => {
